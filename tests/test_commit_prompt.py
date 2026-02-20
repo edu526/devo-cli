@@ -42,7 +42,9 @@ def test_commit_all_options(
 
     # Mock AI agent with text response
     mock_agent_instance = MagicMock()
-    mock_agent_instance.query.return_value = "feat(cli): Add new feature\n\n- Added a new feature to the CLI."
+    mock_agent_instance.query.return_value = (
+        "feat(cli): Add new feature\n\n- Added a new feature to the CLI."
+    )
     mock_base_agent.return_value = mock_agent_instance
 
     # Run the command with --all flag
@@ -98,7 +100,9 @@ def test_commit_manual_message_with_ticket(
 
     # Mock AI agent with text response
     mock_agent_instance = MagicMock()
-    mock_agent_instance.query.return_value = "fix(auth): Fix a bug\n\n- Fixed a critical bug."
+    mock_agent_instance.query.return_value = (
+        "fix(auth): Fix a bug\n\n- Fixed a critical bug."
+    )
     mock_base_agent.return_value = mock_agent_instance
 
     # Simulate user rejecting AI message and providing their own
@@ -260,7 +264,9 @@ def test_commit_structured_output(
 
     # Mock AI agent with text response
     mock_agent_instance = MagicMock()
-    mock_agent_instance.query.return_value = "feat(api): Add new endpoint for user management"
+    mock_agent_instance.query.return_value = (
+        "feat(api): Add new endpoint for user management"
+    )
     mock_base_agent.return_value = mock_agent_instance
 
     result = runner.invoke(commit, input="y\n")

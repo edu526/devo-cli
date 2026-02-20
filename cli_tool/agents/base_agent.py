@@ -203,9 +203,9 @@ class BaseAgent:
             self._last_result = result
 
             # Convert AgentResult to string
-            if hasattr(result, 'output'):
+            if hasattr(result, "output"):
                 return str(result.output)
-            elif hasattr(result, 'content'):
+            elif hasattr(result, "content"):
                 return str(result.content)
             else:
                 return str(result)
@@ -272,22 +272,25 @@ After calling the tool once, STOP. Do not call it again. Do not provide addition
             self._last_result = result
 
             # Extract the structured response from tool calls
-            if hasattr(result, 'tool_calls') and result.tool_calls:
+            if hasattr(result, "tool_calls") and result.tool_calls:
                 for tool_call in result.tool_calls:
-                    if tool_call.get('name') == response_model.__name__:
-                        return response_model(**tool_call.get('input', {}))
+                    if tool_call.get("name") == response_model.__name__:
+                        return response_model(**tool_call.get("input", {}))
 
             # Fallback: check if result has the data we need
             if isinstance(result, str):
                 # Try to parse JSON from the string
                 import json
+
                 try:
                     data = json.loads(result)
                     return response_model(**data)
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-            raise ValueError(f"Could not extract {response_model.__name__} from agent response. Result type: {type(result)}")
+            raise ValueError(
+                f"Could not extract {response_model.__name__} from agent response. Result type: {type(result)}"
+            )
 
         except Exception as e:
             print(f"❌ Error during {self.name} structured query:", str(e))

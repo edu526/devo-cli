@@ -134,19 +134,19 @@ Do NOT include the ticket number (NDT-XXX) in your response - it will be added a
 
         # Parse the response to extract commit message components
         # Expected format: type(scope): summary\n\ndetails (optional)
-        lines = ai_response.strip().split('\n')
+        lines = ai_response.strip().split("\n")
         first_line = lines[0].strip()
 
         # Extract type, scope, and summary from first line
         # Format: type(scope): summary
-        if ':' in first_line:
-            type_scope, summary = first_line.split(':', 1)
+        if ":" in first_line:
+            type_scope, summary = first_line.split(":", 1)
             summary = summary.strip()
 
             # Extract type and scope
-            if '(' in type_scope and ')' in type_scope:
-                commit_type = type_scope.split('(')[0].strip()
-                scope = type_scope.split('(')[1].split(')')[0].strip()
+            if "(" in type_scope and ")" in type_scope:
+                commit_type = type_scope.split("(")[0].strip()
+                scope = type_scope.split("(")[1].split(")")[0].strip()
             else:
                 commit_type = type_scope.strip()
                 scope = "general"
@@ -157,7 +157,7 @@ Do NOT include the ticket number (NDT-XXX) in your response - it will be added a
             summary = first_line
 
         # Get details if present (everything after first line)
-        details = '\n'.join(lines[1:]).strip() if len(lines) > 1 else ""
+        details = "\n".join(lines[1:]).strip() if len(lines) > 1 else ""
         details_formatted = "" if not details else "\n\n{}".format(details)
 
         # Add ticket number to summary if present and not already included
