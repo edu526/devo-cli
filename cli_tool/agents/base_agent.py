@@ -201,7 +201,14 @@ class BaseAgent:
             result = agent(input_text)
             # Store the last result for metrics access
             self._last_result = result
-            return result
+
+            # Convert AgentResult to string
+            if hasattr(result, 'output'):
+                return str(result.output)
+            elif hasattr(result, 'content'):
+                return str(result.content)
+            else:
+                return str(result)
         except Exception as e:
             print(f"❌ Error during {self.name} query:", str(e))
             raise
@@ -242,8 +249,46 @@ class BaseAgent:
         """
         agent = self._get_agent()
         try:
-            # Use Strands structured output feature
-            return agent.structured_output(response_model, input_text)
+            # Create a new agent instance with the response model as a tool
+            # This ensures the model is used correctly for structured output
+            bedrock_model = agent.model
+
+            structured_agent = Agent(
+                tools=[response_model],
+                system_prompt=f"""{self.system_prompt}
+
+CRITICAL INSTRUCTION: You MUST respond by calling the {response_model.__name__} tool exactly ONCE with the appropriate parameters.
+After calling the tool once, STOP. Do not call it again. Do not provide additional text responses.
+""",
+                callback_handler=self._console_ui_callback,
+                model=bedrock_model,
+                name=f"{self.name}_Structured",
+            )
+
+            # Run the structured agent
+            result = structured_agent(input_text)
+
+            # Store the last result for metrics access
+            self._last_result = result
+
+            # Extract the structured response from tool calls
+            if hasattr(result, 'tool_calls') and result.tool_calls:
+                for tool_call in result.tool_calls:
+                    if tool_call.get('name') == response_model.__name__:
+                        return response_model(**tool_call.get('input', {}))
+
+            # Fallback: check if result has the data we need
+            if isinstance(result, str):
+                # Try to parse JSON from the string
+                import json
+                try:
+                    data = json.loads(result)
+                    return response_model(**data)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            raise ValueError(f"Could not extract {response_model.__name__} from agent response. Result type: {type(result)}")
+
         except Exception as e:
             print(f"❌ Error during {self.name} structured query:", str(e))
             raise

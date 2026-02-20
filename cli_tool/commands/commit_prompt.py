@@ -3,19 +3,9 @@ import subprocess
 import webbrowser
 
 import click
-from pydantic import BaseModel
 
 from cli_tool.agents.base_agent import BaseAgent
 from cli_tool.utils.git_utils import get_branch_name, get_remote_url, get_staged_diff
-
-
-class CommitMessageResponse(BaseModel):
-    """Model for the commit message response with structured output."""
-
-    type: str  # feat, fix, chore, docs, refactor, test, style, perf
-    scope: str  # component or area affected
-    summary: str  # concise description (max 50 chars)
-    details: str = ""  # optional detailed explanation
 
 
 @click.command()
@@ -52,44 +42,37 @@ def commit(ctx, push, pull_request, add, all):
 
     agent_ai = BaseAgent(
         name="CommitMessageGenerator",
-        system_prompt="""
-        You are an AI assistant that generates meaningful Git commit messages following conventional commit format and best practices.
+        system_prompt="""You are an AI that generates ONE conventional commit message.
 
-        COMMIT MESSAGE ANALYSIS PROCESS:
-        When generating a commit message, you should:
+CRITICAL: Generate ONLY ONE commit message, not multiple. Find the PRIMARY purpose of all changes.
 
-        1. Analyze the staged changes to understand:
-           - Which files have been changed or added
-           - The nature of changes (new feature, enhancement, bug fix, refactoring, test, docs, etc.)
-           - The purpose or motivation behind these changes
-           - The impact on the overall project
-           - Check for any sensitive information that shouldn't be committed
+FORMAT (first line):
+type(scope): summary
 
-        2. Draft a concise commit message that focuses on the "why" rather than the "what"
+VALID TYPES: feat, fix, refactor, chore, docs, test, style, perf
 
-        COMMIT MESSAGE FORMAT:
-        * Primary format: <type>(<scope>): <ticket number> <short summary>
-        * If details needed: Add bullet points with specific changes
-        * Types: feat, fix, chore, docs, refactor, test, style, perf
-        * Include NDT-<ticket_number> if branch follows 'feature/NDT-<number>' pattern
-        * Short summary should be max 50 chars and explain the purpose
-        * Focus on why the change was made, not just what was changed
+RULES:
+1. First line: type(scope): summary (max 50 chars)
+2. Summary explains WHY, not what
+3. Optional: blank line + bullet points with details
+4. NO markdown, NO multiple messages, NO explanations
 
-        QUALITY GUIDELINES:
-        - Ensure language is clear, concise, and to the point
-        - Message should accurately reflect changes and their purpose
-        - "add" means wholly new feature, "update" means enhancement, "fix" means bug fix
-        - Avoid generic messages like "Update" or "Fix" without context
-        - Summarize what changed and why, not just list file modifications
+CORRECT EXAMPLES:
+refactor(agents): simplify commit message generation
 
-        EXAMPLES:
-        Good: "feat(cli): NDT-123 add AI-powered commit message generation"
-        Bad: "Update commit_prompt.py"
+fix(auth): resolve credential validation error
 
-        Good: "fix(auth): NDT-456 resolve AWS credential validation error"
-        Bad: "Fix bug"
-        """,
-        enable_rich_logging=True,
+- Fixed caching logic
+- Added error handling
+
+INCORRECT (DO NOT DO):
+❌ Multiple commit messages listed
+❌ refactor(agents): improve X
+   fix(base): enhance Y
+   refactor(commit): replace Z
+
+Generate ONE message capturing the main purpose of ALL changes.""",
+        enable_rich_logging=False,  # Disable rich logging to avoid duplicate output
     )
     diff_text = get_staged_diff()
     if not diff_text:
@@ -99,7 +82,6 @@ def commit(ctx, push, pull_request, add, all):
     branch_name = get_branch_name()
     match = re.match(r"feature/NDT-(\d+)", branch_name)
     ticket_number = match.group(1) if match else None
-    ticket_refers_branch = f" NDT-{ticket_number}" if match else ""
 
     # Get additional git context for better commit message generation
     try:
@@ -123,51 +105,77 @@ def commit(ctx, push, pull_request, add, all):
         recent_commits = "Unable to get recent commits"
 
     # Prepare the context for the AI agent
-    context_prompt = f"""
-    Generate a meaningful commit message based on the staged changes.
+    context_prompt = f"""Generate ONE commit message for these changes.
 
-    Follow this analysis process:
-    1. Review the staged diff to understand what files changed
-    2. Analyze the git status to see the scope of changes
-    3. Consider recent commit messages for style consistency
-    4. Determine the type and scope of changes
-    5. Focus on WHY the changes were made, not just WHAT changed
-    6. Create a concise, purposeful commit message
+IMPORTANT: All these changes are part of ONE commit. Find the PRIMARY purpose and create ONE message.
 
-    The commit message should explain the motivation and impact of the changes.
+CONTEXT:
+Branch: {branch_name}
+Ticket: {ticket_number or 'None'} (will be added automatically if present, do NOT include it in your message)
 
-    CONTEXT:
-    Branch name: {branch_name}
-    Ticket number: {ticket_number or 'None'}
-    Ticket reference: {ticket_refers_branch}
+STAGED DIFF:
+{diff_text}
 
-    STAGED DIFF:
-    {diff_text}
+GIT STATUS:
+{git_status}
 
-    GIT STATUS:
-    {git_status}
+RECENT COMMITS (for style):
+{recent_commits}
 
-    RECENT COMMITS (for style consistency):
-    {recent_commits}
-    """
+Remember: Generate ONLY ONE commit message that captures the main purpose of ALL these changes together.
+Do NOT include the ticket number (NDT-XXX) in your response - it will be added automatically."""
 
     try:
-        # Use Strands structured output for reliable parsing
-        # BaseAgent now handles the conversion automatically
-        response = agent_ai.query_structured(context_prompt, CommitMessageResponse)
-        details = (
-            "" if not response.details else "\n\n{}".format(response.details.strip())
-        )
+        # Show loading message
+        click.echo("Generating commit message...")
+
+        # Get AI response as text and parse it
+        ai_response = agent_ai.query(context_prompt)
+
+        # Parse the response to extract commit message components
+        # Expected format: type(scope): summary\n\ndetails (optional)
+        lines = ai_response.strip().split('\n')
+        first_line = lines[0].strip()
+
+        # Extract type, scope, and summary from first line
+        # Format: type(scope): summary
+        if ':' in first_line:
+            type_scope, summary = first_line.split(':', 1)
+            summary = summary.strip()
+
+            # Extract type and scope
+            if '(' in type_scope and ')' in type_scope:
+                commit_type = type_scope.split('(')[0].strip()
+                scope = type_scope.split('(')[1].split(')')[0].strip()
+            else:
+                commit_type = type_scope.strip()
+                scope = "general"
+        else:
+            # Fallback if format is not as expected
+            commit_type = "chore"
+            scope = "general"
+            summary = first_line
+
+        # Get details if present (everything after first line)
+        details = '\n'.join(lines[1:]).strip() if len(lines) > 1 else ""
+        details_formatted = "" if not details else "\n\n{}".format(details)
+
+        # Add ticket number to summary if present and not already included
+        if ticket_number and "NDT-" not in summary:
+            summary = "NDT-{} {}".format(ticket_number, summary)
 
         commit_message = "{}({}): {}{}".format(
-            response.type, response.scope, response.summary.strip(), details
+            commit_type, scope, summary, details_formatted
         ).strip()
 
-        if click.confirm(
-            "Commit message generated: \n\n{}\n\nDo you want to accept this message?".format(
-                commit_message
-            )
-        ):
+        # Display the generated commit message
+        click.echo("\n" + "=" * 60)
+        click.echo("Generated commit message:")
+        click.echo("=" * 60)
+        click.echo(commit_message)
+        click.echo("=" * 60 + "\n")
+
+        if click.confirm("Do you want to use this commit message?"):
             subprocess.run(["git", "commit", "-m", commit_message], check=True)
             click.echo("\n✅ Commit message accepted")
         else:

@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from cli_tool.commands.commit_prompt import CommitMessageResponse, commit
+from cli_tool.commands.commit_prompt import commit
 
 
 @pytest.fixture
@@ -40,15 +40,9 @@ def test_commit_all_options(
         None,  # git push
     ]
 
-    # Mock AI agent with Strands structured output
+    # Mock AI agent with text response
     mock_agent_instance = MagicMock()
-    mock_response = CommitMessageResponse(
-        type="feat",
-        scope="cli",
-        summary="Add new feature",
-        details="- Added a new feature to the CLI.",
-    )
-    mock_agent_instance.query_structured.return_value = mock_response
+    mock_agent_instance.query.return_value = "feat(cli): Add new feature\n\n- Added a new feature to the CLI."
     mock_base_agent.return_value = mock_agent_instance
 
     # Run the command with --all flag
@@ -68,7 +62,7 @@ def test_commit_all_options(
             "git",
             "commit",
             "-m",
-            "feat(cli): Add new feature\n\n- Added a new feature to the CLI.",
+            "feat(cli): NDT-123 Add new feature\n\n- Added a new feature to the CLI.",
         ],
         check=True,
     )
@@ -102,12 +96,9 @@ def test_commit_manual_message_with_ticket(
         None,  # git commit
     ]
 
-    # Mock AI agent with Strands structured output
+    # Mock AI agent with text response
     mock_agent_instance = MagicMock()
-    mock_response = CommitMessageResponse(
-        type="fix", scope="auth", summary="Fix a bug", details="- Fixed a critical bug."
-    )
-    mock_agent_instance.query_structured.return_value = mock_response
+    mock_agent_instance.query.return_value = "fix(auth): Fix a bug\n\n- Fixed a critical bug."
     mock_base_agent.return_value = mock_agent_instance
 
     # Simulate user rejecting AI message and providing their own
@@ -151,7 +142,7 @@ def test_commit_aws_credentials_error(
 
     # Mock AI agent to raise credentials error
     mock_agent_instance = MagicMock()
-    mock_agent_instance.query_structured.side_effect = Exception(
+    mock_agent_instance.query.side_effect = Exception(
         "NoCredentialsError: Unable to locate credentials"
     )
     mock_base_agent.return_value = mock_agent_instance
@@ -187,7 +178,7 @@ def test_commit_general_error(
 
     # Mock AI agent to raise general error
     mock_agent_instance = MagicMock()
-    mock_agent_instance.query_structured.side_effect = Exception("Some other error")
+    mock_agent_instance.query.side_effect = Exception("Some other error")
     mock_base_agent.return_value = mock_agent_instance
 
     result = runner.invoke(commit)
@@ -218,12 +209,9 @@ def test_commit_no_ticket_in_branch(
         None,  # git commit
     ]
 
-    # Mock AI agent with Strands structured output
+    # Mock AI agent with text response
     mock_agent_instance = MagicMock()
-    mock_response = CommitMessageResponse(
-        type="refactor", scope="core", summary="Refactor core components", details=""
-    )
-    mock_agent_instance.query_structured.return_value = mock_response
+    mock_agent_instance.query.return_value = "refactor(core): Refactor core components"
     mock_base_agent.return_value = mock_agent_instance
 
     result = runner.invoke(commit, input="y\n")
@@ -270,15 +258,9 @@ def test_commit_structured_output(
         None,  # git commit
     ]
 
-    # Mock AI agent with structured output (no more fallback needed)
+    # Mock AI agent with text response
     mock_agent_instance = MagicMock()
-    mock_response = CommitMessageResponse(
-        type="feat",
-        scope="api",
-        summary="Add new endpoint for user management",
-        details="",
-    )
-    mock_agent_instance.query_structured.return_value = mock_response
+    mock_agent_instance.query.return_value = "feat(api): Add new endpoint for user management"
     mock_base_agent.return_value = mock_agent_instance
 
     result = runner.invoke(commit, input="y\n")
@@ -293,4 +275,4 @@ def test_commit_structured_output(
     ]
     assert len(commit_calls) == 1
     commit_message = commit_calls[0][0][0][3]  # The message argument (after -m)
-    assert "feat(api): Add new endpoint for user management" in commit_message
+    assert "feat(api): NDT-111 Add new endpoint for user management" in commit_message
