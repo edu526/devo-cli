@@ -1,0 +1,41 @@
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0  # Use the ref you want to point at
+    hooks:
+      - id: check-added-large-files
+      - id: check-toml
+      - id: trailing-whitespace
+      - id: check-case-conflict
+      - id: check-illegal-windows-names
+      - id: check-merge-conflict
+      - id: destroyed-symlinks
+      - id: detect-private-key
+      - id: forbid-submodules
+      - id: detect-aws-credentials
+        args: [ --allow-missing-credentials ]
+      - id: no-commit-to-branch
+        name: branch name (main|production|staging) - (release|hotfix|poc|backup|feature)/*
+        args: ['--branch','', '--pattern', '^(?!(feature/NDT|main|production|release/|release-candidate/|hotfix/|poc/|backup/)).*']
+
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+
+  - repo: https://github.com/pycqa/isort
+    rev: 6.0.1
+    hooks:
+      - id: isort
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.3.0
+    hooks:
+      - id: flake8
+
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.8.2
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+

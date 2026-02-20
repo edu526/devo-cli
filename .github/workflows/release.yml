@@ -1,0 +1,305 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  test:
+    name: Run Tests
+    uses: ./.github/workflows/test-reusable.yml
+    with:
+      python-version: '3.12'
+
+  check-release:
+    name: Check if release needed
+    runs-on: ubuntu-latest
+    needs: test
+    outputs:
+      new-release: ${{ steps.semantic.outputs.released }}
+      version: ${{ steps.semantic.outputs.version }}
+      tag: ${{ steps.semantic.outputs.tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.ref }}
+
+      - name: Ensure latest commits
+        run: |
+          echo "Current HEAD:"
+          git log --oneline -5
+          echo ""
+          echo "Latest tag:"
+          git describe --tags --abbrev=0 || echo "No tags"
+          echo ""
+          echo "Commits since last tag:"
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            git log ${LAST_TAG}..HEAD --oneline
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install semantic-release
+        run: pip install python-semantic-release
+
+      - name: Run semantic-release
+        id: semantic
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🔍 Running semantic-release..."
+          echo "Current branch: $(git branch --show-current)"
+          echo "Current commit: $(git rev-parse HEAD)"
+          echo ""
+
+          # Check what version semantic-release would create
+          echo "🔎 Checking next version (dry-run)..."
+          semantic-release version --print || echo "No version change detected"
+          echo ""
+
+          # Run semantic-release version (creates tag, updates changelog, commits)
+          echo "🚀 Creating new version..."
+          semantic-release version
+
+          # Check if a new tag was created
+          NEW_TAG=$(git describe --exact-match --tags HEAD 2>/dev/null || echo "")
+
+          if [ -n "$NEW_TAG" ]; then
+            echo "released=true" >> $GITHUB_OUTPUT
+            echo "tag=${NEW_TAG}" >> $GITHUB_OUTPUT
+            echo "version=${NEW_TAG#v}" >> $GITHUB_OUTPUT
+            echo "✅ Released version ${NEW_TAG}"
+
+            # Push the changes and tag
+            git push --follow-tags origin main
+
+            # Create GitHub release
+            echo ""
+            echo "📝 Creating GitHub release..."
+            semantic-release publish
+          else
+            echo "released=false" >> $GITHUB_OUTPUT
+            echo "ℹ️  No new release created"
+          fi
+
+  build-binaries:
+    name: Build ${{ matrix.platform }}-${{ matrix.arch }}
+    needs: check-release
+    if: needs.check-release.outputs.new-release == 'true'
+    strategy:
+      matrix:
+        include:
+          # Linux
+          - os: ubuntu-latest
+            platform: linux
+            arch: amd64
+            build_script: bash scripts/build.sh --ci --release
+
+          # macOS Intel
+          - os: macos-latest
+            platform: darwin
+            arch: amd64
+            build_script: bash scripts/build.sh --ci --release
+
+          # macOS Apple Silicon
+          - os: macos-14
+            platform: darwin
+            arch: arm64
+            build_script: bash scripts/build.sh --ci --release
+
+          # Windows
+          - os: windows-latest
+            platform: windows
+            arch: amd64
+            build_script: scripts\build-windows.bat
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.check-release.outputs.tag }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build binary
+        env:
+          RELEASE_VERSION: ${{ needs.check-release.outputs.tag }}
+          FORCE_ARCH: ${{ matrix.arch }}
+        run: ${{ matrix.build_script }}
+
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: devo-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            release/**/*
+            dist/devo*
+          if-no-files-found: error
+
+  upload-assets:
+    name: Upload Release Assets
+    runs-on: ubuntu-latest
+    needs: [check-release, build-binaries]
+    if: needs.check-release.outputs.new-release == 'true'
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release-assets
+
+          echo "📦 Preparing binaries for release..."
+
+          # Copy Linux binary
+          find artifacts/devo-linux-amd64/release -name "devo-linux-amd64" -type f -exec cp -v {} release-assets/ \;
+
+          # Copy macOS Intel binary
+          find artifacts/devo-darwin-amd64/release -name "devo-darwin-amd64" -type f -exec cp -v {} release-assets/ \;
+
+          # Copy macOS ARM binary
+          find artifacts/devo-darwin-arm64/release -name "devo-darwin-arm64" -type f -exec cp -v {} release-assets/ \;
+
+          # Copy Windows binary and rename
+          if [ -f "artifacts/devo-windows-amd64/dist/devo.exe" ]; then
+            cp -v artifacts/devo-windows-amd64/dist/devo.exe release-assets/devo-windows-amd64.exe
+          fi
+
+          # Generate checksums
+          cd release-assets
+          sha256sum * > SHA256SUMS 2>/dev/null || shasum -a 256 * > SHA256SUMS
+          echo ""
+          echo "✅ Release assets ready:"
+          ls -lh
+          cat SHA256SUMS
+          cd ..
+
+      - name: Upload assets to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.check-release.outputs.tag }}"
+          echo "Uploading assets to release ${TAG}..."
+
+          # Upload each asset
+          for file in release-assets/*; do
+            echo "Uploading $(basename $file)..."
+            gh release upload "${TAG}" "$file" --clobber --repo ${{ github.repository }}
+          done
+
+          echo "✅ All assets uploaded successfully"
+
+  notify-telegram:
+    name: Notify Telegram
+    runs-on: ubuntu-latest
+    needs: [test, check-release, build-binaries, upload-assets]
+    if: always()
+
+    steps:
+      - name: Determine overall status
+        id: status
+        run: |
+          # Check if any job failed or was cancelled
+          if [ "${{ needs.test.result }}" == "failure" ] || \
+             [ "${{ needs.check-release.result }}" == "failure" ] || \
+             [ "${{ needs.build-binaries.result }}" == "failure" ] || \
+             [ "${{ needs.upload-assets.result }}" == "failure" ] || \
+             [ "${{ needs.test.result }}" == "cancelled" ] || \
+             [ "${{ needs.check-release.result }}" == "cancelled" ] || \
+             [ "${{ needs.build-binaries.result }}" == "cancelled" ] || \
+             [ "${{ needs.upload-assets.result }}" == "cancelled" ]; then
+            echo "overall=failure" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.check-release.outputs.new-release }}" != "true" ]; then
+            echo "overall=no-release" >> $GITHUB_OUTPUT
+          else
+            echo "overall=success" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send success notification
+        if: steps.status.outputs.overall == 'success'
+        continue-on-error: true
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ vars.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          format: markdown
+          disable_web_page_preview: false
+          message: |
+            🎉 *Devo CLI Release SUCCESS*
+
+            📦 Version: `${{ needs.check-release.outputs.version }}`
+            🏷️ Tag: `${{ needs.check-release.outputs.tag }}`
+            📂 Repository: ${{ github.repository }}
+            👤 Author: ${{ github.actor }}
+
+            ✅ All steps completed successfully
+
+            🔗 [View Release](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.check-release.outputs.tag }})
+            🔗 [View Workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+      - name: Send failure notification
+        if: steps.status.outputs.overall == 'failure'
+        continue-on-error: true
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ vars.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          format: markdown
+          message: |
+            🚨 *Devo CLI Release FAILED*
+
+            ❌ Release process failed on branch `${{ github.ref_name }}`
+            👤 Author: ${{ github.actor }}
+            Commit: `${{ github.sha }}`
+
+            Step Results:
+            • Tests: ${{ needs.test.result }}
+            • Check Release: ${{ needs.check-release.result }}
+            • Build Binaries: ${{ needs.build-binaries.result }}
+            • Upload Assets: ${{ needs.upload-assets.result }}
+
+            🔗 [View Workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+      - name: Send no-release notification
+        if: steps.status.outputs.overall == 'no-release'
+        continue-on-error: true
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ vars.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          format: markdown
+          message: |
+            ℹ️ *Devo CLI - No Release Needed*
+
+            Tests passed but no new release was created.
+
+            Branch: `${{ github.ref_name }}`
+            👤 Author: ${{ github.actor }}
+
+            This means there were no conventional commits since the last release.
+
+            🔗 [View Workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})

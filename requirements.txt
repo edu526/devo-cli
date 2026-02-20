@@ -1,0 +1,8 @@
+setuptools==78.1.0
+setuptools_scm
+twine==6.1.0
+requests==2.32.3
+pytest
+pytest-mock
+build
+flake8

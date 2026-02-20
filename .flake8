@@ -1,0 +1,11 @@
+[flake8]
+max-line-length = 150
+exclude = .git,__pycache__,build,dist,.venv,*.egg-info
+# E203, W503, W504: Conflicts with Black formatter
+ignore = E203,W503,W504
+show-source = true
+statistics = true
+per-file-ignores =
+    # Allow long lines in prompt files (they contain documentation strings)
+    cli_tool/code_reviewer/prompt/*.py:E501
+
