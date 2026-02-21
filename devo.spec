@@ -19,6 +19,8 @@ hidden_imports = [
     'cli_tool.commands.codeartifact_login',
     'cli_tool.commands.commit_prompt',
     'cli_tool.commands.completion',
+    'cli_tool.commands.config',
+    'cli_tool.commands.eventbridge',
     'cli_tool.commands.generate',
     'cli_tool.commands.upgrade',
     'cli_tool.agents',
@@ -27,34 +29,105 @@ hidden_imports = [
     'cli_tool.code_reviewer.analyzer',
     'cli_tool.code_reviewer.git_utils',
     'cli_tool.code_reviewer.prompt',
+    'cli_tool.code_reviewer.prompt.analysis_rules',
+    'cli_tool.code_reviewer.prompt.code_reviewer',
+    'cli_tool.code_reviewer.prompt.output_format',
+    'cli_tool.code_reviewer.prompt.security_standards',
+    'cli_tool.code_reviewer.prompt.tools_guide',
     'cli_tool.code_reviewer.tools',
+    'cli_tool.code_reviewer.tools.code_analyzer',
+    'cli_tool.code_reviewer.tools.file_reader',
     'cli_tool.templates',
     'cli_tool.ui',
     'cli_tool.ui.console_ui',
     'cli_tool.utils',
     'cli_tool.utils.aws',
     'cli_tool.utils.aws_profile',
+    'cli_tool.utils.config_manager',
     'cli_tool.utils.git_utils',
     'cli_tool.utils.templates',
+    'cli_tool.utils.version_check',
     # Third-party dependencies
     'click',
     'jinja2',
+    'jinja2.ext',
     'requests',
     'rich',
+    'rich.console',
+    'rich.live',
+    'rich.panel',
+    'rich.syntax',
+    'rich.table',
+    'rich.text',
+    'rich.markdown',
+    'rich.progress',
+    'rich.spinner',
+    'rich.style',
+    'rich.theme',
+    'rich.traceback',
+    'rich._loop',
+    'rich._wrap',
+    'rich.abc',
+    'rich.align',
+    'rich.ansi',
+    'rich.bar',
+    'rich.box',
+    'rich.cells',
+    'rich.color',
+    'rich.columns',
+    'rich.constrain',
+    'rich.containers',
+    'rich.control',
+    'rich.default_styles',
+    'rich.diagnose',
+    'rich.emoji',
+    'rich.errors',
+    'rich.file_proxy',
+    'rich.filesize',
+    'rich.highlighter',
+    'rich.json',
+    'rich.jupyter',
+    'rich.layout',
+    'rich.logging',
+    'rich.markup',
+    'rich.measure',
+    'rich.padding',
+    'rich.pager',
+    'rich.palette',
+    'rich.pretty',
+    'rich.prompt',
+    'rich.protocol',
+    'rich.region',
+    'rich.repr',
+    'rich.rule',
+    'rich.scope',
+    'rich.screen',
+    'rich.segment',
+    'rich.status',
+    'rich.styled',
+    'rich.terminal_theme',
+    'rich.tree',
     'strands_agents',
+    'strands',
     'git',
+    'gitdb',
     'pydantic',
+    'pydantic.fields',
+    'pydantic.main',
+    'pydantic_core',
     'boto3',
     'botocore',
 ]
 
 # Collect all submodules for packages that need them
-hidden_imports += collect_submodules('rich')
 hidden_imports += collect_submodules('strands_agents')
+hidden_imports += collect_submodules('strands')
 hidden_imports += collect_submodules('pydantic')
+hidden_imports += collect_submodules('pydantic_core')
 hidden_imports += collect_submodules('click')
 hidden_imports += collect_submodules('jinja2')
-hidden_imports += collect_submodules('gitpython')
+hidden_imports += collect_submodules('git')
+hidden_imports += collect_submodules('gitdb')
 
 # Collect data files (templates)
 datas = [
@@ -62,10 +135,10 @@ datas = [
 ]
 
 # Collect all data files from dependencies
-datas += collect_data_files('strands_agents')
-datas += collect_data_files('rich')
-datas += collect_data_files('pydantic')
-datas += collect_data_files('click')
+datas += collect_data_files('strands_agents', include_py_files=True)
+datas += collect_data_files('strands', include_py_files=True)
+datas += collect_data_files('pydantic', include_py_files=True)
+datas += collect_data_files('pydantic_core', include_py_files=True)
 
 a = Analysis(
     ['cli_tool/cli.py'],
