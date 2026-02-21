@@ -48,13 +48,24 @@ hidden_imports = [
     'botocore',
 ]
 
+# Collect all submodules for packages that need them
+hidden_imports += collect_submodules('rich')
+hidden_imports += collect_submodules('strands_agents')
+hidden_imports += collect_submodules('pydantic')
+hidden_imports += collect_submodules('click')
+hidden_imports += collect_submodules('jinja2')
+hidden_imports += collect_submodules('gitpython')
+
 # Collect data files (templates)
 datas = [
     ('cli_tool/templates/*.j2', 'cli_tool/templates'),
 ]
 
-# Collect all strands-agents data files
+# Collect all data files from dependencies
 datas += collect_data_files('strands_agents')
+datas += collect_data_files('rich')
+datas += collect_data_files('pydantic')
+datas += collect_data_files('click')
 
 a = Analysis(
     ['cli_tool/cli.py'],

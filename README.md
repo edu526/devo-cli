@@ -33,6 +33,20 @@ curl -fsSL https://raw.githubusercontent.com/edu526/devo-cli/main/install.sh | b
 irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex
 ```
 
+**Note for Windows users:** If the installer closes too quickly or you encounter errors, download and run it locally to see the full output:
+
+```powershell
+# Download the installer
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1" -OutFile "install-devo.ps1"
+
+# Run it (will pause on errors and success)
+.\install-devo.ps1
+
+# Or test your system first
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/edu526/devo-cli/main/test-install.ps1" -OutFile "test-install.ps1"
+.\test-install.ps1
+```
+
 This will:
 
 - ✅ Detect your platform and architecture
@@ -348,3 +362,40 @@ For issues or questions:
 - Check the [documentation](./docs/)
 - Open an issue on GitHub
 - Contact the development team
+
+### Troubleshooting
+
+**Windows Installation Issues:**
+
+If the PowerShell installer closes immediately or you can't see error messages:
+
+1. Download and run the installer locally (it will pause on errors):
+   ```powershell
+   Invoke-WebRequest -Uri "https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1" -OutFile "install-devo.ps1"
+   .\install-devo.ps1
+   ```
+
+2. Test your system first:
+   ```powershell
+   Invoke-WebRequest -Uri "https://raw.githubusercontent.com/edu526/devo-cli/main/test-install.ps1" -OutFile "test-install.ps1"
+   .\test-install.ps1
+   ```
+
+3. Common issues:
+   - **"Execution policy"**: Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+   - **"Cannot download"**: Check your internet connection and firewall
+   - **"Access denied"**: Choose option 2 (user-only installation) instead of option 1
+
+**Linux/macOS Installation Issues:**
+
+If the bash installer fails:
+
+1. Check you have `curl` installed: `which curl`
+2. Verify internet connection: `curl -I https://github.com`
+3. Download manually and inspect: `curl -O https://raw.githubusercontent.com/edu526/devo-cli/main/install.sh && cat install.sh`
+
+**Runtime Issues:**
+
+- **"No AWS credentials"**: Run `aws configure` to set up your credentials
+- **"Command not found"**: Restart your terminal or add the installation directory to PATH manually
+- **"Version check fails"**: Set `DEVO_SKIP_VERSION_CHECK=1` to disable automatic update checks
