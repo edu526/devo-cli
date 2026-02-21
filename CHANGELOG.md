@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.4 (2026-02-21)
+
+### Bug Fixes
+
+- **build**: Install dependencies before building Windows binary
+  ([`26c0ff0`](https://github.com/edu526/devo-cli/commit/26c0ff01a55f60e18cd5f1a28609d903bf605707))
+
+
 ## v1.0.3 (2026-02-21)
 
 ### Bug Fixes
