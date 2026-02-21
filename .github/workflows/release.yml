@@ -110,6 +110,41 @@ jobs:
           FORCE_ARCH: ${{ matrix.arch }}
         run: ${{ matrix.build_script }}
 
+      - name: Test binary (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          echo "🧪 Testing binary..."
+          chmod +x dist/devo 2>/dev/null || true
+          BINARY_VERSION=$(./dist/devo --version 2>&1 | head -1 || echo "ERROR")
+          echo "Binary version output: $BINARY_VERSION"
+
+          if [ "$BINARY_VERSION" = "ERROR" ] || [ -z "$BINARY_VERSION" ]; then
+            echo "❌ Binary test failed - no version output"
+            exit 1
+          fi
+
+          echo "✅ Binary works! Version: $BINARY_VERSION"
+
+      - name: Test binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "🧪 Testing binary..."
+          try {
+            $output = & "dist\devo.exe" --version 2>&1 | Select-Object -First 1
+            Write-Host "Binary version output: $output"
+
+            if ([string]::IsNullOrWhiteSpace($output)) {
+              Write-Host "❌ Binary test failed - no version output"
+              exit 1
+            }
+
+            Write-Host "✅ Binary works! Version: $output"
+          } catch {
+            Write-Host "❌ Binary test failed with error: $_"
+            exit 1
+          }
+
       - name: Upload binary artifacts
         uses: actions/upload-artifact@v4
         with:
