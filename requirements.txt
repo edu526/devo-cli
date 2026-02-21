@@ -1,8 +1,12 @@
-setuptools==78.1.0
-setuptools_scm
-twine==6.1.0
-requests==2.32.3
-pytest
-pytest-mock
-build
-flake8
+# Development dependencies
+# Install with: pip install -e ".[dev]"
+setuptools>=78.0.0
+setuptools-scm>=8.0.0
+twine>=6.0.0
+pytest>=7.0.0
+pytest-mock>=3.0.0
+build>=1.0.0
+flake8>=6.0.0
+black>=24.0.0
+isort>=5.0.0
+pre-commit>=3.0.0

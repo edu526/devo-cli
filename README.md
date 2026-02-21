@@ -23,22 +23,35 @@ A command-line interface tool for developers with AI-powered features.
 
 Install with a single command:
 
+**Linux/macOS:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/edu526/devo-cli/main/install.sh | bash
 ```
 
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex
+```
+
 This will:
 
-- ✅ Detect your platform (Linux/macOS) and architecture
+- ✅ Detect your platform and architecture
 - ✅ Download the latest binary
 - ✅ Verify the download
-- ✅ Install to `~/.local/bin` (or your choice)
-- ✅ Guide you through PATH setup if needed
+- ✅ Install to the appropriate location
+- ✅ Update PATH automatically
+- ✅ Guide you through setup if needed
 
 **Install specific version:**
 
+Linux/macOS:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/edu526/devo-cli/main/install.sh | bash -s v1.1.0
+```
+
+Windows:
+```powershell
+irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex -Version v1.1.0
 ```
 
 ### Manual Installation
@@ -72,6 +85,13 @@ sudo mv devo /usr/local/bin/
 **Windows (PowerShell):**
 
 ```powershell
+# Download the installer script
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1" -OutFile "install-devo.ps1"
+
+# Run the installer
+.\install-devo.ps1
+
+# Or download binary directly
 Invoke-WebRequest -Uri "https://github.com/edu526/devo-cli/releases/latest/download/devo-windows-amd64.exe" -OutFile "devo.exe"
 ```
 
