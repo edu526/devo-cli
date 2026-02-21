@@ -18,14 +18,14 @@ jobs:
     with:
       python-version: '3.12'
 
-  check-release:
-    name: Check if release needed
+  check-version:
+    name: Check next version (dry-run)
     runs-on: ubuntu-latest
     needs: test
     outputs:
-      new-release: ${{ steps.semantic.outputs.released }}
-      version: ${{ steps.semantic.outputs.version }}
-      tag: ${{ steps.semantic.outputs.tag }}
+      should-release: ${{ steps.check.outputs.should-release }}
+      next-version: ${{ steps.check.outputs.next-version }}
+      next-tag: ${{ steps.check.outputs.next-tag }}
 
     steps:
       - name: Checkout code
@@ -33,21 +33,6 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ github.ref }}
-
-      - name: Ensure latest commits
-        run: |
-          echo "Current HEAD:"
-          git log --oneline -5
-          echo ""
-          echo "Latest tag:"
-          git describe --tags --abbrev=0 || echo "No tags"
-          echo ""
-          echo "Commits since last tag:"
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -n "$LAST_TAG" ]; then
-            git log ${LAST_TAG}..HEAD --oneline
-          fi
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -57,50 +42,28 @@ jobs:
       - name: Install semantic-release
         run: pip install python-semantic-release
 
-      - name: Run semantic-release
-        id: semantic
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check next version (dry-run)
+        id: check
         run: |
-          echo "🔍 Running semantic-release..."
-          echo "Current branch: $(git branch --show-current)"
-          echo "Current commit: $(git rev-parse HEAD)"
-          echo ""
+          echo "🔍 Checking if new release is needed..."
 
-          # Check what version semantic-release would create
-          echo "🔎 Checking next version (dry-run)..."
-          semantic-release version --print || echo "No version change detected"
-          echo ""
+          # Dry-run to get next version without creating anything
+          NEXT_VERSION=$(semantic-release version --print 2>/dev/null || echo "")
 
-          # Run semantic-release version (creates tag, updates changelog, commits)
-          echo "🚀 Creating new version..."
-          semantic-release version
-
-          # Check if a new tag was created
-          NEW_TAG=$(git describe --exact-match --tags HEAD 2>/dev/null || echo "")
-
-          if [ -n "$NEW_TAG" ]; then
-            echo "released=true" >> $GITHUB_OUTPUT
-            echo "tag=${NEW_TAG}" >> $GITHUB_OUTPUT
-            echo "version=${NEW_TAG#v}" >> $GITHUB_OUTPUT
-            echo "✅ Released version ${NEW_TAG}"
-
-            # Push the changes and tag
-            git push --follow-tags origin main
-
-            # Create GitHub release
-            echo ""
-            echo "📝 Creating GitHub release..."
-            semantic-release publish
+          if [ -n "$NEXT_VERSION" ]; then
+            echo "should-release=true" >> $GITHUB_OUTPUT
+            echo "next-version=${NEXT_VERSION}" >> $GITHUB_OUTPUT
+            echo "next-tag=v${NEXT_VERSION}" >> $GITHUB_OUTPUT
+            echo "✅ New version will be: v${NEXT_VERSION}"
           else
-            echo "released=false" >> $GITHUB_OUTPUT
-            echo "ℹ️  No new release created"
+            echo "should-release=false" >> $GITHUB_OUTPUT
+            echo "ℹ️  No new release needed"
           fi
 
   build-binaries:
     name: Build ${{ matrix.platform }}-${{ matrix.arch }}
-    needs: check-release
-    if: needs.check-release.outputs.new-release == 'true'
+    needs: check-version
+    if: needs.check-version.outputs.should-release == 'true'
     strategy:
       matrix:
         include:
@@ -135,7 +98,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ needs.check-release.outputs.tag }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -144,7 +106,7 @@ jobs:
 
       - name: Build binary
         env:
-          RELEASE_VERSION: ${{ needs.check-release.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.check-version.outputs.next-tag }}
           FORCE_ARCH: ${{ matrix.arch }}
         run: ${{ matrix.build_script }}
 
@@ -157,11 +119,55 @@ jobs:
             dist/devo*
           if-no-files-found: error
 
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [check-version, build-binaries]
+    if: needs.check-version.outputs.should-release == 'true'
+    outputs:
+      released: ${{ steps.release.outputs.released }}
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install semantic-release
+        run: pip install python-semantic-release
+
+      - name: Create release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🚀 Creating release for version ${{ needs.check-version.outputs.next-version }}..."
+
+          # Run semantic-release to create tag, update changelog, and create GitHub release
+          semantic-release version
+          semantic-release publish
+
+          # Push changes
+          git push --follow-tags origin main
+
+          echo "released=true" >> $GITHUB_OUTPUT
+          echo "tag=${{ needs.check-version.outputs.next-tag }}" >> $GITHUB_OUTPUT
+          echo "version=${{ needs.check-version.outputs.next-version }}" >> $GITHUB_OUTPUT
+          echo "✅ Release created successfully"
+
   upload-assets:
     name: Upload Release Assets
     runs-on: ubuntu-latest
-    needs: [check-release, build-binaries]
-    if: needs.check-release.outputs.new-release == 'true'
+    needs: [check-version, build-binaries, create-release]
+    if: needs.check-version.outputs.should-release == 'true'
 
     steps:
       - name: Download all artifacts
@@ -202,7 +208,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ needs.check-release.outputs.tag }}"
+          TAG="${{ needs.check-version.outputs.next-tag }}"
           echo "Uploading assets to release ${TAG}..."
 
           # Upload each asset
@@ -216,7 +222,7 @@ jobs:
   notify-telegram:
     name: Notify Telegram
     runs-on: ubuntu-latest
-    needs: [test, check-release, build-binaries, upload-assets]
+    needs: [test, check-version, build-binaries, create-release, upload-assets]
     if: always()
 
     steps:
@@ -225,15 +231,17 @@ jobs:
         run: |
           # Check if any job failed or was cancelled
           if [ "${{ needs.test.result }}" == "failure" ] || \
-             [ "${{ needs.check-release.result }}" == "failure" ] || \
+             [ "${{ needs.check-version.result }}" == "failure" ] || \
              [ "${{ needs.build-binaries.result }}" == "failure" ] || \
+             [ "${{ needs.create-release.result }}" == "failure" ] || \
              [ "${{ needs.upload-assets.result }}" == "failure" ] || \
              [ "${{ needs.test.result }}" == "cancelled" ] || \
-             [ "${{ needs.check-release.result }}" == "cancelled" ] || \
+             [ "${{ needs.check-version.result }}" == "cancelled" ] || \
              [ "${{ needs.build-binaries.result }}" == "cancelled" ] || \
+             [ "${{ needs.create-release.result }}" == "cancelled" ] || \
              [ "${{ needs.upload-assets.result }}" == "cancelled" ]; then
             echo "overall=failure" >> $GITHUB_OUTPUT
-          elif [ "${{ needs.check-release.outputs.new-release }}" != "true" ]; then
+          elif [ "${{ needs.check-version.outputs.should-release }}" != "true" ]; then
             echo "overall=no-release" >> $GITHUB_OUTPUT
           else
             echo "overall=success" >> $GITHUB_OUTPUT
@@ -251,14 +259,14 @@ jobs:
           message: |
             🎉 *Devo CLI Release SUCCESS*
 
-            📦 Version: `${{ needs.check-release.outputs.version }}`
-            🏷️ Tag: `${{ needs.check-release.outputs.tag }}`
+            📦 Version: `${{ needs.check-version.outputs.next-version }}`
+            🏷️ Tag: `${{ needs.check-version.outputs.next-tag }}`
             📂 Repository: ${{ github.repository }}
             👤 Author: ${{ github.actor }}
 
             ✅ All steps completed successfully
 
-            🔗 [View Release](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.check-release.outputs.tag }})
+            🔗 [View Release](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.check-version.outputs.next-tag }})
             🔗 [View Workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
       - name: Send failure notification
@@ -278,8 +286,9 @@ jobs:
 
             Step Results:
             • Tests: ${{ needs.test.result }}
-            • Check Release: ${{ needs.check-release.result }}
+            • Check Version: ${{ needs.check-version.result }}
             • Build Binaries: ${{ needs.build-binaries.result }}
+            • Create Release: ${{ needs.create-release.result }}
             • Upload Assets: ${{ needs.upload-assets.result }}
 
             🔗 [View Workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
