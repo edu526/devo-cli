@@ -8,6 +8,11 @@ if not defined VIRTUAL_ENV (
     call venv\Scripts\activate.bat
 )
 
+REM Install dependencies
+echo Installing dependencies...
+pip install -q -r requirements.txt
+pip install -q -e .
+
 REM Install PyInstaller if not present
 pip show pyinstaller >nul 2>&1
 if errorlevel 1 (

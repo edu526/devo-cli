@@ -145,9 +145,20 @@ datas += collect_data_files('pydantic_core', include_py_files=True)
 
 # Copy metadata for rich (fixes Windows PyInstaller issue)
 # See: https://github.com/pyinstaller/pyinstaller/issues/7113
-datas += copy_metadata('rich')
-datas += copy_metadata('markdown-it-py')
-datas += copy_metadata('pygments')
+try:
+    datas += copy_metadata('rich')
+except Exception:
+    pass
+
+try:
+    datas += copy_metadata('markdown-it-py')
+except Exception:
+    pass
+
+try:
+    datas += copy_metadata('pygments')
+except Exception:
+    pass
 
 a = Analysis(
     ['cli_tool/cli.py'],
