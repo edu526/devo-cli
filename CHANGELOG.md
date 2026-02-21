@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.2 (2026-02-21)
+
+### Bug Fixes
+
+- **build**: Make git imports lazy to avoid initialization errors
+  ([`02e22bc`](https://github.com/edu526/devo-cli/commit/02e22bc4305ce19bad6c0bb9ede7b6b1874f34ac))
+
+
 ## v1.0.1 (2026-02-21)
 
 ### Bug Fixes
