@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.6 (2026-02-21)
+
+### Bug Fixes
+
+- **build**: Keep required stdlib modules for PyInstaller runtime
+  ([`7a58359`](https://github.com/edu526/devo-cli/commit/7a58359dfc851caaa9bec3b01104c8264de90997))
+
+
 ## v1.0.5 (2026-02-21)
 
 ### Performance Improvements
