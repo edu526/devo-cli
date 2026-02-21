@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.3 (2026-02-21)
+
+### Bug Fixes
+
+- **build**: Add copy_metadata for rich to fix Windows PyInstaller issue
+  ([`7eab4c1`](https://github.com/edu526/devo-cli/commit/7eab4c1bb07e1b106c2ac8e83da54772b09ecde8))
+
+
 ## v1.0.2 (2026-02-21)
 
 ### Bug Fixes
