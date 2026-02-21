@@ -6,14 +6,15 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from git import InvalidGitRepositoryError, Repo
-
 
 class GitManager:
     """Manages Git operations for code review analysis."""
 
     def __init__(self, repo_path: Optional[str] = None):
         """Initialize GitManager with repository path."""
+        # Lazy import to avoid git initialization at module import time
+        from git import InvalidGitRepositoryError, Repo
+
         self.repo_path = repo_path or os.getcwd()
         try:
             self.repo = Repo(self.repo_path)
