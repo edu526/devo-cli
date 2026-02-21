@@ -5,7 +5,7 @@ Generates standalone binaries for Linux, macOS, and Windows
 """
 
 import sys
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 block_cipher = None
 
@@ -120,6 +120,9 @@ hidden_imports = [
 ]
 
 # Collect all submodules for packages that need them
+hidden_imports += collect_submodules('rich')
+hidden_imports += collect_submodules('markdown_it')
+hidden_imports += collect_submodules('pygments')
 hidden_imports += collect_submodules('strands_agents')
 hidden_imports += collect_submodules('strands')
 hidden_imports += collect_submodules('pydantic')
@@ -139,6 +142,12 @@ datas += collect_data_files('strands_agents', include_py_files=True)
 datas += collect_data_files('strands', include_py_files=True)
 datas += collect_data_files('pydantic', include_py_files=True)
 datas += collect_data_files('pydantic_core', include_py_files=True)
+
+# Copy metadata for rich (fixes Windows PyInstaller issue)
+# See: https://github.com/pyinstaller/pyinstaller/issues/7113
+datas += copy_metadata('rich')
+datas += copy_metadata('markdown-it-py')
+datas += copy_metadata('pygments')
 
 a = Analysis(
     ['cli_tool/cli.py'],
