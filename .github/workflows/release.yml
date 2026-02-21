@@ -55,6 +55,11 @@ jobs:
             echo "next-version=${NEXT_VERSION}" >> $GITHUB_OUTPUT
             echo "next-tag=v${NEXT_VERSION}" >> $GITHUB_OUTPUT
             echo "✅ New version will be: v${NEXT_VERSION}"
+
+            # Create tag locally (don't push yet - binaries need to build first)
+            echo "📝 Creating local tag for version detection..."
+            git tag "v${NEXT_VERSION}"
+            echo "✅ Local tag v${NEXT_VERSION} created (not pushed yet)"
           else
             echo "should-release=false" >> $GITHUB_OUTPUT
             echo "ℹ️  No new release needed"
@@ -98,6 +103,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Create local tag for version detection
+        run: |
+          echo "📝 Creating local tag v${{ needs.check-version.outputs.next-version }} for setuptools_scm..."
+          git tag "v${{ needs.check-version.outputs.next-version }}"
+          git describe --tags
+          echo "✅ Tag created locally"
 
       - name: Set up Python
         uses: actions/setup-python@v5
