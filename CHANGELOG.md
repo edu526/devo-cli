@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.5 (2026-02-21)
+
+### Performance Improvements
+
+- **build**: Optimize Windows binary startup performance
+  ([`bd812df`](https://github.com/edu526/devo-cli/commit/bd812dfd752983c0467454048bd539e862a1d301))
+
+
 ## v1.0.4 (2026-02-21)
 
 ### Bug Fixes
