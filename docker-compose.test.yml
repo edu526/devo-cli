@@ -1,0 +1,75 @@
+services:
+  # Test binary in clean Ubuntu 24.04 environment
+  test-binary-ubuntu24:
+    image: ubuntu:24.04
+    volumes:
+      - ./dist:/app/dist:ro
+    working_dir: /app
+    command: >
+      bash -c "
+        echo '=== Testing Devo CLI Binary (Ubuntu 24.04) ===' &&
+        echo '' &&
+        echo 'System Info:' &&
+        uname -a &&
+        ldd --version | head -1 &&
+        echo '' &&
+        echo 'Testing binary...' &&
+        /app/dist/devo --version &&
+        echo '' &&
+        echo '✅ Binary works in Ubuntu 24.04!'
+      "
+    network_mode: none
+
+  # Test binary in clean Ubuntu 22.04 environment
+  test-binary-ubuntu22:
+    image: ubuntu:22.04
+    volumes:
+      - ./dist:/app/dist:ro
+    working_dir: /app
+    command: >
+      bash -c "
+        echo '=== Testing Devo CLI Binary (Ubuntu 22.04) ===' &&
+        echo '' &&
+        echo 'System Info:' &&
+        uname -a &&
+        ldd --version | head -1 &&
+        echo '' &&
+        echo 'Testing binary...' &&
+        /app/dist/devo --version &&
+        echo '' &&
+        echo '✅ Binary works in Ubuntu 22.04!'
+      "
+    network_mode: none
+
+  # Build binary in clean Ubuntu 22.04 environment (for compatibility)
+  build-binary:
+    image: ubuntu:22.04
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    command: >
+      bash -c "
+        echo '=== Building Devo CLI Binary in Ubuntu 22.04 ===' &&
+        echo '' &&
+        apt-get update -qq &&
+        apt-get install -y -qq python3.12 python3.12-venv python3-pip git > /dev/null &&
+        echo 'Python version:' &&
+        python3.12 --version &&
+        echo '' &&
+        echo 'Creating virtual environment...' &&
+        python3.12 -m venv /tmp/venv &&
+        . /tmp/venv/bin/activate &&
+        echo 'Installing dependencies...' &&
+        pip install --quiet --upgrade pip setuptools wheel &&
+        pip install --quiet -r requirements.txt &&
+        pip install --quiet -e . &&
+        pip install --quiet pyinstaller &&
+        echo '' &&
+        echo 'Building binary...' &&
+        pyinstaller devo.spec --clean &&
+        echo '' &&
+        echo 'Testing binary...' &&
+        ./dist/devo --version &&
+        echo '' &&
+        echo '✅ Build complete! Binary at dist/devo'
+      "
