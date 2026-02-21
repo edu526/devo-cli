@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.1 (2026-02-21)
+
+### Bug Fixes
+
+- **build**: Explicitly list rich modules in PyInstaller spec
+  ([`c0002bd`](https://github.com/edu526/devo-cli/commit/c0002bdedd8facf39304337585e3a9a32ab207a8))
+
+
 ## v1.0.0 (2026-02-21)
 
 - Initial Release
