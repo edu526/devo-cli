@@ -16,7 +16,7 @@ repos:
         args: [ --allow-missing-credentials ]
       - id: no-commit-to-branch
         name: branch name (main|production|staging) - (release|hotfix|poc|backup|feature)/*
-        args: ['--branch','', '--pattern', '^(?!(feature/NDT|main|production|release/|release-candidate/|hotfix/|poc/|backup/)).*']
+        args: ['--branch','', '--pattern', '^(?!(feature|main|production|release/|release-candidate/|hotfix/|poc/|backup/)).*']
 
   - repo: https://github.com/psf/black
     rev: 25.1.0
