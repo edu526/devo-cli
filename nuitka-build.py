@@ -119,9 +119,6 @@ def build_nuitka():
         cmd.extend(
             [
                 "--windows-console-mode=attach",
-                "--company-name=Devo CLI",
-                "--product-name=Devo CLI Tool",
-                "--file-description=AI-powered CLI for developers",
                 "--output-filename=devo-nuitka.exe",
             ]
         )
