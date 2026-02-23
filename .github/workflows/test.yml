@@ -4,17 +4,6 @@ on:
   pull_request:
     branches:
       - main
-      - develop
-    paths:
-      - 'cli_tool/**'
-      - 'tests/**'
-      - 'scripts/**'
-      - 'devo.spec'
-      - 'setup.py'
-      - 'pyproject.toml'
-      - 'requirements.txt'
-      - '.github/workflows/test*.yml'
-      - '.pre-commit-config.yaml'
 
 jobs:
   test:
