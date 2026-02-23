@@ -4,6 +4,16 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'cli_tool/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'devo.spec'
+      - 'setup.py'
+      - 'pyproject.toml'
+      - 'requirements.txt'
+      - '.github/workflows/release.yml'
+      - '.pre-commit-config.yaml'
   workflow_dispatch:
 
 permissions:
