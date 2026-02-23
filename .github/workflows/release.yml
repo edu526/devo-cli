@@ -159,6 +159,29 @@ jobs:
             exit 1
           }
 
+      - name: Check binary size (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          BINARY_SIZE=$(stat -f%z dist/devo 2>/dev/null || stat -c%s dist/devo)
+          BINARY_SIZE_MB=$((BINARY_SIZE / 1024 / 1024))
+          echo "Binary size: ${BINARY_SIZE_MB}MB"
+
+          if [ $BINARY_SIZE_MB -lt 10 ]; then
+            echo "⚠️  Warning: Binary seems too small (${BINARY_SIZE_MB}MB)"
+          fi
+
+      - name: Check binary size (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $size = (Get-Item "dist\devo\devo.exe").Length
+          $sizeMB = [math]::Round($size / 1MB, 2)
+          Write-Host "Binary size: ${sizeMB}MB"
+
+          if ($sizeMB -lt 10) {
+            Write-Host "⚠️  Warning: Binary seems too small (${sizeMB}MB)"
+          }
+
       - name: Upload binary artifacts
         uses: actions/upload-artifact@v4
         with:
