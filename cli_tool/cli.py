@@ -83,9 +83,7 @@ except ImportError:
     default=None,
     help="AWS profile to use (must come before command, e.g., 'devo --profile dev eventbridge')",
 )
-@click.version_option(
-    __version__, "-v", "--version", prog_name="devo", message="%(version)s"
-)
+@click.version_option(__version__, "-v", "--version", prog_name="devo", message="%(version)s")
 @click.pass_context
 def cli(ctx, profile):
     """CLI for developers with AI-powered features."""

@@ -42,9 +42,7 @@ def test_commit_all_options(
 
     # Mock AI agent with text response
     mock_agent_instance = MagicMock()
-    mock_agent_instance.query.return_value = (
-        "feat(cli): Add new feature\n\n- Added a new feature to the CLI."
-    )
+    mock_agent_instance.query.return_value = "feat(cli): Add new feature\n\n- Added a new feature to the CLI."
     mock_base_agent.return_value = mock_agent_instance
 
     # Run the command with --all flag
@@ -68,9 +66,7 @@ def test_commit_all_options(
         ],
         check=True,
     )
-    mock_subprocess_run.assert_any_call(
-        ["git", "push", "origin", "feature/TICKET-123"], check=True
-    )
+    mock_subprocess_run.assert_any_call(["git", "push", "origin", "feature/TICKET-123"], check=True)
 
     # Verify webbrowser was opened for PR
     mock_webbrowser_open.assert_called_once()
@@ -100,9 +96,7 @@ def test_commit_manual_message_with_ticket(
 
     # Mock AI agent with text response
     mock_agent_instance = MagicMock()
-    mock_agent_instance.query.return_value = (
-        "fix(auth): Fix a bug\n\n- Fixed a critical bug."
-    )
+    mock_agent_instance.query.return_value = "fix(auth): Fix a bug\n\n- Fixed a critical bug."
     mock_base_agent.return_value = mock_agent_instance
 
     # Simulate user rejecting AI message and providing their own
@@ -112,11 +106,7 @@ def test_commit_manual_message_with_ticket(
     assert "Enter your commit message" in result.output
 
     # Check that git commit was called with the manual message, including the ticket number
-    commit_calls = [
-        call_args
-        for call_args in mock_subprocess_run.call_args_list
-        if call_args[0][0][:2] == ["git", "commit"]
-    ]
+    commit_calls = [call_args for call_args in mock_subprocess_run.call_args_list if call_args[0][0][:2] == ["git", "commit"]]
     assert len(commit_calls) == 1
     commit_message = commit_calls[0][0][0][3]  # The message argument (after -m)
     assert "TICKET-456" in commit_message
@@ -146,17 +136,13 @@ def test_commit_aws_credentials_error(
 
     # Mock AI agent to raise credentials error
     mock_agent_instance = MagicMock()
-    mock_agent_instance.query.side_effect = Exception(
-        "NoCredentialsError: Unable to locate credentials"
-    )
+    mock_agent_instance.query.side_effect = Exception("NoCredentialsError: Unable to locate credentials")
     mock_base_agent.return_value = mock_agent_instance
 
     result = runner.invoke(commit)
 
     assert result.exit_code == 0
-    assert (
-        "❌ No AWS credentials found. Please configure your AWS CLI." in result.output
-    )
+    assert "❌ No AWS credentials found. Please configure your AWS CLI." in result.output
 
 
 @patch("cli_tool.commands.commit_prompt.get_staged_diff")
@@ -222,16 +208,12 @@ def test_commit_no_ticket_in_branch(
 
     assert result.exit_code == 0
     commit_message = "refactor(core): Refactor core components"
-    mock_subprocess_run.assert_any_call(
-        ["git", "commit", "-m", commit_message], check=True
-    )
+    mock_subprocess_run.assert_any_call(["git", "commit", "-m", commit_message], check=True)
     assert "TICKET-" not in result.output
 
 
 def test_commit_no_staged_changes(runner):
-    with patch(
-        "cli_tool.commands.commit_prompt.get_staged_diff"
-    ) as mock_get_staged_diff:
+    with patch("cli_tool.commands.commit_prompt.get_staged_diff") as mock_get_staged_diff:
         mock_get_staged_diff.return_value = ""
 
         result = runner.invoke(commit)
@@ -264,9 +246,7 @@ def test_commit_structured_output(
 
     # Mock AI agent with text response
     mock_agent_instance = MagicMock()
-    mock_agent_instance.query.return_value = (
-        "feat(api): Add new endpoint for user management"
-    )
+    mock_agent_instance.query.return_value = "feat(api): Add new endpoint for user management"
     mock_base_agent.return_value = mock_agent_instance
 
     result = runner.invoke(commit, input="y\n")
@@ -274,13 +254,7 @@ def test_commit_structured_output(
     assert result.exit_code == 0
 
     # Should commit with the structured response
-    commit_calls = [
-        call_args
-        for call_args in mock_subprocess_run.call_args_list
-        if call_args[0][0][:2] == ["git", "commit"]
-    ]
+    commit_calls = [call_args for call_args in mock_subprocess_run.call_args_list if call_args[0][0][:2] == ["git", "commit"]]
     assert len(commit_calls) == 1
     commit_message = commit_calls[0][0][0][3]  # The message argument (after -m)
-    assert (
-        "feat(api): TICKET-111 Add new endpoint for user management" in commit_message
-    )
+    assert "feat(api): TICKET-111 Add new endpoint for user management" in commit_message

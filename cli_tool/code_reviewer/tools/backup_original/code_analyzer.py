@@ -190,9 +190,7 @@ def parse_grep_results(output: str, symbol_name: str) -> List[Dict[str, Any]]:
                             "file_path": file_path,
                             "line_number": line_number,
                             "content": content.strip(),
-                            "preview": (
-                                content[:100] + "..." if len(content) > 100 else content
-                            ),
+                            "preview": (content[:100] + "..." if len(content) > 100 else content),
                         }
                     )
             except (ValueError, IndexError):
@@ -202,9 +200,7 @@ def parse_grep_results(output: str, symbol_name: str) -> List[Dict[str, Any]]:
     return results
 
 
-def get_language_patterns(
-    symbol_name: str, search_type: str = "reference"
-) -> Dict[str, List[str]]:
+def get_language_patterns(symbol_name: str, search_type: str = "reference") -> Dict[str, List[str]]:
     """Get language-specific search patterns for different symbol types."""
     import re
 
@@ -391,13 +387,9 @@ def search_code_references(
             formatted_ui_results = []
             for file_path, file_results in files_dict.items():
                 for res in file_results:
-                    formatted_ui_results.append(
-                        f"📄 {res['file_path']}:{res['line_number']}: {res['preview']}"
-                    )
+                    formatted_ui_results.append(f"📄 {res['file_path']}:{res['line_number']}: {res['preview']}")
 
-            search_label = (
-                f"Regex: {symbol_or_pattern}" if use_regex else symbol_or_pattern
-            )
+            search_label = f"Regex: {symbol_or_pattern}" if use_regex else symbol_or_pattern
             console_ui.show_search_results(
                 search_label,
                 formatted_ui_results,
@@ -407,9 +399,7 @@ def search_code_references(
         else:
             search_type = "regex pattern" if use_regex else "symbol"
             response = f"No matches found for {search_type} '{symbol_or_pattern}' in files with extensions: {file_extensions}"
-            search_label = (
-                f"Regex: {symbol_or_pattern}" if use_regex else symbol_or_pattern
-            )
+            search_label = f"Regex: {symbol_or_pattern}" if use_regex else symbol_or_pattern
             console_ui.show_search_results(search_label, [])
 
         return response
@@ -421,9 +411,7 @@ def search_code_references(
 
 
 @tool
-def search_function_definition(
-    function_name: str, file_extensions: str = "py,js,ts", context_lines: int = 3
-) -> str:
+def search_function_definition(function_name: str, file_extensions: str = "py,js,ts", context_lines: int = 3) -> str:
     """
     Search for function definitions across the codebase with language-aware patterns.
 
@@ -486,11 +474,7 @@ def search_function_definition(
                         errors="ignore",
                     )
 
-                    if (
-                        result.returncode == 0
-                        and result.stdout
-                        and result.stdout.strip()
-                    ):
+                    if result.returncode == 0 and result.stdout and result.stdout.strip():
                         # Parse context results
                         lines = result.stdout.split("\n")
                         current_file = None
@@ -505,9 +489,7 @@ def search_function_definition(
                                         seen_locations.add(location_key)
                                 current_match = {}
                                 current_file = None
-                            elif (
-                                ":" in line and "-" not in line.split(":", 1)[1][:3]
-                            ):  # Main match line
+                            elif ":" in line and "-" not in line.split(":", 1)[1][:3]:  # Main match line
                                 parts = line.split(":", 2)
                                 if len(parts) >= 3:
                                     current_file = parts[0]
@@ -539,9 +521,7 @@ def search_function_definition(
 
                         # Don't forget the last match
                         if current_match and current_file:
-                            location_key = (
-                                f"{current_file}:{current_match.get('line_number', 0)}"
-                            )
+                            location_key = f"{current_file}:{current_match.get('line_number', 0)}"
                             if location_key not in seen_locations:
                                 results.append(current_match)
                                 seen_locations.add(location_key)
@@ -550,17 +530,13 @@ def search_function_definition(
             response = f"Found {len(results)} definition(s) for '{function_name}':\n\n"
 
             for i, match in enumerate(results, 1):
-                response += (
-                    f"Definition {i}: {match['file_path']}:{match['line_number']}\n"
-                )
+                response += f"Definition {i}: {match['file_path']}:{match['line_number']}\n"
                 response += f"{'=' * 50}\n"
 
                 # Show context with the definition highlighted
                 for ctx in match.get("context", []):
                     if ctx["line_number"] == match["line_number"]:
-                        response += (
-                            f">>> {ctx['line_number']:4d}: {ctx['content']} <<<\n"
-                        )
+                        response += f">>> {ctx['line_number']:4d}: {ctx['content']} <<<\n"
                     else:
                         response += f"    {ctx['line_number']:4d}: {ctx['content']}\n"
                 response += "\n"
@@ -568,9 +544,7 @@ def search_function_definition(
             # Format for UI display
             ui_results = []
             for match in results:
-                ui_results.append(
-                    f"📍 {match['file_path']}:{match['line_number']}: {match['definition_line'][:80]}..."
-                )
+                ui_results.append(f"📍 {match['file_path']}:{match['line_number']}: {match['definition_line'][:80]}...")
 
             console_ui.show_function_definitions(function_name, ui_results)
         else:
@@ -586,9 +560,7 @@ def search_function_definition(
 
 
 @tool
-def analyze_import_usage(
-    symbol_name: str, file_path: str, show_context: bool = True
-) -> str:
+def analyze_import_usage(symbol_name: str, file_path: str, show_context: bool = True) -> str:
     """
     Analyze how a symbol is imported and used in a specific file.
 
@@ -691,9 +663,7 @@ def analyze_import_usage(
                     or ("from" in line_stripped and symbol_name in line_stripped)
                     or ("require" in line_stripped and symbol_name in line_stripped)
                 ):
-                    imports.append(
-                        {"line_number": i, "content": line_stripped, "type": "import"}
-                    )
+                    imports.append({"line_number": i, "content": line_stripped, "type": "import"})
                     is_import_line = True
 
             # Check for usages (excluding import lines)
@@ -706,33 +676,20 @@ def analyze_import_usage(
                     usage_type = "unknown"
 
                     # Classify usage type
-                    if (
-                        "(" in line_stripped
-                        and symbol_name in line_stripped.split("(")[0]
-                    ):
+                    if "(" in line_stripped and symbol_name in line_stripped.split("(")[0]:
                         usage_type = "function_call"
-                    elif (
-                        "=" in line_stripped
-                        and symbol_name in line_stripped.split("=")[0]
-                    ):
+                    elif "=" in line_stripped and symbol_name in line_stripped.split("=")[0]:
                         usage_type = "assignment"
                     elif "." in line_stripped and f"{symbol_name}." in line_stripped:
                         usage_type = "attribute_access"
-                    elif (
-                        line_stripped.startswith("class ")
-                        and symbol_name in line_stripped
-                    ):
+                    elif line_stripped.startswith("class ") and symbol_name in line_stripped:
                         usage_type = "inheritance"
-                    elif any(
-                        keyword in line_stripped for keyword in ["def ", "function "]
-                    ):
+                    elif any(keyword in line_stripped for keyword in ["def ", "function "]):
                         usage_type = "in_definition"
                     else:
                         usage_type = "reference"
 
-                    usages.append(
-                        {"line_number": i, "content": line_stripped, "type": usage_type}
-                    )
+                    usages.append({"line_number": i, "content": line_stripped, "type": usage_type})
 
         # Build analysis result
         result = f"Analysis of '{symbol_name}' in {file_path}:\n"
@@ -769,9 +726,7 @@ def analyze_import_usage(
             for usage_type, type_usages in usage_by_type.items():
                 result += f"  {usage_type.upper()} ({len(type_usages)} times):\n"
                 for usage in type_usages[:10]:  # Limit to 10 per type
-                    result += (
-                        f"    Line {usage['line_number']:3d}: {usage['content']}\n"
-                    )
+                    result += f"    Line {usage['line_number']:3d}: {usage['content']}\n"
                     if show_context:
                         # Show brief context
                         start_ctx = max(0, usage["line_number"] - 1)
@@ -794,13 +749,9 @@ def analyze_import_usage(
         # Potential issues
         issues = []
         if imports and not usages:
-            issues.append(
-                "⚠️  Symbol is imported but never used (potential unused import)"
-            )
+            issues.append("⚠️  Symbol is imported but never used (potential unused import)")
         elif usages and not imports:
-            issues.append(
-                "⚠️  Symbol is used but no imports found (might be built-in or global)"
-            )
+            issues.append("⚠️  Symbol is used but no imports found (might be built-in or global)")
         elif len(imports) > 1:
             issues.append("⚠️  Symbol is imported multiple times")
 

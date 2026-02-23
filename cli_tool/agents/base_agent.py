@@ -138,9 +138,7 @@ class BaseAgent:
             )
 
             if self.enable_rich_logging and self.console:
-                self.console.print(
-                    f"🤖 Initializing [bold blue]{self.name}[/bold blue] with primary model: [green]{self.llm_model_id}[/green]"
-                )
+                self.console.print(f"🤖 Initializing [bold blue]{self.name}[/bold blue] with primary model: [green]{self.llm_model_id}[/green]")
             else:
                 print(
                     f"🤖 Initializing {self.name} with primary model:",
@@ -288,9 +286,7 @@ After calling the tool once, STOP. Do not call it again. Do not provide addition
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-            raise ValueError(
-                f"Could not extract {response_model.__name__} from agent response. Result type: {type(result)}"
-            )
+            raise ValueError(f"Could not extract {response_model.__name__} from agent response. Result type: {type(result)}")
 
         except Exception as e:
             print(f"❌ Error during {self.name} structured query:", str(e))

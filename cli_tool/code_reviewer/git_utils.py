@@ -19,9 +19,7 @@ class GitManager:
         try:
             self.repo = Repo(self.repo_path)
         except InvalidGitRepositoryError:
-            raise InvalidGitRepositoryError(
-                f"No valid Git repository found at {self.repo_path}"
-            )
+            raise InvalidGitRepositoryError(f"No valid Git repository found at {self.repo_path}")
 
     def get_current_branch(self) -> str:
         """Get the name of the current branch."""
@@ -48,9 +46,7 @@ class GitManager:
                 return base
 
         # If no common base found, use the first branch
-        branches = [
-            ref.name for ref in self.repo.refs if not ref.name.startswith("origin/")
-        ]
+        branches = [ref.name for ref in self.repo.refs if not ref.name.startswith("origin/")]
         if branches:
             return branches[0]
 
@@ -80,9 +76,7 @@ class GitManager:
 
         # Get list of changed files
         changed_files = []
-        for item in self.repo.git.diff(
-            merge_base, current_branch, name_only=True
-        ).split("\n"):
+        for item in self.repo.git.diff(merge_base, current_branch, name_only=True).split("\n"):
             if item.strip():
                 changed_files.append(item.strip())
 
@@ -125,18 +119,14 @@ class GitManager:
                 except Exception:
                     # File is new in current branch
                     try:
-                        file_content = self.repo.git.show(
-                            f"{current_branch}:{file_path}"
-                        )
+                        file_content = self.repo.git.show(f"{current_branch}:{file_path}")
                         diff_header = (
                             f"diff --git a/{file_path} b/{file_path}\n"
                             f"new file mode 100644\nindex 0000000..1234567\n"
                             f"--- /dev/null\n+++ b/{file_path}\n"
                             f"@@ -0,0 +1,{len(file_content.splitlines())} @@\n"
                         )
-                        return diff_header + "\n".join(
-                            f"+{line}" for line in file_content.splitlines()
-                        )
+                        return diff_header + "\n".join(f"+{line}" for line in file_content.splitlines())
                     except Exception:
                         return f"Error: Could not read new file {file_path}"
 
