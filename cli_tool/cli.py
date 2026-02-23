@@ -9,7 +9,6 @@ from cli_tool.commands.commit_prompt import commit
 from cli_tool.commands.completion import completion
 from cli_tool.commands.config import config
 from cli_tool.commands.eventbridge import eventbridge
-from cli_tool.commands.generate import generate
 from cli_tool.commands.upgrade import upgrade
 
 console = Console()
@@ -98,9 +97,9 @@ def cli(ctx, profile):
 
     # Check if we need AWS credentials (skip for help, version, and completion commands)
     # Also skip if --help or -h is in the command line arguments
-    # Skip for commands that don't need AWS: upgrade, config, generate, completion
+    # Skip for commands that don't need AWS: upgrade, config, completion
     skip_profile_check = (
-        ctx.invoked_subcommand in ["completion", "upgrade", "config", "generate", None]
+        ctx.invoked_subcommand in ["completion", "upgrade", "config", None]
         or "--help" in sys.argv
         or "-h" in sys.argv
         or "--version" in sys.argv
@@ -151,7 +150,6 @@ def cli(ctx, profile):
         os.environ["AWS_PROFILE"] = profile
 
 
-cli.add_command(generate)
 cli.add_command(commit)
 cli.add_command(upgrade)
 cli.add_command(codeartifact_login)

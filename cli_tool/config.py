@@ -3,8 +3,6 @@ import os
 from cli_tool.utils.config_manager import get_config_value
 
 BASE_DIR = os.path.dirname(__file__)
-TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
-OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 
 # AWS Bedrock model configuration
 # Using Claude Sonnet 4 (latest and most capable) with inference profile - confirmed working
