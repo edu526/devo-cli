@@ -111,10 +111,13 @@ try {
         $TempExeRoot = Join-Path $TempExtract "devo.exe"
         if (Test-Path $TempExeRoot) {
             $TempExe = $TempExeRoot
+            $SourceDir = $TempExtract
         } else {
             $foundExe = Get-ChildItem -Path $TempExtract -Filter "devo.exe" -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($null -ne $foundExe) {
                 $TempExe = $foundExe.FullName
+                # Use the parent directory of devo.exe as source (handles nested structure)
+                $SourceDir = Split-Path -Parent $TempExe
             } else {
                 Write-Host ""
                 Write-Host "ERROR: Extraction failed - devo.exe not found" -ForegroundColor Red
@@ -237,7 +240,7 @@ try {
             }
 
             # Copy entire folder
-            Copy-Item -Path "$TempExtract\*" -Destination $InstallDir -Recurse -Force
+            Copy-Item -Path "$SourceDir\*" -Destination $InstallDir -Recurse -Force
             $DestPath = Join-Path $InstallDir "devo.exe"
             Write-Host "Installed to $InstallDir" -ForegroundColor Green
 
@@ -282,7 +285,7 @@ try {
             }
 
             # Copy entire folder
-            Copy-Item -Path "$TempExtract\*" -Destination $InstallPath -Recurse -Force
+            Copy-Item -Path "$SourceDir\*" -Destination $InstallPath -Recurse -Force
             $DestPath = Join-Path $InstallPath "devo.exe"
             Write-Host "Installed to $InstallPath" -ForegroundColor Green
 
@@ -310,7 +313,7 @@ try {
             }
 
             # Copy entire folder
-            Copy-Item -Path "$TempExtract\*" -Destination $InstallPath -Recurse -Force
+            Copy-Item -Path "$SourceDir\*" -Destination $InstallPath -Recurse -Force
             $DestPath = Join-Path $InstallPath "devo.exe"
             Write-Host "Installed to $InstallPath" -ForegroundColor Green
 
@@ -331,7 +334,7 @@ try {
             # Current directory
             Write-Host ""
             $CurrentDir = Get-Location
-            Copy-Item -Path "$TempExtract\*" -Destination $CurrentDir -Recurse -Force
+            Copy-Item -Path "$SourceDir\*" -Destination $CurrentDir -Recurse -Force
             $DestPath = Join-Path $CurrentDir "devo.exe"
             Write-Host "Binary ready in current directory" -ForegroundColor Green
 

@@ -189,22 +189,61 @@ def replace_binary(new_binary_path, target_path, is_windows_zip=False):
                 """Attempt to restore the previous installation from .old or backup."""
                 click.echo("Attempting to restore from backup...")
                 try:
+                    # Clean up temp extraction directory
                     if temp_extract.exists():
-                        shutil.rmtree(temp_extract)
+                        try:
+                            shutil.rmtree(temp_extract)
+                        except (OSError, PermissionError) as e:
+                            click.echo(f"Warning: Could not clean up temp directory: {e}", err=True)
+
+                    # Restore from .old directory (preferred)
                     if old_path.exists():
                         if target_path.exists():
-                            shutil.rmtree(target_path)
-                        shutil.move(str(old_path), str(target_path))
-                        click.echo("Restored installation from .old directory.")
+                            try:
+                                shutil.rmtree(target_path)
+                            except (OSError, PermissionError) as e:
+                                click.echo(f"Error: Cannot remove corrupted installation at {target_path}: {e}", err=True)
+                                click.echo("The installation directory may be in use or you may lack permissions.", err=True)
+                                if platform.system() == "Windows":
+                                    click.echo("Try closing all terminals and applications using the CLI, then run upgrade again.", err=True)
+                                raise
+                        try:
+                            shutil.move(str(old_path), str(target_path))
+                            click.echo("Restored installation from .old directory.")
+                        except (OSError, PermissionError) as e:
+                            click.echo(f"Error: Failed to restore from .old directory: {e}", err=True)
+                            raise
+
+                    # Restore from backup directory (fallback)
                     elif backup_path.exists():
                         if target_path.exists():
-                            shutil.rmtree(target_path)
-                        shutil.copytree(str(backup_path), str(target_path))
-                        click.echo("Restored installation from backup directory.")
+                            try:
+                                shutil.rmtree(target_path)
+                            except (OSError, PermissionError) as e:
+                                click.echo(f"Error: Cannot remove corrupted installation at {target_path}: {e}", err=True)
+                                click.echo("The installation directory may be in use or you may lack permissions.", err=True)
+                                if platform.system() == "Windows":
+                                    click.echo("Try closing all terminals and applications using the CLI, then run upgrade again.", err=True)
+                                raise
+                        try:
+                            shutil.copytree(str(backup_path), str(target_path))
+                            click.echo("Restored installation from backup directory.")
+                        except (OSError, PermissionError) as e:
+                            click.echo(f"Error: Failed to restore from backup directory: {e}", err=True)
+                            raise
+
+                    # No backup available
                     else:
-                        click.echo("No .old or backup directory found to restore from.")
+                        click.echo("No .old or backup directory found to restore from.", err=True)
+                        click.echo(f"Manual recovery may be required. Check {target_path.parent} for backup directories.", err=True)
+
                 except Exception as restore_exc:
-                    click.echo(f"Error while restoring from backup: {restore_exc}")
+                    click.echo(f"Critical error during restore: {restore_exc}", err=True)
+                    click.echo(f"Installation may be corrupted. Manual recovery required at: {target_path}", err=True)
+                    if backup_path.exists():
+                        click.echo(f"Backup available at: {backup_path}", err=True)
+                    if old_path.exists():
+                        click.echo(f"Previous version available at: {old_path}", err=True)
 
             try:
                 with zipfile.ZipFile(new_binary_path, "r") as zf:
@@ -220,7 +259,17 @@ def replace_binary(new_binary_path, target_path, is_windows_zip=False):
                 # Move old directory out of the way
                 if old_path.exists():
                     shutil.rmtree(old_path)
-                shutil.move(str(target_path), str(old_path))
+                if not target_path.exists():
+                    click.echo(f"Error: Installation directory {target_path} no longer exists", err=True)
+                    restore_from_backup()
+                    raise click.ClickException("Installation directory was removed during upgrade")
+
+                try:
+                    shutil.move(str(target_path), str(old_path))
+                except (OSError, FileNotFoundError) as e:
+                    click.echo(f"Error: Failed to move installation directory: {e}", err=True)
+                    restore_from_backup()
+                    raise click.ClickException("Failed to prepare for upgrade")
 
                 # Move new directory into place (handles both flat and nested ZIP)
                 try:

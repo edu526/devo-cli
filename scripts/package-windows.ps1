@@ -40,9 +40,12 @@ if (Test-Path $ZipPath) {
     Remove-Item $ZipPath -Force
 }
 
-# Create ZIP archive
+# Create ZIP archive with nested structure (devo folder inside ZIP)
 try {
-    Compress-Archive -Path "dist\devo\*" -DestinationPath $ZipPath -CompressionLevel Optimal
+    # Change to dist directory so the ZIP contains "devo/" folder
+    Push-Location "dist"
+    Compress-Archive -Path "devo" -DestinationPath "..\$ZipPath" -CompressionLevel Optimal
+    Pop-Location
 
     $ZipSize = (Get-Item $ZipPath).Length / 1MB
     Write-Host "Package created successfully!" -ForegroundColor Green
