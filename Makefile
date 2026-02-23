@@ -33,11 +33,18 @@ help:
 # Create virtual environment
 venv:
 	@echo "Creating virtual environment..."
-	python3 -m venv venv
+	python3 -m venv venv || python -m venv venv
 	@echo "✓ Virtual environment created"
 	@echo ""
 	@echo "Activate it with:"
+ifeq ($(OS),Windows_NT)
+	@echo "  PowerShell: .\venv\Scripts\Activate.ps1"
+	@echo "  CMD:        venv\Scripts\activate.bat"
+else
 	@echo "  source venv/bin/activate"
+endif
+	@echo ""
+	@echo "Then run: make install-dev"
 
 # Install package in editable mode
 install:

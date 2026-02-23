@@ -239,10 +239,10 @@ Write-Host "You can now run: devo --version"
                 # Start the PowerShell script in a new window
                 import subprocess
 
+                # Use CREATE_NEW_CONSOLE to show progress, without DETACHED_PROCESS
                 subprocess.Popen(
-                    ["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", str(script_path)],
-                    creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS,
-                    close_fds=True,
+                    ["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-File", str(script_path)],
+                    creationflags=subprocess.CREATE_NEW_CONSOLE,
                 )
 
                 return True
