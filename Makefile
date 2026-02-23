@@ -1,4 +1,4 @@
-.PHONY: help install install-dev uninstall clean test lint format build publish refresh venv completion binary binary-all
+.PHONY: help install install-dev uninstall clean test lint format build publish refresh venv completion binary binary-all build-windows
 
 # Default target
 help:
@@ -118,6 +118,19 @@ binary-all:
 	@chmod +x build-all-platforms.sh
 	./build-all-platforms.sh
 	@echo "✓ Platform-specific binary build complete"
+
+# Build Windows binary with PyInstaller (onedir mode)
+build-windows:
+	@echo "Building Windows binary with PyInstaller..."
+	@echo "Note: Run this on Windows or use scripts/build-windows.bat"
+	@if [ "$(OS)" = "Windows_NT" ]; then \
+		cmd /c scripts\\build-windows.bat; \
+	else \
+		echo "Error: This target is for Windows only"; \
+		echo "On Windows, run: scripts\\build-windows.bat"; \
+		echo "Or use: make build-binary for cross-platform build"; \
+		exit 1; \
+	fi
 
 # Create release tag
 release:
