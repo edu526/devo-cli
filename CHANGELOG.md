@@ -2,6 +2,44 @@
 
 <!-- version list -->
 
+## v2.0.0 (2026-02-23)
+
+### Chores
+
+- Remove jinja2 dependency and template-related code
+  ([`0f9ce52`](https://github.com/edu526/devo-cli/commit/0f9ce52bcf64910a29a52adce92bf2fba4b72441))
+
+### Continuous Integration
+
+- Remove path filters from release and test workflows
+  ([`d5f1a9e`](https://github.com/edu526/devo-cli/commit/d5f1a9e792f6d48a59f4a0d93f0db9dec3699202))
+
+- **release**: Add duplicate tag detection and Windows support
+  ([`809b8a9`](https://github.com/edu526/devo-cli/commit/809b8a9ec83d26be168e486e0060504baa7b2a76))
+
+- **release**: Improve tag handling and workflow structure
+  ([`59c1930`](https://github.com/edu526/devo-cli/commit/59c19307db626188fd2ee2ae5fbea2c7c67b4fdc))
+
+### Documentation
+
+- **changelog**: Reorganize release history and add v1.1.0-v1.2.0 entries
+  ([`560ace4`](https://github.com/edu526/devo-cli/commit/560ace41be3efe35d1bbf7d8f1711295bb274f46))
+
+### Features
+
+- Remove generate command and clean up dependencies
+  ([`e03713a`](https://github.com/edu526/devo-cli/commit/e03713a5a7b8e8050153b36ec0b9d1724e5e451a))
+
+### Refactoring
+
+- Remove template-based code generation feature
+  ([`1a484fc`](https://github.com/edu526/devo-cli/commit/1a484fc702b67d08ce2ab8fc28748d84f7d7ba7f))
+
+### Breaking Changes
+
+- The 'devo generate' command has been removed
+
+
 ## v1.2.0 (2026-02-20)
 
 ### Features
