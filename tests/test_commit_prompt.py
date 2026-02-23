@@ -281,4 +281,6 @@ def test_commit_structured_output(
     ]
     assert len(commit_calls) == 1
     commit_message = commit_calls[0][0][0][3]  # The message argument (after -m)
-    assert "feat(api): TICKET-111 Add new endpoint for user management" in commit_message
+    assert (
+        "feat(api): TICKET-111 Add new endpoint for user management" in commit_message
+    )
