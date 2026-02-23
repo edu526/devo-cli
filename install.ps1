@@ -33,7 +33,7 @@ try {
 
     # Configuration
     $Repo = "edu526/devo-cli"
-    $BinaryName = "devo-windows-amd64.exe"
+    $BinaryName = "devo-windows-amd64.zip"  # Changed to ZIP
 
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "    Devo CLI Installer for Windows" -ForegroundColor Cyan
@@ -55,22 +55,23 @@ try {
     Write-Host "Downloading Devo CLI from GitHub..." -ForegroundColor Blue
     Write-Host "URL: $DownloadUrl" -ForegroundColor Gray
     Write-Host ""
-    $TempFile = Join-Path $env:TEMP "devo.exe"
+    $TempZip = Join-Path $env:TEMP "devo-cli.zip"
+    $TempExtract = Join-Path $env:TEMP "devo-cli-extract"
 
     try {
         # Show progress
         $ProgressPreference = 'SilentlyContinue'
-        Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempFile -UseBasicParsing -ErrorAction Stop
+        Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempZip -UseBasicParsing -ErrorAction Stop
         $ProgressPreference = 'Continue'
 
         # Verify file was downloaded
-        if (!(Test-Path $TempFile)) {
-            Pause-OnError "ERROR: Download completed but file not found at $TempFile"
+        if (!(Test-Path $TempZip)) {
+            Pause-OnError "ERROR: Download completed but file not found at $TempZip"
         }
 
-        $FileSize = (Get-Item $TempFile).Length / 1MB
+        $FileSize = (Get-Item $TempZip).Length / 1MB
 
-        # Check if file is suspiciously small (likely an error page or missing binary)
+        # Check if file is suspiciously small
         if ($FileSize -lt 5) {
             Write-Host ""
             Write-Host "ERROR: Downloaded file is too small ($([math]::Round($FileSize, 2)) MB)" -ForegroundColor Red
@@ -89,11 +90,34 @@ try {
             Write-Host ""
             Write-Host "  3. Try a specific version that has binaries:" -ForegroundColor Yellow
             Write-Host "     .\install-devo.ps1 -Version v1.1.0" -ForegroundColor Gray
-            Remove-Item $TempFile -ErrorAction SilentlyContinue
+            Remove-Item $TempZip -ErrorAction SilentlyContinue
             Pause-OnError ""
         }
 
         Write-Host "Download complete! ($([math]::Round($FileSize, 2)) MB)" -ForegroundColor Green
+
+        # Extract ZIP
+        Write-Host ""
+        Write-Host "Extracting files..." -ForegroundColor Blue
+
+        # Clean up old extraction folder
+        if (Test-Path $TempExtract) {
+            Remove-Item $TempExtract -Recurse -Force
+        }
+
+        Expand-Archive -Path $TempZip -DestinationPath $TempExtract -Force
+
+        # Verify extraction
+        $TempExe = Join-Path $TempExtract "devo.exe"
+        if (!(Test-Path $TempExe)) {
+            Write-Host ""
+            Write-Host "ERROR: Extraction failed - devo.exe not found" -ForegroundColor Red
+            Remove-Item $TempZip -ErrorAction SilentlyContinue
+            Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue
+            Pause-OnError ""
+        }
+
+        Write-Host "Extraction complete!" -ForegroundColor Green
     } catch {
         Write-Host ""
         Write-Host "ERROR: Download failed!" -ForegroundColor Red
@@ -113,7 +137,7 @@ try {
     Write-Host "Testing binary..." -ForegroundColor Blue
     try {
         # Capture both stdout and stderr
-        $output = & $TempFile --version 2>&1 | Out-String
+        $output = & $TempExe --version 2>&1 | Out-String
         $exitCode = $LASTEXITCODE
 
         if ($exitCode -ne 0) {
@@ -130,7 +154,7 @@ try {
             Write-Host "  4. Corrupted download (try downloading again)" -ForegroundColor Gray
             Write-Host ""
             Write-Host "Try running the binary directly to see the error:" -ForegroundColor Cyan
-            Write-Host "  $TempFile --version" -ForegroundColor Gray
+            Write-Host "  $TempExe --version" -ForegroundColor Gray
             Write-Host ""
             Write-Host "Or check Windows Event Viewer for application errors" -ForegroundColor Cyan
             Write-Host ""
@@ -138,7 +162,8 @@ try {
             # Ask if user wants to continue anyway
             $continue = Read-Host "Do you want to install anyway? (y/N)"
             if ($continue -ne "y" -and $continue -ne "Y") {
-                Remove-Item $TempFile -ErrorAction SilentlyContinue
+                Remove-Item $TempZip -ErrorAction SilentlyContinue
+                Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue
                 Pause-OnError "Installation cancelled"
             }
             Write-Host ""
@@ -161,7 +186,8 @@ try {
         # Ask if user wants to continue anyway
         $continue = Read-Host "Do you want to install anyway? (y/N)"
         if ($continue -ne "y" -and $continue -ne "Y") {
-            Remove-Item $TempFile -ErrorAction SilentlyContinue
+            Remove-Item $TempZip -ErrorAction SilentlyContinue
+            Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue
             Pause-OnError "Installation cancelled"
         }
         Write-Host ""
@@ -203,9 +229,14 @@ try {
                 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
             }
 
+            # Copy entire folder
+            Copy-Item -Path "$TempExtract\*" -Destination $InstallDir -Recurse -Force
             $DestPath = Join-Path $InstallDir "devo.exe"
-            Move-Item -Path $TempFile -Destination $DestPath -Force
-            Write-Host "Installed to $DestPath" -ForegroundColor Green
+            Write-Host "Installed to $InstallDir" -ForegroundColor Green
+
+            # Clean up temp files
+            Remove-Item $TempZip -ErrorAction SilentlyContinue
+            Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue
 
             # Add to PATH if not already there
             $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
@@ -233,7 +264,8 @@ try {
                 Write-Host "  2. Run the installer again"
                 Write-Host ""
                 Write-Host "Or choose option 2 for user-only installation (no admin needed)" -ForegroundColor Yellow
-                Remove-Item $TempFile -ErrorAction SilentlyContinue
+                Remove-Item $TempZip -ErrorAction SilentlyContinue
+                Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue
                 Pause-OnError ""
             }
 
@@ -242,9 +274,14 @@ try {
                 New-Item -ItemType Directory -Path $InstallPath -Force | Out-Null
             }
 
+            # Copy entire folder
+            Copy-Item -Path "$TempExtract\*" -Destination $InstallPath -Recurse -Force
             $DestPath = Join-Path $InstallPath "devo.exe"
-            Move-Item -Path $TempFile -Destination $DestPath -Force
-            Write-Host "Installed to $DestPath" -ForegroundColor Green
+            Write-Host "Installed to $InstallPath" -ForegroundColor Green
+
+            # Clean up temp files
+            Remove-Item $TempZip -ErrorAction SilentlyContinue
+            Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue
 
             # Add to system PATH
             $SystemPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
@@ -265,9 +302,14 @@ try {
                 New-Item -ItemType Directory -Path $InstallPath -Force | Out-Null
             }
 
+            # Copy entire folder
+            Copy-Item -Path "$TempExtract\*" -Destination $InstallPath -Recurse -Force
             $DestPath = Join-Path $InstallPath "devo.exe"
-            Move-Item -Path $TempFile -Destination $DestPath -Force
-            Write-Host "Installed to $DestPath" -ForegroundColor Green
+            Write-Host "Installed to $InstallPath" -ForegroundColor Green
+
+            # Clean up temp files
+            Remove-Item $TempZip -ErrorAction SilentlyContinue
+            Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue
 
             # Add to user PATH
             $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
@@ -281,9 +323,15 @@ try {
         "3" {
             # Current directory
             Write-Host ""
-            $DestPath = Join-Path (Get-Location) "devo.exe"
-            Move-Item -Path $TempFile -Destination $DestPath -Force
+            $CurrentDir = Get-Location
+            Copy-Item -Path "$TempExtract\*" -Destination $CurrentDir -Recurse -Force
+            $DestPath = Join-Path $CurrentDir "devo.exe"
             Write-Host "Binary ready in current directory" -ForegroundColor Green
+
+            # Clean up temp files
+            Remove-Item $TempZip -ErrorAction SilentlyContinue
+            Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue
+
             Write-Host ""
             Write-Host "To use from anywhere, add to PATH or move to a directory in PATH" -ForegroundColor Yellow
         }
@@ -291,7 +339,8 @@ try {
             Write-Host ""
             Write-Host "ERROR: Invalid choice '$choice'" -ForegroundColor Red
             Write-Host "Please choose 1, 2, or 3" -ForegroundColor Yellow
-            Remove-Item $TempFile -ErrorAction SilentlyContinue
+            Remove-Item $TempZip -ErrorAction SilentlyContinue
+            Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue
             Pause-OnError ""
         }
     }
