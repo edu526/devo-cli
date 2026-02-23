@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.0.1 (2026-02-23)
+
+### Bug Fixes
+
+- Align release workflow after v2.0.0
+  ([`371ebf9`](https://github.com/edu526/devo-cli/commit/371ebf92f7768474590f04ab233cdacf21504ec9))
+
+### Refactoring
+
+- **upgrade**: Simplify Windows binary replacement logic
+  ([`5ec3c80`](https://github.com/edu526/devo-cli/commit/5ec3c80ca6b39c05ec11b4d2ca2798d70e577aa2))
+
+
 ## v2.0.0 (2026-02-23)
 
 ### Chores
