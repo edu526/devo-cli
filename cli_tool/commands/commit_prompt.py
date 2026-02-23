@@ -80,7 +80,8 @@ Generate ONE message capturing the main purpose of ALL changes.""",
         return
 
     branch_name = get_branch_name()
-    match = re.match(r"feature/NDT-(\d+)", branch_name)
+    # Extract ticket number from branch name (e.g., feature/TICKET-123-description)
+    match = re.match(r"feature/([A-Z]+-\d+)", branch_name)
     ticket_number = match.group(1) if match else None
 
     # Get additional git context for better commit message generation
@@ -123,7 +124,7 @@ RECENT COMMITS (for style):
 {recent_commits}
 
 Remember: Generate ONLY ONE commit message that captures the main purpose of ALL these changes together.
-Do NOT include the ticket number (NDT-XXX) in your response - it will be added automatically."""
+Do NOT include the ticket number in your response - it will be added automatically if present in branch name."""
 
     try:
         # Show loading message
@@ -161,8 +162,8 @@ Do NOT include the ticket number (NDT-XXX) in your response - it will be added a
         details_formatted = "" if not details else "\n\n{}".format(details)
 
         # Add ticket number to summary if present and not already included
-        if ticket_number and "NDT-" not in summary:
-            summary = "NDT-{} {}".format(ticket_number, summary)
+        if ticket_number and ticket_number not in summary:
+            summary = "{} {}".format(ticket_number, summary)
 
         commit_message = "{}({}): {}{}".format(
             commit_type, scope, summary, details_formatted
@@ -180,8 +181,8 @@ Do NOT include the ticket number (NDT-XXX) in your response - it will be added a
             click.echo("\n✅ Commit message accepted")
         else:
             manual_message = click.prompt("Enter your commit message")
-            if ticket_number and "NDT-" not in manual_message:
-                manual_message = " NDT-{} {}".format(ticket_number, manual_message)
+            if ticket_number and ticket_number not in manual_message:
+                manual_message = "{} {}".format(ticket_number, manual_message)
             subprocess.run(["git", "commit", "-m", manual_message], check=True)
             click.echo("✅ Manual commit message accepted")
 
