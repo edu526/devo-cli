@@ -53,8 +53,8 @@ Expected binary sizes:
 
 The size includes:
 - Python runtime
-- All dependencies (click, jinja2, rich, strands-agents, boto3, etc.)
-- Templates and data files
+- All dependencies (click, rich, strands-agents, boto3, etc.)
+- Data files
 
 ## Distribution Methods
 

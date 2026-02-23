@@ -197,21 +197,6 @@ Then run the installer again.
 
 ## Testing Your Installation
 
-### Test System Compatibility
-
-Before installing, test your system:
-
-```powershell
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/edu526/devo-cli/main/test-install.ps1" -OutFile "test-install.ps1"
-.\test-install.ps1
-```
-
-This checks:
-- PowerShell version
-- Internet connectivity
-- Existing installations
-- Write permissions
-
 ### Verify Installation
 
 After installing:
