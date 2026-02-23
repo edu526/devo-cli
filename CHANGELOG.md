@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.0.3 (2026-02-23)
+
+### Bug Fixes
+
+- Correct Windows upgrade subprocess flags
+  ([`c0123a2`](https://github.com/edu526/devo-cli/commit/c0123a2ffc3633dd3d2713767512ccc681527c31))
+
+
 ## v2.0.2 (2026-02-23)
 
 ### Bug Fixes
