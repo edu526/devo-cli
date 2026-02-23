@@ -1,27 +1,15 @@
-# Devo CLI Tool 🚀
+# Devo CLI 🚀
 
-A command-line interface tool for developers with AI-powered features.
+AI-powered command-line tool for developers with AWS Bedrock integration.
 
 ## Features
 
-- 🔄 Project scaffolding and code generation
 - 📝 AI-powered commit message generation
-- 🤖 AI code review with AWS Bedrock
+- 🤖 AI code review with security analysis
 - 🔄 Self-updating capability
-- 📦 Multi-platform binary distribution
+- 📦 Standalone binaries (no Python required)
 
-## Prerequisites
-
-- AWS CLI configured with appropriate permissions
-- Git for version control
-
-**Note:** Python is NOT required for end users (binaries are standalone). Developers need Python 3.12+.
-
-## Installation
-
-### Quick Install (Recommended)
-
-Install with a single command:
+## Quick Install
 
 **Linux/macOS:**
 ```bash
@@ -33,369 +21,140 @@ curl -fsSL https://raw.githubusercontent.com/edu526/devo-cli/main/install.sh | b
 irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex
 ```
 
-**Note for Windows users:** If the installer closes too quickly or you encounter errors, download and run it locally to see the full output:
-
-```powershell
-# Download the installer
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1" -OutFile "install-devo.ps1"
-
-# Run it (will pause on errors and success)
-.\install-devo.ps1
-
-# Or test your system first
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/edu526/devo-cli/main/test-install.ps1" -OutFile "test-install.ps1"
-.\test-install.ps1
-```
-
-This will:
-
-- ✅ Detect your platform and architecture
-- ✅ Download the latest binary
-- ✅ Verify the download
-- ✅ Install to the appropriate location
-- ✅ Update PATH automatically
-- ✅ Guide you through setup if needed
-
-**Install specific version:**
-
-Linux/macOS:
-```bash
-curl -fsSL https://raw.githubusercontent.com/edu526/devo-cli/main/install.sh | bash -s v1.1.0
-```
-
-Windows:
-```powershell
-irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex -Version v1.1.0
-```
-
-### Manual Installation
-
-Download the pre-built binary for your platform from [GitHub Releases](https://github.com/edu526/devo-cli/releases):
-
-**Linux:**
-
-```bash
-curl -L https://github.com/edu526/devo-cli/releases/latest/download/devo-linux-amd64 -o devo
-chmod +x devo
-sudo mv devo /usr/local/bin/
-```
-
-**macOS Intel:**
-
-```bash
-curl -L https://github.com/edu526/devo-cli/releases/latest/download/devo-darwin-amd64 -o devo
-chmod +x devo
-sudo mv devo /usr/local/bin/
-```
-
-**macOS Apple Silicon:**
-
-```bash
-curl -L https://github.com/edu526/devo-cli/releases/latest/download/devo-darwin-arm64 -o devo
-chmod +x devo
-sudo mv devo /usr/local/bin/
-```
-
-**Windows (PowerShell):**
-
-```powershell
-# Download the installer script
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1" -OutFile "install-devo.ps1"
-
-# Run the installer
-.\install-devo.ps1
-
-# Or download binary directly
-Invoke-WebRequest -Uri "https://github.com/edu526/devo-cli/releases/latest/download/devo-windows-amd64.exe" -OutFile "devo.exe"
-```
-
-**Benefits:**
-
-- ✅ No Python installation required
-- ✅ Single executable file
-- ✅ Works immediately
-- ✅ ~70-80 MB download
-
-**Requirements:**
-
-- AWS credentials configured (`aws configure`)
+**Requirements:** AWS credentials configured (`aws configure`)
 
 ## Usage
 
 ```bash
-# Show available commands
-devo --help
-
-# Show CLI version
-devo --version
-
-# Use specific AWS profile
-devo --profile my-profile <command>
-```
-
-**Note:** The CLI automatically checks for updates once per day and shows a notification if a new version is available. You can disable this by setting `DEVO_SKIP_VERSION_CHECK=1`.
-
-### Configuration
-
-Manage CLI configuration stored in `~/.devo/config.json`:
-
-```bash
-# Show current configuration
-devo config show
-
-# Set a configuration value
-devo config set aws.region us-west-2
-devo config set bedrock.model_id us.anthropic.claude-sonnet-4-20250514-v1:0
-
-# Get a configuration value
-devo config get aws.region
-
-# Edit configuration in your editor
-devo config edit
-
-# Manage CodeArtifact registries
-devo config registry list
-devo config registry add --domain my-domain --repository my-repo --namespace @myorg
-devo config registry remove 2
-
-# Export/Import configuration
-devo config export my-config.json
-devo config import my-config.json
-devo config import backup-config.json --merge
-
-# Reset to defaults
-devo config reset
-```
-
-See [Configuration Guide](./docs/configuration.md) for detailed information.
-
-### Commands
-
-```bash
+# AI commit message generation
 devo commit
-# Options for `devo commit`:
-#   --add, -a            Add all changes to the staging area before committing
-#   --push, -p           Push to the current branch
-#   --pull-request, -pr  Open the browser to create a Pull Request in GitHub
-#   --all, -A            Execute add, commit, push, and pull-request in sequence
-#   --profile TEXT       AWS profile to use
 
-# Update CLI to latest version
-devo upgrade
-
-# AI-powered code review
+# AI code review
 devo code-reviewer --base-branch main
 
-# Login to CodeArtifact for npm
+# Update to latest version
+devo upgrade
+
+# CodeArtifact login
 devo codeartifact-login
+
+# Configuration management
+devo config show
+devo config set bedrock.model_id us.anthropic.claude-sonnet-4-20250514-v1:0
+
+# Use specific AWS profile
+devo --profile my-profile commit
 ```
+
+### Commit Command Options
+
+```bash
+devo commit [OPTIONS]
+
+Options:
+  -a, --add            Add all changes before committing
+  -p, --push           Push to current branch
+  -pr, --pull-request  Open browser to create GitHub PR
+  -A, --all            Execute add, commit, push, and PR in sequence
+  --profile TEXT       AWS profile to use
+```
+
+## Configuration
+
+Configuration stored in `~/.devo/config.json`:
+
+```bash
+devo config show                    # View current config
+devo config set aws.region us-west-2
+devo config get bedrock.model_id
+devo config edit                    # Open in editor
+devo config export backup.json      # Export config
+devo config import backup.json      # Import config
+devo config reset                   # Reset to defaults
+```
+
+See [Configuration Guide](./docs/configuration.md) for details.
 
 ## Shell Autocompletion
 
-Enable tab completion for commands and options:
-
 ```bash
-# Show instructions for your shell
-devo completion
-
-# For Zsh (add to ~/.zshrc)
+# Zsh (add to ~/.zshrc)
 eval "$(_DEVO_COMPLETE=zsh_source devo)"
 
-# For Bash (add to ~/.bashrc)
+# Bash (add to ~/.bashrc)
 eval "$(_DEVO_COMPLETE=bash_source devo)"
 
-# For Fish (add to ~/.config/fish/config.fish)
+# Fish (add to ~/.config/fish/config.fish)
 _DEVO_COMPLETE=fish_source devo | source
-```
-
-After setup, restart your terminal or run:
-
-```bash
-source ~/.zshrc   # or ~/.bashrc
 ```
 
 ## Development
 
-### Quick Start for Developers
+### Quick Start
 
 ```bash
-# Clone the repository
 git clone https://github.com/edu526/devo-cli.git
 cd devo-cli
-
-# Run the setup script (does everything automatically)
-chmod +x setup-dev.sh
 ./setup-dev.sh
-
-# You're ready! Try it:
-devo --help
 ```
 
-That's it! The setup script will:
-
-- ✅ Create and activate virtual environment
-- ✅ Install the CLI in development mode
-- ✅ Install all dependencies
-- ✅ Setup shell autocompletion
-- ✅ Refresh shell cache
-
-### Manual Development Setup
+### Manual Setup
 
 ```bash
-# Create virtual environment
 make venv
 source venv/bin/activate
-
-# Install in editable mode
 make install-dev
-
-# Setup shell autocompletion
 make completion
-
-# Refresh shell cache
-make refresh
 ```
-
-See [Development Guide](./docs/development.md) for detailed instructions.
 
 ### Building Binaries
 
-For developers who want to build standalone binaries:
-
 ```bash
-# Build binary for current platform
-make build-binary
-
-# Build with platform-specific naming
-make build-all
-
-# Test the binary
-./dist/devo --version
+make build-binary    # Build for current platform
+make build-all       # Build with platform naming
 ```
-
-See [Binary Distribution Guide](./docs/binary-distribution.md) for detailed instructions.
 
 ### Release Process
 
-This project uses **Semantic Release** for automated versioning and releases.
-
-#### Using Conventional Commits
+Uses Semantic Release with Conventional Commits:
 
 ```bash
-# Feature (minor bump: 1.0.0 → 1.1.0)
+# Feature (1.0.0 → 1.1.0)
 git commit -m "feat: add new command"
 
-# Bug fix (patch bump: 1.0.0 → 1.0.1)
+# Bug fix (1.0.0 → 1.0.1)
 git commit -m "fix: resolve parsing error"
 
-# Breaking change (major bump: 1.0.0 → 2.0.0)
-git commit -m "feat!: redesign CLI interface
+# Breaking change (1.0.0 → 2.0.0)
+git commit -m "feat!: redesign CLI
 
 BREAKING CHANGE: Command structure changed"
-
-# Push to main
-git push origin main
 ```
 
-GitHub Actions will automatically:
-
-- Analyze commits using Semantic Release
-- Determine the next version
-- Update CHANGELOG.md
-- Create and push a git tag
-- Build binaries for all platforms (Linux, macOS, Windows)
-- Create GitHub Release with all artifacts
-
-Download binaries from: [GitHub Releases](https://github.com/edu526/devo-cli/releases)
-
-See [Semantic Release Guide](./docs/semantic-release.md) for detailed information.
-
-### Commit Message Format
-
-This project uses [Conventional Commits](https://www.conventionalcommits.org/):
-
-```text
-<type>(<scope>): <subject>
-
-<body>
-
-<footer>
-```
-
-**Types:** feat, fix, docs, style, refactor, perf, test, build, ci, chore
+Push to main triggers automated release with binaries for all platforms.
 
 ## Documentation
 
-- [Configuration Guide](./docs/configuration.md) - Environment variables and settings
-- [Development Guide](./docs/development.md) - Setup and development workflow
-- [CI/CD Pipeline](./docs/cicd.md) - GitHub Actions workflows and pipeline
-- [Semantic Release](./docs/semantic-release.md) - Automated versioning
-- [Binary Distribution](./docs/binary-distribution.md) - Building and distributing binaries
-- [Contributing Guidelines](./docs/contributing.md) - How to contribute
-- [Versioning](./docs/versioning.md) - Version management
+- [Configuration Guide](./docs/configuration.md)
+- [Development Guide](./docs/development.md)
+- [CI/CD Pipeline](./docs/cicd.md)
+- [Semantic Release](./docs/semantic-release.md)
+- [Binary Distribution](./docs/binary-distribution.md)
+- [Contributing Guidelines](./docs/contributing.md)
 
-## Project Structure
+## Troubleshooting
 
-```text
-devo-cli/
-├── cli_tool/              # Main package
-├── scripts/               # Build and installation scripts
-├── tests/                 # Test suite
-├── docs/                  # Documentation
-├── .github/workflows/     # GitHub Actions workflows
-├── pyproject.toml         # Project configuration
-└── README.md             # This file
-```
+**Windows:**
+- Execution policy error: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+- Access denied: Choose user-only installation option
 
-## Contributing
+**Linux/macOS:**
+- Command not found: Restart terminal or add to PATH manually
 
-We welcome contributions! Please see [Contributing Guidelines](./docs/contributing.md) for details.
+**Runtime:**
+- No AWS credentials: Run `aws configure`
+- Disable version check: Set `DEVO_SKIP_VERSION_CHECK=1`
 
 ## License
 
 MIT License - See LICENSE file for details
-
-## Support
-
-For issues or questions:
-
-- Check the [documentation](./docs/)
-- Open an issue on GitHub
-- Contact the development team
-
-### Troubleshooting
-
-**Windows Installation Issues:**
-
-If the PowerShell installer closes immediately or you can't see error messages:
-
-1. Download and run the installer locally (it will pause on errors):
-   ```powershell
-   Invoke-WebRequest -Uri "https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1" -OutFile "install-devo.ps1"
-   .\install-devo.ps1
-   ```
-
-2. Test your system first:
-   ```powershell
-   Invoke-WebRequest -Uri "https://raw.githubusercontent.com/edu526/devo-cli/main/test-install.ps1" -OutFile "test-install.ps1"
-   .\test-install.ps1
-   ```
-
-3. Common issues:
-   - **"Execution policy"**: Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
-   - **"Cannot download"**: Check your internet connection and firewall
-   - **"Access denied"**: Choose option 2 (user-only installation) instead of option 1
-
-**Linux/macOS Installation Issues:**
-
-If the bash installer fails:
-
-1. Check you have `curl` installed: `which curl`
-2. Verify internet connection: `curl -I https://github.com`
-3. Download manually and inspect: `curl -O https://raw.githubusercontent.com/edu526/devo-cli/main/install.sh && cat install.sh`
-
-**Runtime Issues:**
-
-- **"No AWS credentials"**: Run `aws configure` to set up your credentials
-- **"Command not found"**: Restart your terminal or add the installation directory to PATH manually
-- **"Version check fails"**: Set `DEVO_SKIP_VERSION_CHECK=1` to disable automatic update checks

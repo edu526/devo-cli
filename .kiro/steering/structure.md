@@ -13,9 +13,8 @@ All source code lives in `cli_tool/` package:
 - `cli_tool/_version.py` - Auto-generated from git tags (NEVER edit manually)
 - `cli_tool/commands/` - Each CLI command as separate module
 - `cli_tool/agents/` - AI agent base classes (BaseAgent wrapper)
-- `cli_tool/templates/` - Jinja2 templates (*.j2 extension)
 - `cli_tool/ui/` - Rich-based terminal UI components
-- `cli_tool/utils/` - Shared utilities (AWS, git, templates)
+- `cli_tool/utils/` - Shared utilities (AWS, git)
 
 ## Architecture Patterns
 
@@ -31,11 +30,6 @@ All source code lives in `cli_tool/` package:
 - Define system prompts inline or in dedicated prompt modules
 - For complex features, create subdirectory with `prompt/` folder (see `code_reviewer/`)
 
-### Template-Based Generation
-- Store Jinja2 templates in `cli_tool/templates/` with `.j2` extension
-- Use `cli_tool/utils/templates.py` for rendering
-- Templates must be included in `setup.py` package_data
-
 ### Feature Modules
 Large features get their own subdirectory under `cli_tool/`:
 - Main logic files (e.g., `analyzer.py`, `git_utils.py`)
@@ -50,7 +44,6 @@ Large features get their own subdirectory under `cli_tool/`:
 - Functions/methods: `snake_case` (e.g., `get_staged_diff()`)
 - Constants: `UPPER_SNAKE_CASE` (e.g., `BEDROCK_MODEL_ID`)
 - Private members: prefix `_` (e.g., `_internal_method`)
-- Templates: `descriptive_name.txt.j2`
 
 ## Git Workflow
 
@@ -75,5 +68,4 @@ Large features get their own subdirectory under `cli_tool/`:
 ## Package Distribution
 
 - Entry point: `devo` console script defined in `setup.py`
-- Non-Python files (templates, configs) specified in `setup.py` package_data
 - Version from git tags via setuptools_scm

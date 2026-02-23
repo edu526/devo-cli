@@ -14,7 +14,6 @@ inclusion: always
 ## Core Dependencies (Know These)
 
 - **click 8.1.8** - CLI framework (use decorators: @click.command, @click.option, @click.argument)
-- **jinja2 3.1.6** - Templates in `cli_tool/templates/*.j2`, render via `cli_tool/utils/templates.py`
 - **rich 13.0.0+** - Terminal UI (use for formatted output, not plain print statements)
 - **strands-agents 1.7.0+** - AI agent framework (extend BaseAgent, use Pydantic for structured outputs)
 - **gitpython 3.1.0+** - Git operations (use for reading diffs, branches, staged changes)
@@ -65,10 +64,9 @@ twine upload --repository codeartifact dist/*  # After codeartifact login
 1. Use Rich for terminal output (not print)
 2. Extend BaseAgent for AI features with Pydantic models
 3. Register new commands in `cli_tool/cli.py` via `cli.add_command()`
-4. Templates must be .j2 files in `cli_tool/templates/` and listed in setup.py package_data
-5. Follow 2-space indentation (not Python's typical 4)
-6. Keep lines under 150 chars
-7. Use snake_case for modules/functions, PascalCase for classes, UPPER_SNAKE_CASE for constants
+4. Follow 2-space indentation (not Python's typical 4)
+5. Keep lines under 150 chars
+6. Use snake_case for modules/functions, PascalCase for classes, UPPER_SNAKE_CASE for constants
 
 ## Development Tools
 

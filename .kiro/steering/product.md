@@ -13,11 +13,6 @@ Devo CLI is a Python-based command-line tool that provides AI-powered developmen
 - Code review with structured analysis and security checks
 - Uses strands-agents framework with Pydantic for structured outputs
 
-### Code Generation
-- Template-based scaffolding using Jinja2 templates
-- Templates stored in `cli_tool/templates/` with `.j2` extension
-- Supports database migrations, indexes, and custom templates
-
 ### AWS Integration
 - CodeArtifact authentication for private package repositories
 - Bedrock AI model integration (configurable via BEDROCK_MODEL_ID env var)
@@ -42,11 +37,6 @@ AI-powered code review analyzing git diffs.
 - Reviews staged or committed changes
 - Checks: code quality, security, best practices, performance
 - Structured output with severity levels and actionable feedback
-
-### `devo generate`
-Scaffolds code from Jinja2 templates.
-- Available templates: alter_table, create_index, ejemplo_template
-- Prompts for template variables interactively
 
 ### `devo codeartifact-login`
 Authenticates with AWS CodeArtifact for package management.
@@ -91,6 +81,5 @@ Self-updates the CLI tool to the latest version.
 Development teams requiring:
 - Standardized commit message formats
 - AI-assisted code review workflows
-- Template-based code generation
 - AWS CodeArtifact integration
 - Consistent development tooling across team members

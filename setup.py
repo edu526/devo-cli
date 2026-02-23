@@ -22,7 +22,6 @@ setup(
     python_requires=">=3.12",
     install_requires=[
         "click==8.1.8",
-        "jinja2==3.1.6",
         "requests==2.32.3",
         "rich>=13.0.0",
         "tzdata>=2025.2",
@@ -35,6 +34,6 @@ setup(
         ],
     },
     package_data={
-        "cli_tool": ["templates/*.j2", "commands/*.py", "utils/*.py", "config.py"],
+        "cli_tool": ["commands/*.py", "utils/*.py", "config.py"],
     },
 )
