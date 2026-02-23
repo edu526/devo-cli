@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.0.2 (2026-02-23)
+
+### Bug Fixes
+
+- **build**: Improve cross-platform setup and upgrade experience
+  ([`933040a`](https://github.com/edu526/devo-cli/commit/933040aaa1a9b5cf610abd91322da5031ff2a4f1))
+
+
 ## v2.0.1 (2026-02-23)
 
 ### Bug Fixes
