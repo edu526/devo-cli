@@ -230,25 +230,17 @@ jobs:
 
           echo "📦 Preparing binaries for release..."
 
-          # Copy Linux binary
+          # Copy Linux binary (single file)
           find artifacts/devo-linux-amd64/release -name "devo-linux-amd64" -type f -exec cp -v {} release-assets/ \;
 
-          # Copy macOS Intel binary
+          # Copy macOS Intel binary (single file)
           find artifacts/devo-darwin-amd64/release -name "devo-darwin-amd64" -type f -exec cp -v {} release-assets/ \;
 
-          # Copy macOS ARM binary
+          # Copy macOS ARM binary (single file)
           find artifacts/devo-darwin-arm64/release -name "devo-darwin-arm64" -type f -exec cp -v {} release-assets/ \;
 
           # Copy Windows ZIP (onedir package)
-          if [ -f "artifacts/devo-windows-amd64/release/devo-windows-amd64.zip" ]; then
-            cp -v artifacts/devo-windows-amd64/release/devo-windows-amd64.zip release-assets/
-          else
-            echo "⚠️  Warning: Windows ZIP not found, checking for legacy EXE..."
-            if [ -f "artifacts/devo-windows-amd64/dist/devo/devo.exe" ]; then
-              echo "Found onedir build, but not packaged. This shouldn't happen in CI."
-              exit 1
-            fi
-          fi
+          find artifacts/devo-windows-amd64/release -name "*.zip" -type f -exec cp -v {} release-assets/ \;
 
           # Generate checksums
           cd release-assets
