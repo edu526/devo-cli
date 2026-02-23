@@ -21,7 +21,6 @@ hidden_imports = [
     'cli_tool.commands.completion',
     'cli_tool.commands.config',
     'cli_tool.commands.eventbridge',
-    'cli_tool.commands.generate',
     'cli_tool.commands.upgrade',
     'cli_tool.agents',
     'cli_tool.agents.base_agent',
@@ -37,7 +36,6 @@ hidden_imports = [
     'cli_tool.code_reviewer.tools',
     'cli_tool.code_reviewer.tools.code_analyzer',
     'cli_tool.code_reviewer.tools.file_reader',
-    'cli_tool.templates',
     'cli_tool.ui',
     'cli_tool.ui.console_ui',
     'cli_tool.utils',
@@ -45,12 +43,9 @@ hidden_imports = [
     'cli_tool.utils.aws_profile',
     'cli_tool.utils.config_manager',
     'cli_tool.utils.git_utils',
-    'cli_tool.utils.templates',
     'cli_tool.utils.version_check',
     # Third-party dependencies
     'click',
-    'jinja2',
-    'jinja2.ext',
     'requests',
     'rich',
     'rich.console',
@@ -128,14 +123,11 @@ hidden_imports += collect_submodules('strands')
 hidden_imports += collect_submodules('pydantic')
 hidden_imports += collect_submodules('pydantic_core')
 hidden_imports += collect_submodules('click')
-hidden_imports += collect_submodules('jinja2')
 hidden_imports += collect_submodules('git')
 hidden_imports += collect_submodules('gitdb')
 
-# Collect data files (templates)
-datas = [
-    ('cli_tool/templates/*.j2', 'cli_tool/templates'),
-]
+# Collect data files
+datas = []
 
 # Collect all data files from dependencies
 datas += collect_data_files('strands_agents', include_py_files=True)
