@@ -62,10 +62,17 @@ jobs:
           NEXT_VERSION=$(semantic-release version --print 2>/dev/null || echo "")
 
           if [ -n "$NEXT_VERSION" ]; then
-            echo "should-release=true" >> $GITHUB_OUTPUT
-            echo "next-version=${NEXT_VERSION}" >> $GITHUB_OUTPUT
-            echo "next-tag=v${NEXT_VERSION}" >> $GITHUB_OUTPUT
-            echo "✅ New version will be: v${NEXT_VERSION}"
+            # Check if this tag already exists remotely
+            if git ls-remote --tags origin | grep -q "refs/tags/v${NEXT_VERSION}$"; then
+              echo "⚠️  Tag v${NEXT_VERSION} already exists remotely, skipping release"
+              echo "should-release=false" >> $GITHUB_OUTPUT
+              echo "ℹ️  No new release needed (tag already exists)"
+            else
+              echo "should-release=true" >> $GITHUB_OUTPUT
+              echo "next-version=${NEXT_VERSION}" >> $GITHUB_OUTPUT
+              echo "next-tag=v${NEXT_VERSION}" >> $GITHUB_OUTPUT
+              echo "✅ New version will be: v${NEXT_VERSION}"
+            fi
           else
             echo "should-release=false" >> $GITHUB_OUTPUT
             echo "ℹ️  No new release needed"
@@ -112,7 +119,8 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Create local tag for version detection
+      - name: Create local tag for version detection (Linux/macOS)
+        if: runner.os != 'Windows'
         run: |
           TAG="v${{ needs.check-version.outputs.next-version }}"
           echo "📝 Checking if tag ${TAG} exists..."
@@ -125,6 +133,25 @@ jobs:
             git tag "${TAG}"
             echo "✅ Tag created locally"
           fi
+
+          git describe --tags
+
+      - name: Create local tag for version detection (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $TAG = "v${{ needs.check-version.outputs.next-version }}"
+          Write-Host "📝 Checking if tag $TAG exists..."
+
+          # Check if tag already exists (locally or remotely)
+          $tagExists = git rev-parse $TAG 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "⚠️  Tag $TAG already exists, skipping creation"
+          } else {
+            Write-Host "Creating local tag $TAG for setuptools_scm..."
+            git tag $TAG
+            Write-Host "✅ Tag created locally"
+          }
 
           git describe --tags
 
@@ -232,6 +259,11 @@ jobs:
       - name: Install semantic-release
         run: pip install python-semantic-release
 
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Create release
         id: release
         env:
@@ -239,12 +271,9 @@ jobs:
         run: |
           echo "🚀 Creating release for version ${{ needs.check-version.outputs.next-version }}..."
 
-          # Run semantic-release to create tag, update changelog, and create GitHub release
+          # Run semantic-release to create tag, update changelog, commit, and create GitHub release
           semantic-release version
           semantic-release publish
-
-          # Push changes
-          git push --follow-tags origin main
 
           echo "released=true" >> $GITHUB_OUTPUT
           echo "tag=${{ needs.check-version.outputs.next-tag }}" >> $GITHUB_OUTPUT
