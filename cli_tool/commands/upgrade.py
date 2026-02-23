@@ -102,9 +102,7 @@ def verify_binary(binary_path, is_zip=False):
         # Check file size (should be at least 10MB for PyInstaller binary)
         file_size = binary_path.stat().st_size
         if file_size < 10 * 1024 * 1024:  # 10MB
-            click.echo(
-                f"Warning: Binary size is only {file_size / 1024 / 1024:.1f}MB, seems too small"
-            )
+            click.echo(f"Warning: Binary size is only {file_size / 1024 / 1024:.1f}MB, seems too small")
             return False
 
         # Check if file is executable format (basic check)
@@ -145,9 +143,7 @@ def download_binary(url, dest_path):
         downloaded = 0
 
         with open(dest_path, "wb") as f:
-            with click.progressbar(
-                length=total_size, label="Downloading", show_percent=True, show_pos=True
-            ) as bar:
+            with click.progressbar(length=total_size, label="Downloading", show_percent=True, show_pos=True) as bar:
                 for chunk in response.iter_content(chunk_size=block_size):
                     if chunk:
                         f.write(chunk)
@@ -298,9 +294,7 @@ def upgrade(force, check):
         # Get current executable path
         current_exe = get_executable_path()
         if not current_exe:
-            click.echo(
-                "Error: Could not determine current executable location", err=True
-            )
+            click.echo("Error: Could not determine current executable location", err=True)
             click.echo("Please install manually from GitHub Releases", err=True)
             sys.exit(1)
 
@@ -310,9 +304,7 @@ def upgrade(force, check):
         check_path = current_exe.parent if is_windows_zip else current_exe.parent
         if not os.access(check_path, os.W_OK):
             click.echo(f"Error: No write permission to {check_path}", err=True)
-            click.echo(
-                "Try running with sudo or install to a user-writable location", err=True
-            )
+            click.echo("Try running with sudo or install to a user-writable location", err=True)
             sys.exit(1)
 
         if not force:

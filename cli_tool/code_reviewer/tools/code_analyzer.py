@@ -166,11 +166,7 @@ def search_code_references(
         include_pattern = " ".join([f"--include='*.{ext}'" for ext in extensions])
         exclude_pattern = get_gitignore_excludes()
 
-        search_patterns = (
-            [symbol_or_pattern]
-            if use_regex
-            else get_smart_search_patterns(symbol_or_pattern)
-        )
+        search_patterns = [symbol_or_pattern] if use_regex else get_smart_search_patterns(symbol_or_pattern)
         all_results = []
         seen_locations = set()
 
@@ -221,13 +217,9 @@ def search_code_references(
             formatted_ui_results = []
             for file_path, file_results in files_dict.items():
                 for res in file_results:
-                    formatted_ui_results.append(
-                        f"📄 {res['file_path']}:{res['line_number']}: {res['preview']}"
-                    )
+                    formatted_ui_results.append(f"📄 {res['file_path']}:{res['line_number']}: {res['preview']}")
 
-            search_label = (
-                f"Regex: {symbol_or_pattern}" if use_regex else symbol_or_pattern
-            )
+            search_label = f"Regex: {symbol_or_pattern}" if use_regex else symbol_or_pattern
             console_ui.show_search_results(
                 search_label,
                 formatted_ui_results,
@@ -236,9 +228,7 @@ def search_code_references(
         else:
             search_type = "regex pattern" if use_regex else "symbol"
             response = f"No matches found for {search_type} '{symbol_or_pattern}' in files with extensions: {file_extensions}"
-            search_label = (
-                f"Regex: {symbol_or_pattern}" if use_regex else symbol_or_pattern
-            )
+            search_label = f"Regex: {symbol_or_pattern}" if use_regex else symbol_or_pattern
             console_ui.show_search_results(search_label, [])
 
         return response
@@ -250,9 +240,7 @@ def search_code_references(
 
 
 @tool
-def search_function_definition(
-    function_name: str, file_extensions: str = "py,js,ts", context_lines: int = 3
-) -> str:
+def search_function_definition(function_name: str, file_extensions: str = "py,js,ts", context_lines: int = 3) -> str:
     """
     Find function definitions with language-aware patterns.
 
@@ -316,11 +304,7 @@ def search_function_definition(
                         errors="ignore",
                     )
 
-                    if (
-                        result.returncode == 0
-                        and result.stdout
-                        and result.stdout.strip()
-                    ):
+                    if result.returncode == 0 and result.stdout and result.stdout.strip():
                         lines = result.stdout.split("\n")
                         current_file = None
                         current_match = {}
@@ -365,9 +349,7 @@ def search_function_definition(
                                         continue
 
                         if current_match and current_file:
-                            location_key = (
-                                f"{current_file}:{current_match.get('line_number', 0)}"
-                            )
+                            location_key = f"{current_file}:{current_match.get('line_number', 0)}"
                             if location_key not in seen_locations:
                                 results.append(current_match)
                                 seen_locations.add(location_key)
@@ -375,23 +357,17 @@ def search_function_definition(
         if results:
             response = f"Found {len(results)} definition(s) for '{function_name}':\n\n"
             for i, match in enumerate(results, 1):
-                response += (
-                    f"Definition {i}: {match['file_path']}:{match['line_number']}\n"
-                )
+                response += f"Definition {i}: {match['file_path']}:{match['line_number']}\n"
                 for ctx in match.get("context", []):
                     if ctx["line_number"] == match["line_number"]:
-                        response += (
-                            f">>> {ctx['line_number']:4d}: {ctx['content']} <<<\n"
-                        )
+                        response += f">>> {ctx['line_number']:4d}: {ctx['content']} <<<\n"
                     else:
                         response += f"    {ctx['line_number']:4d}: {ctx['content']}\n"
                 response += "\n"
 
             ui_results = []
             for match in results:
-                ui_results.append(
-                    f"📍 {match['file_path']}:{match['line_number']}: {match['definition_line'][:80]}..."
-                )
+                ui_results.append(f"📍 {match['file_path']}:{match['line_number']}: {match['definition_line'][:80]}...")
             console_ui.show_function_definitions(function_name, ui_results)
         else:
             response = f"No definitions found for function '{function_name}'"
@@ -406,9 +382,7 @@ def search_function_definition(
 
 
 @tool
-def analyze_import_usage(
-    symbol_name: str, file_path: str, show_context: bool = True
-) -> str:
+def analyze_import_usage(symbol_name: str, file_path: str, show_context: bool = True) -> str:
     """
     Analyze symbol imports and usage in a file.
 
@@ -488,46 +462,29 @@ def analyze_import_usage(
             else:
                 has_import = "import" in line_stripped and symbol_name in line_stripped
                 has_from = "from" in line_stripped and symbol_name in line_stripped
-                has_require = (
-                    "require" in line_stripped and symbol_name in line_stripped
-                )
+                has_require = "require" in line_stripped and symbol_name in line_stripped
                 if has_import or has_from or has_require:
-                    imports.append(
-                        {"line_number": i, "content": line_stripped, "type": "import"}
-                    )
+                    imports.append({"line_number": i, "content": line_stripped, "type": "import"})
                     is_import_line = True
 
             # Check for usages (excluding import lines)
             if not is_import_line and symbol_name in line_stripped:
                 if re.search(rf"\b{re.escape(symbol_name)}\b", line_stripped):
                     usage_type = "unknown"
-                    if (
-                        "(" in line_stripped
-                        and symbol_name in line_stripped.split("(")[0]
-                    ):
+                    if "(" in line_stripped and symbol_name in line_stripped.split("(")[0]:
                         usage_type = "function_call"
-                    elif (
-                        "=" in line_stripped
-                        and symbol_name in line_stripped.split("=")[0]
-                    ):
+                    elif "=" in line_stripped and symbol_name in line_stripped.split("=")[0]:
                         usage_type = "assignment"
                     elif "." in line_stripped and f"{symbol_name}." in line_stripped:
                         usage_type = "attribute_access"
-                    elif (
-                        line_stripped.startswith("class ")
-                        and symbol_name in line_stripped
-                    ):
+                    elif line_stripped.startswith("class ") and symbol_name in line_stripped:
                         usage_type = "inheritance"
-                    elif any(
-                        keyword in line_stripped for keyword in ["def ", "function "]
-                    ):
+                    elif any(keyword in line_stripped for keyword in ["def ", "function "]):
                         usage_type = "in_definition"
                     else:
                         usage_type = "reference"
 
-                    usages.append(
-                        {"line_number": i, "content": line_stripped, "type": usage_type}
-                    )
+                    usages.append({"line_number": i, "content": line_stripped, "type": usage_type})
 
         # Build analysis result
         result = f"Analysis of '{symbol_name}' in {file_path}:\n"
@@ -553,9 +510,7 @@ def analyze_import_usage(
             for usage_type, type_usages in usage_by_type.items():
                 result += f"  {usage_type.upper()} ({len(type_usages)}):\n"
                 for usage in type_usages[:5]:  # Limit to 5 per type
-                    result += (
-                        f"    Line {usage['line_number']:3d}: {usage['content']}\n"
-                    )
+                    result += f"    Line {usage['line_number']:3d}: {usage['content']}\n"
                 if len(type_usages) > 5:
                     result += f"    ... and {len(type_usages) - 5} more\n"
                 result += "\n"
@@ -583,15 +538,9 @@ def analyze_import_usage(
         else:
             result += "  ✅ No issues detected\n"
 
-        import_lines = [
-            f"Line {imp['line_number']}: {imp['content']}" for imp in imports
-        ]
-        usage_lines = [
-            f"Line {usage['line_number']}: {usage['content']}" for usage in usages
-        ]
-        console_ui.show_import_analysis(
-            symbol_name, file_path, import_lines, usage_lines
-        )
+        import_lines = [f"Line {imp['line_number']}: {imp['content']}" for imp in imports]
+        usage_lines = [f"Line {usage['line_number']}: {usage['content']}" for usage in usages]
+        console_ui.show_import_analysis(symbol_name, file_path, import_lines, usage_lines)
         return result
 
     except Exception as e:

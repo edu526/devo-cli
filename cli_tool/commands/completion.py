@@ -38,9 +38,7 @@ def completion():
     if shell_name in SHELL_INSTRUCTIONS:
         click.echo(SHELL_INSTRUCTIONS[shell_name])
     else:
-        click.echo(
-            "⚠️  Your shell is not officially supported (supported: bash, zsh, fish)."
-        )
+        click.echo("⚠️  Your shell is not officially supported (supported: bash, zsh, fish).")
 
 
 if __name__ == "__main__":

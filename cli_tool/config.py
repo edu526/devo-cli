@@ -15,24 +15,16 @@ DEFAULT_MODEL_ID = get_config_value("bedrock.model_id", SONNET_3_7_MODEL_ID)
 
 # Get model ID from environment variable or config file
 BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", DEFAULT_MODEL_ID)
-BEDROCK_REGION = os.getenv(
-    "BEDROCK_REGION", get_config_value("bedrock.region", "us-east-1")
-)
+BEDROCK_REGION = os.getenv("BEDROCK_REGION", get_config_value("bedrock.region", "us-east-1"))
 
 # GitHub Configuration
-GITHUB_REPO_OWNER = os.getenv(
-    "GITHUB_REPO_OWNER", get_config_value("github.repo_owner", "edu526")
-)
-GITHUB_REPO_NAME = os.getenv(
-    "GITHUB_REPO_NAME", get_config_value("github.repo_name", "devo-cli")
-)
+GITHUB_REPO_OWNER = os.getenv("GITHUB_REPO_OWNER", get_config_value("github.repo_owner", "edu526"))
+GITHUB_REPO_NAME = os.getenv("GITHUB_REPO_NAME", get_config_value("github.repo_name", "devo-cli"))
 GITHUB_REPO_URL = f"https://github.com/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}"
 GITHUB_API_RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases/latest"
 
 # CodeArtifact Configuration
-CODEARTIFACT_REGION = os.getenv(
-    "CODEARTIFACT_REGION", get_config_value("codeartifact.region", "us-east-1")
-)
+CODEARTIFACT_REGION = os.getenv("CODEARTIFACT_REGION", get_config_value("codeartifact.region", "us-east-1"))
 CODEARTIFACT_ACCOUNT_ID = os.getenv(
     "CODEARTIFACT_ACCOUNT_ID",
     get_config_value("codeartifact.account_id", "123456789012"),
@@ -48,11 +40,7 @@ CODEARTIFACT_REQUIRED_ROLE = os.getenv(
 
 # Load CodeArtifact domains from config
 _domains_config = get_config_value("codeartifact.domains", [])
-CODEARTIFACT_DOMAINS = (
-    [(d["domain"], d["repository"], d["namespace"]) for d in _domains_config]
-    if _domains_config
-    else []
-)
+CODEARTIFACT_DOMAINS = [(d["domain"], d["repository"], d["namespace"]) for d in _domains_config] if _domains_config else []
 
 # Legacy AWS config names (for backward compatibility)
 AWS_REGION = CODEARTIFACT_REGION

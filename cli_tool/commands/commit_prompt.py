@@ -9,12 +9,8 @@ from cli_tool.utils.git_utils import get_branch_name, get_remote_url, get_staged
 
 
 @click.command()
-@click.option(
-    "--push", "-p", is_flag=True, help="Push the commit to the remote origin."
-)
-@click.option(
-    "--pull-request", "-pr", is_flag=True, help="Open a pull request on GitHub."
-)
+@click.option("--push", "-p", is_flag=True, help="Push the commit to the remote origin.")
+@click.option("--pull-request", "-pr", is_flag=True, help="Open a pull request on GitHub.")
 @click.option(
     "--add",
     "-a",
@@ -87,9 +83,7 @@ Generate ONE message capturing the main purpose of ALL changes.""",
     # Get additional git context for better commit message generation
     try:
         # Get git status to understand what files are being committed
-        git_status_result = subprocess.run(
-            ["git", "status", "--porcelain"], capture_output=True, text=True, check=True
-        )
+        git_status_result = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, check=True)
         git_status = git_status_result.stdout
 
         # Get recent commit messages for style consistency
@@ -165,9 +159,7 @@ Do NOT include the ticket number in your response - it will be added automatical
         if ticket_number and ticket_number not in summary:
             summary = "{} {}".format(ticket_number, summary)
 
-        commit_message = "{}({}): {}{}".format(
-            commit_type, scope, summary, details_formatted
-        ).strip()
+        commit_message = "{}({}): {}{}".format(commit_type, scope, summary, details_formatted).strip()
 
         # Display the generated commit message
         click.echo("\n" + "=" * 60)
@@ -195,9 +187,7 @@ Do NOT include the ticket number in your response - it will be added automatical
             remote_url = get_remote_url()
             if remote_url:
                 # GitHub URL format for creating pull requests
-                pr_url = remote_url.replace(".git", "") + "/compare/{}?expand=1".format(
-                    branch_name
-                )
+                pr_url = remote_url.replace(".git", "") + "/compare/{}?expand=1".format(branch_name)
                 click.echo("\nOpening pull request URL in browser: {}".format(pr_url))
                 webbrowser.open(pr_url)
             else:

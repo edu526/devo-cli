@@ -92,9 +92,7 @@ def select_aws_profile(required_account=None, show_messages=True):
         selected_profile = profiles[0]
 
         # Verify the profile works
-        account_id, user_arn = verify_aws_credentials(
-            selected_profile, required_account
-        )
+        account_id, user_arn = verify_aws_credentials(selected_profile, required_account)
         if not account_id:
             if show_messages:
                 click.echo("")
@@ -115,12 +113,8 @@ def select_aws_profile(required_account=None, show_messages=True):
         if required_account and account_id != required_account:
             if show_messages:
                 click.echo("")
-                click.echo(
-                    click.style(f"Error: Profile is for account {account_id}", fg="red")
-                )
-                click.echo(
-                    click.style(f"Required account: {required_account}", fg="red")
-                )
+                click.echo(click.style(f"Error: Profile is for account {account_id}", fg="red"))
+                click.echo(click.style(f"Required account: {required_account}", fg="red"))
                 click.echo("")
             return None
 
@@ -154,9 +148,7 @@ def select_aws_profile(required_account=None, show_messages=True):
             selected_profile = profiles[index]
 
             # Verify the selected profile works
-            account_id, user_arn = verify_aws_credentials(
-                selected_profile, required_account
-            )
+            account_id, user_arn = verify_aws_credentials(selected_profile, required_account)
             if not account_id:
                 if show_messages:
                     click.echo("")
@@ -183,9 +175,7 @@ def select_aws_profile(required_account=None, show_messages=True):
                             fg="red",
                         )
                     )
-                    click.echo(
-                        click.style(f"Required account: {required_account}", fg="red")
-                    )
+                    click.echo(click.style(f"Required account: {required_account}", fg="red"))
                     click.echo("")
                 return None
 
@@ -219,15 +209,9 @@ def ensure_aws_profile(profile=None, required_account=None, show_messages=True):
 
         # Wrong account
         if show_messages:
-            click.echo(
-                click.style(
-                    f"Current credentials are for account: {account_id}", fg="yellow"
-                )
-            )
+            click.echo(click.style(f"Current credentials are for account: {account_id}", fg="yellow"))
             if required_account:
-                click.echo(
-                    click.style(f"Required account: {required_account}", fg="yellow")
-                )
+                click.echo(click.style(f"Required account: {required_account}", fg="yellow"))
             click.echo("")
 
     # Try to select a profile
@@ -244,11 +228,7 @@ def ensure_aws_profile(profile=None, required_account=None, show_messages=True):
     if required_account and account_id != required_account:
         if show_messages:
             click.echo("")
-            click.echo(
-                click.style(
-                    "Error: Selected profile is for wrong AWS account", fg="red"
-                )
-            )
+            click.echo(click.style("Error: Selected profile is for wrong AWS account", fg="red"))
             click.echo(click.style(f"Expected: {required_account}", fg="red"))
             click.echo(click.style(f"Got: {account_id}", fg="red"))
             click.echo("")

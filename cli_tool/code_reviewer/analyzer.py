@@ -42,9 +42,7 @@ class CodeReviewAnalyzer:
         ]
 
         # Choose prompt based on parameter
-        prompt = (
-            CODE_REVIEWER_PROMPT_SHORT if use_short_prompt else CODE_REVIEWER_PROMPT
-        )
+        prompt = CODE_REVIEWER_PROMPT_SHORT if use_short_prompt else CODE_REVIEWER_PROMPT
 
         return BaseAgent(
             name="CodeReviewer",
@@ -116,9 +114,7 @@ class CodeReviewAnalyzer:
                 }
 
             # Analyze the diff - let AI decide what context it needs via tools
-            diff_analysis = self._analyze_pr_diff_only(
-                pr_context, repo_path, use_short_prompt
-            )
+            diff_analysis = self._analyze_pr_diff_only(pr_context, repo_path, use_short_prompt)
 
             # Get metrics if available
             metrics_data = {}
@@ -164,9 +160,7 @@ class CodeReviewAnalyzer:
             Parsed JSON analysis focused only on diff changes
         """
         # Show AI thinking process
-        console_ui.show_ai_thinking(
-            "Preparing to analyze the PR diff and identify potential issues..."
-        )
+        console_ui.show_ai_thinking("Preparing to analyze the PR diff and identify potential issues...")
 
         # Show what we're analyzing
         console_ui.show_ai_action(
@@ -222,31 +216,21 @@ Diff:
                 # If not JSON, look for JSON block in the response
                 import re
 
-                json_match = re.search(
-                    r"```json\s*(\{.*?\})\s*```", response_text, re.DOTALL
-                )
+                json_match = re.search(r"```json\s*(\{.*?\})\s*```", response_text, re.DOTALL)
                 if json_match:
                     parsed_result = json.loads(json_match.group(1))
                     console_ui.show_analysis_complete(len(response_text))
                     return parsed_result
                 else:
                     # Fallback: create a structured response
-                    console_ui.show_ai_thinking(
-                        "Could not find JSON in response, creating fallback structure..."
-                    )
+                    console_ui.show_ai_thinking("Could not find JSON in response, creating fallback structure...")
                     return {
-                        "summary": (
-                            response_text[:500] + "..."
-                            if len(response_text) > 500
-                            else response_text
-                        ),
+                        "summary": (response_text[:500] + "..." if len(response_text) > 500 else response_text),
                         "issues": [],
                     }
         except json.JSONDecodeError as e:
             # If JSON parsing fails, return the raw response in a structured format
-            console_ui.show_ai_thinking(
-                f"JSON parsing failed: {str(e)}, returning raw response..."
-            )
+            console_ui.show_ai_thinking(f"JSON parsing failed: {str(e)}, returning raw response...")
             return {
                 "summary": f"Analysis completed (JSON parsing failed): {response_text[:200]}...",
                 "issues": [],
@@ -292,6 +276,4 @@ Diff:
             if tool_count:
                 summary_text.append(f"🔧 {tool_count} tools used")
 
-            console_ui.show_ai_thinking(
-                f"Analysis complete: {' | '.join(summary_text)}"
-            )
+            console_ui.show_ai_thinking(f"Analysis complete: {' | '.join(summary_text)}")

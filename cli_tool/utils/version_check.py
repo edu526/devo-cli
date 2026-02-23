@@ -80,9 +80,7 @@ def parse_version(version_str):
     """Parse version string into tuple of integers for comparison"""
     try:
         # Remove 'v' prefix if present and any dev/pre-release suffixes
-        version_str = (
-            version_str.lstrip("v").split("+")[0].split("-")[0].split(".dev")[0]
-        )
+        version_str = version_str.lstrip("v").split("+")[0].split("-")[0].split(".dev")[0]
         parts = version_str.split(".")
         return tuple(int(p) for p in parts if p.isdigit())
     except Exception:
@@ -150,9 +148,7 @@ def show_update_notification():
 
         if has_update and latest_version:
             print()
-            print(
-                f"✨ New version available: v{latest_version} (current: v{current_version})"
-            )
+            print(f"✨ New version available: v{latest_version} (current: v{current_version})")
             print("   Run 'devo upgrade' to update")
     except Exception:
         # Silently fail - don't interrupt user's workflow

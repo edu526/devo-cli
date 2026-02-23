@@ -54,9 +54,7 @@ class StreamingDisplayManager:
         if event_id in self.event_panels:
             del self.event_panels[event_id]
             if self.is_active and self.live_display:
-                self.live_display.update(
-                    Group(*self.event_panels.values()), refresh=True
-                )
+                self.live_display.update(Group(*self.event_panels.values()), refresh=True)
 
 
 class ConsoleUI:
@@ -77,15 +75,11 @@ class ConsoleUI:
 
     def show_tool_input(self, tool_name: str, icon: str, parameters: Dict[str, Any]):
         """Display tool input parameters in a formatted panel."""
-        params_text = "\n".join(
-            [f"• {key}: [green]'{value}'[/green]" for key, value in parameters.items()]
-        )
+        params_text = "\n".join([f"• {key}: [green]'{value}'[/green]" for key, value in parameters.items()])
 
         self.console.print(
             Panel(
-                f"[bold cyan]{icon} {tool_name}[/bold cyan]\n\n"
-                f"[yellow]Parameters:[/yellow]\n"
-                f"{params_text}",
+                f"[bold cyan]{icon} {tool_name}[/bold cyan]\n\n" f"[yellow]Parameters:[/yellow]\n" f"{params_text}",
                 title="📥 Tool Input",
                 border_style="blue",
             )
@@ -124,9 +118,7 @@ class ConsoleUI:
             )
         )
 
-    def show_code_content(
-        self, file_path: str, content: str, start_line: int = 1, language: str = "text"
-    ):
+    def show_code_content(self, file_path: str, content: str, start_line: int = 1, language: str = "text"):
         """Display code content with syntax highlighting."""
         try:
             syntax = Syntax(content, language, line_numbers=True, start_line=start_line)
@@ -140,13 +132,9 @@ class ConsoleUI:
             self.console.print(Panel(syntax, title=title, border_style="green"))
         except Exception:
             # Fallback to plain text if syntax highlighting fails
-            self.show_tool_output(
-                "{} (lines {}+)".format(file_path, start_line), content
-            )
+            self.show_tool_output("{} (lines {}+)".format(file_path, start_line), content)
 
-    def show_search_results(
-        self, symbol_name: str, results: list, success_message: str = None
-    ):
+    def show_search_results(self, symbol_name: str, results: list, success_message: str = None):
         """Display search results in a formatted way."""
         if results:
             output_text = success_message or "✅ Success"
@@ -165,9 +153,7 @@ class ConsoleUI:
     def show_function_definitions(self, function_name: str, results: list):
         """Display function definition search results."""
         if results:
-            output_text = (
-                f"Found {len(results)} definition(s) for '{function_name}'\n\n"
-            )
+            output_text = f"Found {len(results)} definition(s) for '{function_name}'\n\n"
             for i, result in enumerate(results[:3], 1):
                 lines = result.strip().split("\n")
                 for line in lines[:2]:
@@ -185,9 +171,7 @@ class ConsoleUI:
                 success=True,
             )
 
-    def show_import_analysis(
-        self, symbol_name: str, file_path: str, imports: list, usages: list
-    ):
+    def show_import_analysis(self, symbol_name: str, file_path: str, imports: list, usages: list):
         """Display import and usage analysis."""
         output_text = f"Analysis of '{symbol_name}' in {file_path}\n\n"
 
@@ -233,15 +217,11 @@ class ConsoleUI:
 
     def show_request_preview(self, preview_content: str):
         """Display request preview panel."""
-        self.console.print(
-            Panel(preview_content, title="📋 Request Preview", border_style="blue")
-        )
+        self.console.print(Panel(preview_content, title="📋 Request Preview", border_style="blue"))
 
     def show_processing_status(self):
         """Display processing status."""
-        self.console.print(
-            "\n🔄 [bold yellow]AI is processing the request...[/bold yellow]\n"
-        )
+        self.console.print("\n🔄 [bold yellow]AI is processing the request...[/bold yellow]\n")
 
     def show_ai_thinking(self, thought: str):
         """Display AI thinking process in real-time using streaming panels."""
@@ -255,9 +235,7 @@ class ConsoleUI:
         self._streaming_manager.start_streaming()
 
         # Create the panel with current thought
-        panel = Panel(
-            f"💭 {thought}", title="🧠 AI Thinking", border_style="cyan", padding=(0, 1)
-        )
+        panel = Panel(f"💭 {thought}", title="🧠 AI Thinking", border_style="cyan", padding=(0, 1))
 
         # Update the streaming panel
         self._streaming_manager.update_event_panel(event_id, panel)
@@ -284,9 +262,7 @@ class ConsoleUI:
         if details:
             content += f"\n\n📋 {details}"
 
-        self.console.print(
-            Panel(content, title="🤖 AI Action", border_style="blue", padding=(0, 1))
-        )
+        self.console.print(Panel(content, title="🤖 AI Action", border_style="blue", padding=(0, 1)))
 
     def show_ai_progress(self, step: str, current: int, total: int):
         """Display AI progress through analysis steps."""
@@ -297,17 +273,14 @@ class ConsoleUI:
         progress_bar = "█" * current + "░" * (total - current)
         self.console.print(
             Panel(
-                f"📊 Step {current}/{total}: {step}\n\n"
-                f"Progress: [{progress_bar}] {current}/{total}",
+                f"📊 Step {current}/{total}: {step}\n\n" f"Progress: [{progress_bar}] {current}/{total}",
                 title="⚡ AI Progress",
                 border_style="green",
                 padding=(0, 1),
             )
         )
 
-    def show_ai_writing(
-        self, content_preview: str, writing_status: str = "Writing analysis..."
-    ):
+    def show_ai_writing(self, content_preview: str, writing_status: str = "Writing analysis..."):
         """Display AI writing process with content preview."""
         # Truncate preview if too long
         if len(content_preview) > 300:
@@ -340,11 +313,7 @@ class ConsoleUI:
         self._last_event_type = "ai_response"
 
         # Prepare display content
-        status = (
-            "✅ Complete"
-            if is_complete
-            else f"⏳ Generating... ({self._event_count} chunks)"
-        )
+        status = "✅ Complete" if is_complete else f"⏳ Generating... ({self._event_count} chunks)"
 
         # For long content during streaming, show a sliding window to keep new content visible
         display_content = self._accumulated_response
@@ -358,10 +327,7 @@ class ConsoleUI:
                 recent_lines = lines[-20:]
                 hidden_lines = len(lines) - 20
 
-                display_content = (
-                    f"... ({hidden_lines} previous lines, {char_count:,} chars total) ...\n\n"
-                    + "\n".join(recent_lines)
-                )
+                display_content = f"... ({hidden_lines} previous lines, {char_count:,} chars total) ...\n\n" + "\n".join(recent_lines)
 
         # Create the panel
         panel = Panel(
@@ -396,17 +362,13 @@ class ConsoleUI:
 
         self.console.print(
             Panel(
-                f"🎯 AI Analysis Completed!\n\n"
-                f"📝 Response length: {response_length:,} characters\n"
-                f"📊 Processing JSON response...",
+                f"🎯 AI Analysis Completed!\n\n" f"📝 Response length: {response_length:,} characters\n" f"📊 Processing JSON response...",
                 title="✅ Analysis Complete",
                 border_style="green",
             )
         )
 
-    def show_analysis_results_table(
-        self, analysis_result: Dict[str, Any], show_metrics: bool = True
-    ):
+    def show_analysis_results_table(self, analysis_result: Dict[str, Any], show_metrics: bool = True):
         """Display analysis results in a rich table format."""
         # Stop any active streaming
         self._streaming_manager.stop_streaming()
@@ -431,9 +393,7 @@ class ConsoleUI:
                 f"📁 Total files changed: {context.get('total_files', 0)}\n"
                 f"📄 Supported files analyzed: {context.get('supported_files', 0)}"
             )
-            self.console.print(
-                Panel(context_info, title="📊 PR Context", border_style="blue")
-            )
+            self.console.print(Panel(context_info, title="📊 PR Context", border_style="blue"))
 
         # Show issues in cards format
         issues = analysis_result.get("issues", [])
@@ -482,9 +442,7 @@ class ConsoleUI:
             elif i > 0 and i < len(lines) - 1:
                 # Only add empty lines if they're between content lines (not at start/end)
                 # This creates proper spacing between sections
-                next_lines_have_content = any(
-                    lines[j].strip() for j in range(i + 1, len(lines))
-                )
+                next_lines_have_content = any(lines[j].strip() for j in range(i + 1, len(lines)))
                 if next_lines_have_content:
                     formatted_lines.append("")
 
@@ -492,9 +450,7 @@ class ConsoleUI:
 
     def _show_issues_cards(self, issues: List[Dict[str, Any]]):
         """Display issues as individual cards for better readability."""
-        self.console.print(
-            f"\n[bold magenta]🚨 Issues Found ({len(issues)} total)[/bold magenta]\n"
-        )
+        self.console.print(f"\n[bold magenta]🚨 Issues Found ({len(issues)} total)[/bold magenta]\n")
 
         for i, issue in enumerate(issues, 1):
             # Get severity color and style
@@ -509,9 +465,7 @@ class ConsoleUI:
 
             # Get issue type with icon - normalize the type for better matching
             issue_type = issue.get("type", "unknown").lower()
-            issue_type_normalized = (
-                issue_type.replace(" ", "").replace("_", "").replace("-", "")
-            )
+            issue_type_normalized = issue_type.replace(" ", "").replace("_", "").replace("-", "")
 
             type_info = {
                 # Dependencies
@@ -770,11 +724,7 @@ class ConsoleUI:
 
             # Create and show the card
             card_text = "\n".join(card_content)
-            self.console.print(
-                Panel(
-                    card_text, border_style=border_style, padding=(0, 1), expand=False
-                )
-            )
+            self.console.print(Panel(card_text, border_style=border_style, padding=(0, 1), expand=False))
 
             # Add separator between cards (except for the last one)
             if i < len(issues):
