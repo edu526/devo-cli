@@ -84,17 +84,18 @@ def get_executable_path():
     return None
 
 
-def verify_binary(binary_path, is_zip=False):
+def verify_binary(binary_path, is_windows_zip=False):
     """Verify downloaded binary is valid"""
     try:
-        # For ZIP files, verify it's a valid ZIP
-        if is_zip:
+        # For Windows ZIP files, verify it's a valid ZIP
+        if is_windows_zip:
             if not zipfile.is_zipfile(binary_path):
                 click.echo("Error: Downloaded file is not a valid ZIP archive")
                 return False
-            # Check ZIP contains devo.exe
+            # Check ZIP contains devo directory with devo.exe
             with zipfile.ZipFile(binary_path, "r") as zf:
-                if "devo.exe" not in zf.namelist():
+                names = zf.namelist()
+                if not any("devo.exe" in name or "devo/devo.exe" in name for name in names):
                     click.echo("Error: ZIP does not contain devo.exe")
                     return False
             return True
@@ -156,11 +157,11 @@ def download_binary(url, dest_path):
         return False
 
 
-def replace_binary(new_binary_path, target_path, is_zip=False):
+def replace_binary(new_binary_path, target_path, is_windows_zip=False):
     """Replace current binary with new one"""
     try:
-        # Windows onedir: target_path is the directory, not the exe
-        if is_zip:
+        # Windows onedir: target_path is the directory, extract ZIP
+        if is_windows_zip:
             # Create backup of entire directory
             backup_path = target_path.parent / f"{target_path.name}.backup"
             if backup_path.exists():
@@ -173,9 +174,21 @@ def replace_binary(new_binary_path, target_path, is_zip=False):
             temp_extract = target_path.parent / "devo_temp"
             if temp_extract.exists():
                 shutil.rmtree(temp_extract)
+            temp_extract.mkdir()
 
             with zipfile.ZipFile(new_binary_path, "r") as zf:
                 zf.extractall(temp_extract)
+
+            # Find the extracted devo directory
+            extracted_dir = None
+            for item in temp_extract.iterdir():
+                if item.is_dir() and item.name.startswith("devo"):
+                    extracted_dir = item
+                    break
+
+            if not extracted_dir:
+                click.echo("Error: Could not find extracted devo directory")
+                return False
 
             # Move old directory out of the way
             old_path = target_path.parent / f"{target_path.name}.old"
@@ -184,7 +197,10 @@ def replace_binary(new_binary_path, target_path, is_zip=False):
             shutil.move(str(target_path), str(old_path))
 
             # Move new directory into place
-            shutil.move(str(temp_extract), str(target_path))
+            shutil.move(str(extracted_dir), str(target_path))
+
+            # Clean up temp directory
+            shutil.rmtree(temp_extract)
 
             click.echo(f"Old directory: {old_path}")
             click.echo("\nTo restore backup if needed:")
@@ -324,14 +340,14 @@ def upgrade(force, check):
 
             # Verify downloaded binary
             click.echo("\nVerifying downloaded binary...")
-            if not verify_binary(tmp_path, is_zip=is_windows_zip):
+            if not verify_binary(tmp_path, is_windows_zip=is_windows_zip):
                 click.echo("Error: Downloaded binary failed verification", err=True)
                 click.echo("The file may be corrupted. Please try again.", err=True)
                 sys.exit(1)
 
             # Replace binary
             click.echo("\nInstalling new version...")
-            if not replace_binary(tmp_path, current_exe, is_zip=is_windows_zip):
+            if not replace_binary(tmp_path, current_exe, is_windows_zip=is_windows_zip):
                 sys.exit(1)
 
             # Clean up temp file immediately after successful replacement

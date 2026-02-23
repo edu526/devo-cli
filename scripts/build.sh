@@ -96,9 +96,9 @@ rm -rf build dist *.spec.bak
 echo -e "${BLUE}🔨 Building binary with PyInstaller...${NC}"
 pyinstaller devo.spec --clean
 
-# Check if build was successful
+# Check if build was successful (single binary for Linux/macOS)
 if [ ! -f "dist/devo" ]; then
-  echo -e "${RED}❌ Build failed - binary not found${NC}"
+  echo -e "${RED}❌ Build failed - binary not found at dist/devo${NC}"
   exit 1
 fi
 
@@ -151,6 +151,8 @@ if [ "$CREATE_RELEASE" = true ]; then
   mkdir -p "${RELEASE_DIR}"
 
   BINARY_NAME="devo-${PLATFORM}-${ARCH}"
+
+  # Copy the binary
   cp dist/devo "${RELEASE_DIR}/${BINARY_NAME}"
   chmod +x "${RELEASE_DIR}/${BINARY_NAME}"
 
@@ -165,9 +167,9 @@ if [ "$CREATE_RELEASE" = true ]; then
 
   # Use shasum on macOS, sha256sum on Linux
   if command -v sha256sum &> /dev/null; then
-    sha256sum * > SHA256SUMS
+    sha256sum "${BINARY_NAME}" > SHA256SUMS
   elif command -v shasum &> /dev/null; then
-    shasum -a 256 * > SHA256SUMS
+    shasum -a 256 "${BINARY_NAME}" > SHA256SUMS
   else
     echo -e "${YELLOW}⚠️  Warning: No checksum tool found${NC}"
   fi
