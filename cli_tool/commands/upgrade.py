@@ -234,8 +234,7 @@ def replace_binary(new_binary_path, target_path, is_windows_zip=False):
                             shutil.move(str(item), str(target_path / item.name))
                 except PermissionError as exc:
                     click.echo(
-                        "Failed to replace the installation directory. "
-                        "This can happen if the CLI is currently running from that location.",
+                        "Failed to replace the installation directory. " "This can happen if the CLI is currently running from that location.",
                         err=True,
                     )
                     if platform.system() == "Windows":
@@ -246,8 +245,7 @@ def replace_binary(new_binary_path, target_path, is_windows_zip=False):
                         )
                     else:
                         click.echo(
-                            "Please ensure no running processes are using the cli_tool binary "
-                            "and try the upgrade again.",
+                            "Please ensure no running processes are using the cli_tool binary " "and try the upgrade again.",
                             err=True,
                         )
                     click.echo(f"Underlying error: {exc}", err=True)
