@@ -52,13 +52,13 @@ make lint
 ### 1. Create Feature Branch
 
 ```bash
-git checkout -b feature/NDT-123-description
+git checkout -b feature/TICKET-123-description
 ```
 
 Branch naming:
-- `feature/NDT-<ticket>-description` - New features
-- `fix/NDT-<ticket>-description` - Bug fixes
-- `chore/NDT-<ticket>-description` - Maintenance
+- `feature/<ticket>-description` - New features
+- `fix/<ticket>-description` - Bug fixes
+- `chore/<ticket>-description` - Maintenance
 
 ### 2. Make Changes
 
@@ -84,17 +84,17 @@ make lint            # Check code style
 devo commit
 
 # Or manually:
-git commit -m "feat(cli): NDT-123 add feature"
+git commit -m "feat(cli): TICKET-123 add feature"
 ```
 
-Commit format: `<type>(<scope>): NDT-<ticket> <summary>`
+Commit format: `<type>(<scope>): <ticket> <summary>`
 
 Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `style`, `perf`
 
 ### 5. Push and Create PR
 
 ```bash
-git push origin feature/NDT-123-description
+git push origin feature/TICKET-123-description
 devo commit --pull-request  # Opens PR in browser
 ```
 

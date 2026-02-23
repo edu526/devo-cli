@@ -28,7 +28,7 @@ def test_commit_all_options(
 ):
     # Mock external dependencies
     mock_get_staged_diff.return_value = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-hello\n+world"
-    mock_get_branch_name.return_value = "feature/NDT-123"
+    mock_get_branch_name.return_value = "feature/TICKET-123"
     mock_get_remote_url.return_value = "https://github.com/edu526/devo-cli"
 
     # Mock git commands and operations in sequence
@@ -55,7 +55,7 @@ def test_commit_all_options(
     assert "Adding all changes to the staging area..." in result.output
     assert "✅ All changes added." in result.output
     assert "✅ Commit message accepted" in result.output
-    assert "✅ Changes pushed to origin/feature/NDT-123" in result.output
+    assert "✅ Changes pushed to origin/feature/TICKET-123" in result.output
 
     # Verify git operations were called
     mock_subprocess_run.assert_any_call(["git", "add", "."], check=True)
@@ -64,12 +64,12 @@ def test_commit_all_options(
             "git",
             "commit",
             "-m",
-            "feat(cli): NDT-123 Add new feature\n\n- Added a new feature to the CLI.",
+            "feat(cli): TICKET-123 Add new feature\n\n- Added a new feature to the CLI.",
         ],
         check=True,
     )
     mock_subprocess_run.assert_any_call(
-        ["git", "push", "origin", "feature/NDT-123"], check=True
+        ["git", "push", "origin", "feature/TICKET-123"], check=True
     )
 
     # Verify webbrowser was opened for PR
@@ -89,7 +89,7 @@ def test_commit_manual_message_with_ticket(
 ):
     # Mock external dependencies
     mock_get_staged_diff.return_value = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-hello\n+world"
-    mock_get_branch_name.return_value = "feature/NDT-456"
+    mock_get_branch_name.return_value = "feature/TICKET-456"
 
     # Mock git commands
     mock_subprocess_run.side_effect = [
@@ -119,7 +119,7 @@ def test_commit_manual_message_with_ticket(
     ]
     assert len(commit_calls) == 1
     commit_message = commit_calls[0][0][0][3]  # The message argument (after -m)
-    assert "NDT-456" in commit_message
+    assert "TICKET-456" in commit_message
     assert "My manual commit message" in commit_message
 
 
@@ -136,7 +136,7 @@ def test_commit_aws_credentials_error(
 ):
     # Mock external dependencies
     mock_get_staged_diff.return_value = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-hello\n+world"
-    mock_get_branch_name.return_value = "feature/NDT-789"
+    mock_get_branch_name.return_value = "feature/TICKET-789"
 
     # Mock git commands
     mock_subprocess_run.side_effect = [
@@ -172,7 +172,7 @@ def test_commit_general_error(
 ):
     # Mock external dependencies
     mock_get_staged_diff.return_value = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-hello\n+world"
-    mock_get_branch_name.return_value = "feature/NDT-999"
+    mock_get_branch_name.return_value = "feature/TICKET-999"
 
     # Mock git commands
     mock_subprocess_run.side_effect = [
@@ -225,7 +225,7 @@ def test_commit_no_ticket_in_branch(
     mock_subprocess_run.assert_any_call(
         ["git", "commit", "-m", commit_message], check=True
     )
-    assert "NDT-" not in result.output
+    assert "TICKET-" not in result.output
 
 
 def test_commit_no_staged_changes(runner):
@@ -253,7 +253,7 @@ def test_commit_structured_output(
 ):
     # Mock external dependencies
     mock_get_staged_diff.return_value = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-hello\n+world"
-    mock_get_branch_name.return_value = "feature/NDT-111"
+    mock_get_branch_name.return_value = "feature/TICKET-111"
 
     # Mock git commands
     mock_subprocess_run.side_effect = [
@@ -281,4 +281,4 @@ def test_commit_structured_output(
     ]
     assert len(commit_calls) == 1
     commit_message = commit_calls[0][0][0][3]  # The message argument (after -m)
-    assert "feat(api): NDT-111 Add new endpoint for user management" in commit_message
+    assert "feat(api): TICKET-111 Add new endpoint for user management" in commit_message
