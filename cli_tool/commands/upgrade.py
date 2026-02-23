@@ -174,76 +174,13 @@ def replace_binary(new_binary_path, target_path, is_windows_zip=False):
             click.echo(f"Backup created: {backup_path}")
 
             # Extract ZIP to temporary location
-            temp_extract = target_path.parent / "devo_temp"
+            temp_extract = target_path.parent / "devo_new"
             if temp_extract.exists():
                 try:
                     shutil.rmtree(temp_extract)
                 except OSError as e:
                     click.echo(f"Warning: Could not remove old temp directory: {e}", err=True)
             temp_extract.mkdir()
-
-            # Path for moving old installation out of the way
-            old_path = target_path.parent / f"{target_path.name}.old"
-
-            def restore_from_backup():
-                """Attempt to restore the previous installation from .old or backup."""
-                click.echo("Attempting to restore from backup...")
-                try:
-                    # Clean up temp extraction directory
-                    if temp_extract.exists():
-                        try:
-                            shutil.rmtree(temp_extract)
-                        except (OSError, PermissionError) as e:
-                            click.echo(f"Warning: Could not clean up temp directory: {e}", err=True)
-
-                    # Restore from .old directory (preferred)
-                    if old_path.exists():
-                        if target_path.exists():
-                            try:
-                                shutil.rmtree(target_path)
-                            except (OSError, PermissionError) as e:
-                                click.echo(f"Error: Cannot remove corrupted installation at {target_path}: {e}", err=True)
-                                click.echo("The installation directory may be in use or you may lack permissions.", err=True)
-                                if platform.system() == "Windows":
-                                    click.echo("Try closing all terminals and applications using the CLI, then run upgrade again.", err=True)
-                                raise
-                        try:
-                            shutil.move(str(old_path), str(target_path))
-                            click.echo("Restored installation from .old directory.")
-                        except (OSError, PermissionError) as e:
-                            click.echo(f"Error: Failed to restore from .old directory: {e}", err=True)
-                            raise
-
-                    # Restore from backup directory (fallback)
-                    elif backup_path.exists():
-                        if target_path.exists():
-                            try:
-                                shutil.rmtree(target_path)
-                            except (OSError, PermissionError) as e:
-                                click.echo(f"Error: Cannot remove corrupted installation at {target_path}: {e}", err=True)
-                                click.echo("The installation directory may be in use or you may lack permissions.", err=True)
-                                if platform.system() == "Windows":
-                                    click.echo("Try closing all terminals and applications using the CLI, then run upgrade again.", err=True)
-                                raise
-                        try:
-                            shutil.copytree(str(backup_path), str(target_path))
-                            click.echo("Restored installation from backup directory.")
-                        except (OSError, PermissionError) as e:
-                            click.echo(f"Error: Failed to restore from backup directory: {e}", err=True)
-                            raise
-
-                    # No backup available
-                    else:
-                        click.echo("No .old or backup directory found to restore from.", err=True)
-                        click.echo(f"Manual recovery may be required. Check {target_path.parent} for backup directories.", err=True)
-
-                except Exception as restore_exc:
-                    click.echo(f"Critical error during restore: {restore_exc}", err=True)
-                    click.echo(f"Installation may be corrupted. Manual recovery required at: {target_path}", err=True)
-                    if backup_path.exists():
-                        click.echo(f"Backup available at: {backup_path}", err=True)
-                    if old_path.exists():
-                        click.echo(f"Previous version available at: {old_path}", err=True)
 
             try:
                 with zipfile.ZipFile(new_binary_path, "r") as zf:
@@ -256,79 +193,68 @@ def replace_binary(new_binary_path, target_path, is_windows_zip=False):
                         extracted_dir = item
                         break
 
-                # Move old directory out of the way
-                if old_path.exists():
-                    shutil.rmtree(old_path)
-                if not target_path.exists():
-                    click.echo(f"Error: Installation directory {target_path} no longer exists", err=True)
-                    restore_from_backup()
-                    raise click.ClickException("Installation directory was removed during upgrade")
+                if extracted_dir is None:
+                    # ZIP contains files at the root
+                    extracted_dir = temp_extract
 
-                try:
-                    shutil.move(str(target_path), str(old_path))
-                except (OSError, FileNotFoundError) as e:
-                    click.echo(f"Error: Failed to move installation directory: {e}", err=True)
-                    restore_from_backup()
-                    raise click.ClickException("Failed to prepare for upgrade")
+                # Create PowerShell script to replace after process exits
+                script_path = target_path.parent / "upgrade_devo.ps1"
+                script_content = f"""
+# Wait for current process to exit
+$processId = {os.getpid()}
+Write-Host "Waiting for process $processId to exit..."
+Wait-Process -Id $processId -ErrorAction SilentlyContinue
 
-                # Move new directory into place (handles both flat and nested ZIP)
-                try:
-                    if extracted_dir is not None:
-                        # ZIP contains a top-level devo* directory; move it into place
-                        shutil.move(str(extracted_dir), str(target_path))
-                    else:
-                        # ZIP contains files at the root; move all extracted items into target_path
-                        target_path.mkdir()
-                        for item in temp_extract.iterdir():
-                            shutil.move(str(item), str(target_path / item.name))
-                except PermissionError as exc:
-                    click.echo(
-                        "Failed to replace the installation directory. " "This can happen if the CLI is currently running from that location.",
-                        err=True,
-                    )
-                    if platform.system() == "Windows":
-                        click.echo(
-                            "On Windows, please close this terminal (and any other "
-                            "instances of cli_tool) and run the upgrade again from a new terminal.",
-                            err=True,
-                        )
-                    else:
-                        click.echo(
-                            "Please ensure no running processes are using the cli_tool binary " "and try the upgrade again.",
-                            err=True,
-                        )
-                    click.echo(f"Underlying error: {exc}", err=True)
-                    restore_from_backup()
-                    raise click.ClickException("Upgrade failed while replacing the installation directory.")
+# Give it a moment
+Start-Sleep -Seconds 2
 
-                # Clean up temp directory
-                try:
-                    shutil.rmtree(temp_extract)
-                except OSError:
-                    pass  # Ignore cleanup errors
+# Remove old installation
+Write-Host "Removing old installation..."
+if (Test-Path "{target_path}") {{
+    Remove-Item -Path "{target_path}" -Recurse -Force -ErrorAction Stop
+}}
 
-                # Clean up old directory
-                try:
-                    if old_path.exists():
-                        shutil.rmtree(old_path)
-                except OSError:
-                    pass  # Ignore cleanup errors
+# Move new installation into place
+Write-Host "Installing new version..."
+Move-Item -Path "{extracted_dir}" -Destination "{target_path}" -Force -ErrorAction Stop
 
-                click.echo("\nTo restore backup if needed:")
-                if platform.system() == "Windows":
-                    click.echo(f"  rmdir /s /q {target_path}")
-                    click.echo(f"  move {backup_path} {target_path}")
-                else:
-                    click.echo(f"  rm -rf {target_path}")
-                    click.echo(f"  mv {backup_path} {target_path}")
+# Clean up
+Write-Host "Cleaning up..."
+if (Test-Path "{temp_extract}") {{
+    Remove-Item -Path "{temp_extract}" -Recurse -Force -ErrorAction SilentlyContinue
+}}
+Remove-Item -Path "{script_path}" -Force -ErrorAction SilentlyContinue
+
+Write-Host "Upgrade complete!"
+Write-Host "You can now run: devo --version"
+"""
+
+                with open(script_path, "w", encoding="utf-8") as f:
+                    f.write(script_content)
+
+                click.echo("\n✨ Upgrade prepared successfully!")
+                click.echo("\nThe upgrade will complete after this process exits.")
+                click.echo("Starting upgrade script...")
+
+                # Start the PowerShell script in a new window
+                import subprocess
+
+                subprocess.Popen(
+                    ["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", str(script_path)],
+                    creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS,
+                    close_fds=True,
+                )
 
                 return True
 
-            except click.ClickException:
-                raise
             except Exception as e:
-                click.echo(f"Upgrade failed: {e}")
-                restore_from_backup()
+                click.echo(f"Error preparing upgrade: {e}", err=True)
+                # Clean up temp directory
+                if temp_extract.exists():
+                    try:
+                        shutil.rmtree(temp_extract)
+                    except OSError:
+                        pass
                 return False
 
         # Unix single binary
