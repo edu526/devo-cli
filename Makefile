@@ -123,14 +123,18 @@ binary-all:
 build-windows:
 	@echo "Building Windows binary with PyInstaller..."
 	@echo "Note: Run this on Windows or use scripts/build-windows.bat"
-	@if [ "$(OS)" = "Windows_NT" ]; then \
-		cmd /c scripts\\build-windows.bat; \
-	else \
-		echo "Error: This target is for Windows only"; \
-		echo "On Windows, run: scripts\\build-windows.bat"; \
-		echo "Or use: make build-binary for cross-platform build"; \
-		exit 1; \
-	fi
+	@uname_out=$$(uname -s 2>/dev/null || echo unknown); \
+	case "$$uname_out" in \
+		MINGW*|MSYS*|CYGWIN*) \
+			cmd /c scripts\\build-windows.bat; \
+			;; \
+		*) \
+			echo "Error: This target is for Windows only (detected $$uname_out)"; \
+			echo "On Windows, run: scripts\\build-windows.bat"; \
+			echo "Or use: make build-binary for cross-platform build"; \
+			exit 1; \
+			;; \
+	esac
 
 # Create release tag
 release:

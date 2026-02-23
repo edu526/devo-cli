@@ -13,9 +13,14 @@
   - Extracts entire folder
   - Copies all files to installation directory
 
-### 3. What Still Needs Update
-- **cli_tool/commands/upgrade.py**: Needs to handle folder structure
-- **GitHub Actions**: Need to create ZIP in release workflow
+### 3. Upgrade Command
+- **cli_tool/commands/upgrade.py**: Updated to handle ZIP files and folder structure
+  - Downloads `devo-windows-amd64.zip`
+  - Extracts to directory with error recovery
+  - Creates backup before upgrade
+
+### 4. GitHub Actions
+- **`.github/workflows/release.yml`**: Updated to build and package Windows ZIP
 
 ## New Distribution Workflow
 
@@ -39,7 +44,7 @@ scripts\package-windows.ps1
 irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex
 
 # Or with specific version
-irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex -Version v1.2.0
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1))) -Version v1.2.0
 ```
 
 ### For Users (Upgrading):
@@ -47,8 +52,6 @@ irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex -Ve
 ```bash
 # Upgrade to latest
 devo upgrade
-
-# Note: upgrade command needs to be updated to handle folders
 ```
 
 ## File Structure
@@ -100,10 +103,10 @@ User Installation:
 2. ✅ Update build-windows.bat
 3. ✅ Create package-windows.ps1
 4. ✅ Update install.ps1
-5. ⏳ Update upgrade.py command
-6. ⏳ Update GitHub Actions workflow
+5. ✅ Update upgrade.py command
+6. ✅ Update GitHub Actions workflow
 7. ⏳ Test complete workflow
-8. ⏳ Update documentation
+8. ✅ Update documentation
 
 ## Testing Checklist
 
