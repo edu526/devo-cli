@@ -11,8 +11,84 @@ on:
       - develop
 
 jobs:
+  lint:
+    name: Lint & Format Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install flake8 black isort
+
+      - name: Run flake8
+        run: flake8 cli_tool/ tests/
+
+      - name: Check black formatting
+        run: black --check cli_tool/ tests/
+
+      - name: Check isort
+        run: isort --check-only cli_tool/ tests/
+
   test:
     name: Run Tests
+    needs: lint
     uses: ./.github/workflows/test-reusable.yml
     with:
       python-version: '3.12'
+
+  build-test:
+    name: Test Binary Build (Linux)
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Create temporary tag for version
+        run: |
+          git tag v0.0.0-pr-test
+          git describe --tags
+
+      - name: Build Linux binary
+        run: |
+          bash scripts/build.sh --ci --release
+
+      - name: Test binary
+        run: |
+          echo "Testing binary..."
+          chmod +x dist/devo 2>/dev/null || true
+          BINARY_VERSION=$(./dist/devo --version 2>&1 | head -1 || echo "ERROR")
+          echo "Binary version output: $BINARY_VERSION"
+
+          if [ "$BINARY_VERSION" = "ERROR" ] || [ -z "$BINARY_VERSION" ]; then
+            echo "❌ Binary test failed - no version output"
+            exit 1
+          fi
+
+          echo "✅ Binary works! Version: $BINARY_VERSION"
+
+      - name: Check binary size
+        run: |
+          BINARY_SIZE=$(stat -f%z dist/devo 2>/dev/null || stat -c%s dist/devo)
+          BINARY_SIZE_MB=$((BINARY_SIZE / 1024 / 1024))
+          echo "Binary size: ${BINARY_SIZE_MB}MB"
+
+          if [ $BINARY_SIZE_MB -lt 10 ]; then
+            echo "⚠️  Warning: Binary seems too small (${BINARY_SIZE_MB}MB)"
+          fi
