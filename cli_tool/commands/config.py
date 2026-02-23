@@ -36,9 +36,7 @@ def show():
     console.print(f"[dim]Location: {get_config_path()}[/dim]\n")
 
     # Bedrock Configuration
-    table = Table(
-        title="Bedrock Configuration", show_header=True, header_style="bold cyan"
-    )
+    table = Table(title="Bedrock Configuration", show_header=True, header_style="bold cyan")
     table.add_column("Setting", style="yellow")
     table.add_column("Value", style="white")
 
@@ -50,9 +48,7 @@ def show():
     console.print()
 
     # GitHub Configuration
-    table = Table(
-        title="GitHub Configuration", show_header=True, header_style="bold cyan"
-    )
+    table = Table(title="GitHub Configuration", show_header=True, header_style="bold cyan")
     table.add_column("Setting", style="yellow")
     table.add_column("Value", style="white")
 
@@ -63,9 +59,7 @@ def show():
     console.print()
 
     # CodeArtifact Configuration
-    table = Table(
-        title="CodeArtifact Configuration", show_header=True, header_style="bold cyan"
-    )
+    table = Table(title="CodeArtifact Configuration", show_header=True, header_style="bold cyan")
     table.add_column("Setting", style="yellow")
     table.add_column("Value", style="white")
 
@@ -78,9 +72,7 @@ def show():
     console.print()
 
     # CodeArtifact Domains
-    table = Table(
-        title="CodeArtifact Domains", show_header=True, header_style="bold cyan"
-    )
+    table = Table(title="CodeArtifact Domains", show_header=True, header_style="bold cyan")
     table.add_column("Domain", style="yellow")
     table.add_column("Repository", style="white")
     table.add_column("Namespace", style="cyan")
@@ -145,9 +137,7 @@ def get(key):
 
 
 @config.command()
-@click.confirmation_option(
-    prompt="Are you sure you want to reset configuration to defaults?"
-)
+@click.confirmation_option(prompt="Are you sure you want to reset configuration to defaults?")
 def reset():
     """Reset configuration to defaults."""
     try:
@@ -248,9 +238,7 @@ def export(output_file):
 
         console.print(f"[green]✓[/green] Configuration exported to: {output_path}")
     except Exception as e:
-        console.print(
-            f"[red]Error exporting configuration:[/red] {str(e)}", style="red"
-        )
+        console.print(f"[red]Error exporting configuration:[/red] {str(e)}", style="red")
         sys.exit(1)
 
 
@@ -298,9 +286,7 @@ def import_config(input_file, merge):
         console.print(f"[red]Error: Invalid JSON file[/red] - {str(e)}", style="red")
         sys.exit(1)
     except Exception as e:
-        console.print(
-            f"[red]Error importing configuration:[/red] {str(e)}", style="red"
-        )
+        console.print(f"[red]Error importing configuration:[/red] {str(e)}", style="red")
         sys.exit(1)
 
 
@@ -359,18 +345,14 @@ def registry_list():
         console.print("[yellow]No registries configured[/yellow]")
         return
 
-    table = Table(
-        title="CodeArtifact Registries", show_header=True, header_style="bold cyan"
-    )
+    table = Table(title="CodeArtifact Registries", show_header=True, header_style="bold cyan")
     table.add_column("#", style="dim")
     table.add_column("Domain", style="yellow")
     table.add_column("Repository", style="white")
     table.add_column("Namespace", style="cyan")
 
     for idx, domain in enumerate(domains, 1):
-        table.add_row(
-            str(idx), domain["domain"], domain["repository"], domain["namespace"]
-        )
+        table.add_row(str(idx), domain["domain"], domain["repository"], domain["namespace"])
 
     console.print(table)
 
@@ -396,9 +378,7 @@ def registry_add(domain, repository, namespace):
     # Check if registry already exists
     for existing in config_data["codeartifact"]["domains"]:
         if existing["domain"] == domain and existing["repository"] == repository:
-            console.print(
-                f"[yellow]Registry '{domain}/{repository}' already exists[/yellow]"
-            )
+            console.print(f"[yellow]Registry '{domain}/{repository}' already exists[/yellow]")
             sys.exit(1)
 
     # Add new registry
@@ -406,9 +386,7 @@ def registry_add(domain, repository, namespace):
     config_data["codeartifact"]["domains"].append(new_domain)
 
     save_config(config_data)
-    console.print(
-        f"[green]✓[/green] Added registry: {domain}/{repository} ({namespace})"
-    )
+    console.print(f"[green]✓[/green] Added registry: {domain}/{repository} ({namespace})")
 
 
 @registry.command("remove")
@@ -435,9 +413,7 @@ def registry_remove(index):
     removed = domains.pop(index - 1)
     save_config(config_data)
 
-    console.print(
-        f"[green]✓[/green] Removed registry: {removed['domain']}/{removed['repository']} ({removed['namespace']})"
-    )
+    console.print(f"[green]✓[/green] Removed registry: {removed['domain']}/{removed['repository']} ({removed['namespace']})")
 
 
 if __name__ == "__main__":

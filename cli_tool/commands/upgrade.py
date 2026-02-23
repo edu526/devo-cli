@@ -3,6 +3,7 @@ import platform
 import shutil
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 import click
@@ -61,7 +62,7 @@ def detect_platform():
 def get_binary_name(system, arch):
     """Get binary name for platform"""
     if system == "windows":
-        return f"devo-{system}-{arch}.exe"
+        return f"devo-{system}-{arch}.zip"
     return f"devo-{system}-{arch}"
 
 
@@ -69,7 +70,11 @@ def get_executable_path():
     """Get path of current executable"""
     # Check if running as PyInstaller bundle
     if getattr(sys, "frozen", False):
-        return Path(sys.executable)
+        exe_path = Path(sys.executable)
+        # For Windows onedir, return the parent directory
+        if platform.system().lower() == "windows" and exe_path.name == "devo.exe":
+            return exe_path.parent
+        return exe_path
 
     # Running as Python script - find devo in PATH
     devo_path = shutil.which("devo")
@@ -79,15 +84,26 @@ def get_executable_path():
     return None
 
 
-def verify_binary(binary_path):
+def verify_binary(binary_path, is_windows_zip=False):
     """Verify downloaded binary is valid"""
     try:
+        # For Windows ZIP files, verify it's a valid ZIP
+        if is_windows_zip:
+            if not zipfile.is_zipfile(binary_path):
+                click.echo("Error: Downloaded file is not a valid ZIP archive")
+                return False
+            # Check ZIP contains devo directory with devo.exe
+            with zipfile.ZipFile(binary_path, "r") as zf:
+                names = [name.replace("\\", "/") for name in zf.namelist()]
+                if not any("devo.exe" in name for name in names):
+                    click.echo("Error: ZIP does not contain devo.exe")
+                    return False
+            return True
+
         # Check file size (should be at least 10MB for PyInstaller binary)
         file_size = binary_path.stat().st_size
         if file_size < 10 * 1024 * 1024:  # 10MB
-            click.echo(
-                f"Warning: Binary size is only {file_size / 1024 / 1024:.1f}MB, seems too small"
-            )
+            click.echo(f"Warning: Binary size is only {file_size / 1024 / 1024:.1f}MB, seems too small")
             return False
 
         # Check if file is executable format (basic check)
@@ -128,9 +144,7 @@ def download_binary(url, dest_path):
         downloaded = 0
 
         with open(dest_path, "wb") as f:
-            with click.progressbar(
-                length=total_size, label="Downloading", show_percent=True, show_pos=True
-            ) as bar:
+            with click.progressbar(length=total_size, label="Downloading", show_percent=True, show_pos=True) as bar:
                 for chunk in response.iter_content(chunk_size=block_size):
                     if chunk:
                         f.write(chunk)
@@ -143,9 +157,181 @@ def download_binary(url, dest_path):
         return False
 
 
-def replace_binary(new_binary_path, target_path):
+def replace_binary(new_binary_path, target_path, is_windows_zip=False):
     """Replace current binary with new one"""
     try:
+        # Windows onedir: target_path is the directory, extract ZIP
+        if is_windows_zip:
+            # Create backup of entire directory
+            backup_path = target_path.parent / f"{target_path.name}.backup"
+            if backup_path.exists():
+                try:
+                    shutil.rmtree(backup_path)
+                except OSError as e:
+                    click.echo(f"Warning: Could not remove old backup: {e}", err=True)
+
+            shutil.copytree(str(target_path), str(backup_path))
+            click.echo(f"Backup created: {backup_path}")
+
+            # Extract ZIP to temporary location
+            temp_extract = target_path.parent / "devo_temp"
+            if temp_extract.exists():
+                try:
+                    shutil.rmtree(temp_extract)
+                except OSError as e:
+                    click.echo(f"Warning: Could not remove old temp directory: {e}", err=True)
+            temp_extract.mkdir()
+
+            # Path for moving old installation out of the way
+            old_path = target_path.parent / f"{target_path.name}.old"
+
+            def restore_from_backup():
+                """Attempt to restore the previous installation from .old or backup."""
+                click.echo("Attempting to restore from backup...")
+                try:
+                    # Clean up temp extraction directory
+                    if temp_extract.exists():
+                        try:
+                            shutil.rmtree(temp_extract)
+                        except (OSError, PermissionError) as e:
+                            click.echo(f"Warning: Could not clean up temp directory: {e}", err=True)
+
+                    # Restore from .old directory (preferred)
+                    if old_path.exists():
+                        if target_path.exists():
+                            try:
+                                shutil.rmtree(target_path)
+                            except (OSError, PermissionError) as e:
+                                click.echo(f"Error: Cannot remove corrupted installation at {target_path}: {e}", err=True)
+                                click.echo("The installation directory may be in use or you may lack permissions.", err=True)
+                                if platform.system() == "Windows":
+                                    click.echo("Try closing all terminals and applications using the CLI, then run upgrade again.", err=True)
+                                raise
+                        try:
+                            shutil.move(str(old_path), str(target_path))
+                            click.echo("Restored installation from .old directory.")
+                        except (OSError, PermissionError) as e:
+                            click.echo(f"Error: Failed to restore from .old directory: {e}", err=True)
+                            raise
+
+                    # Restore from backup directory (fallback)
+                    elif backup_path.exists():
+                        if target_path.exists():
+                            try:
+                                shutil.rmtree(target_path)
+                            except (OSError, PermissionError) as e:
+                                click.echo(f"Error: Cannot remove corrupted installation at {target_path}: {e}", err=True)
+                                click.echo("The installation directory may be in use or you may lack permissions.", err=True)
+                                if platform.system() == "Windows":
+                                    click.echo("Try closing all terminals and applications using the CLI, then run upgrade again.", err=True)
+                                raise
+                        try:
+                            shutil.copytree(str(backup_path), str(target_path))
+                            click.echo("Restored installation from backup directory.")
+                        except (OSError, PermissionError) as e:
+                            click.echo(f"Error: Failed to restore from backup directory: {e}", err=True)
+                            raise
+
+                    # No backup available
+                    else:
+                        click.echo("No .old or backup directory found to restore from.", err=True)
+                        click.echo(f"Manual recovery may be required. Check {target_path.parent} for backup directories.", err=True)
+
+                except Exception as restore_exc:
+                    click.echo(f"Critical error during restore: {restore_exc}", err=True)
+                    click.echo(f"Installation may be corrupted. Manual recovery required at: {target_path}", err=True)
+                    if backup_path.exists():
+                        click.echo(f"Backup available at: {backup_path}", err=True)
+                    if old_path.exists():
+                        click.echo(f"Previous version available at: {old_path}", err=True)
+
+            try:
+                with zipfile.ZipFile(new_binary_path, "r") as zf:
+                    zf.extractall(temp_extract)
+
+                # Find the extracted devo directory (nested ZIP structure)
+                extracted_dir = None
+                for item in temp_extract.iterdir():
+                    if item.is_dir() and item.name.startswith("devo"):
+                        extracted_dir = item
+                        break
+
+                # Move old directory out of the way
+                if old_path.exists():
+                    shutil.rmtree(old_path)
+                if not target_path.exists():
+                    click.echo(f"Error: Installation directory {target_path} no longer exists", err=True)
+                    restore_from_backup()
+                    raise click.ClickException("Installation directory was removed during upgrade")
+
+                try:
+                    shutil.move(str(target_path), str(old_path))
+                except (OSError, FileNotFoundError) as e:
+                    click.echo(f"Error: Failed to move installation directory: {e}", err=True)
+                    restore_from_backup()
+                    raise click.ClickException("Failed to prepare for upgrade")
+
+                # Move new directory into place (handles both flat and nested ZIP)
+                try:
+                    if extracted_dir is not None:
+                        # ZIP contains a top-level devo* directory; move it into place
+                        shutil.move(str(extracted_dir), str(target_path))
+                    else:
+                        # ZIP contains files at the root; move all extracted items into target_path
+                        target_path.mkdir()
+                        for item in temp_extract.iterdir():
+                            shutil.move(str(item), str(target_path / item.name))
+                except PermissionError as exc:
+                    click.echo(
+                        "Failed to replace the installation directory. " "This can happen if the CLI is currently running from that location.",
+                        err=True,
+                    )
+                    if platform.system() == "Windows":
+                        click.echo(
+                            "On Windows, please close this terminal (and any other "
+                            "instances of cli_tool) and run the upgrade again from a new terminal.",
+                            err=True,
+                        )
+                    else:
+                        click.echo(
+                            "Please ensure no running processes are using the cli_tool binary " "and try the upgrade again.",
+                            err=True,
+                        )
+                    click.echo(f"Underlying error: {exc}", err=True)
+                    restore_from_backup()
+                    raise click.ClickException("Upgrade failed while replacing the installation directory.")
+
+                # Clean up temp directory
+                try:
+                    shutil.rmtree(temp_extract)
+                except OSError:
+                    pass  # Ignore cleanup errors
+
+                # Clean up old directory
+                try:
+                    if old_path.exists():
+                        shutil.rmtree(old_path)
+                except OSError:
+                    pass  # Ignore cleanup errors
+
+                click.echo("\nTo restore backup if needed:")
+                if platform.system() == "Windows":
+                    click.echo(f"  rmdir /s /q {target_path}")
+                    click.echo(f"  move {backup_path} {target_path}")
+                else:
+                    click.echo(f"  rm -rf {target_path}")
+                    click.echo(f"  mv {backup_path} {target_path}")
+
+                return True
+
+            except click.ClickException:
+                raise
+            except Exception as e:
+                click.echo(f"Upgrade failed: {e}")
+                restore_from_backup()
+                return False
+
+        # Unix single binary
         # Make new binary executable
         os.chmod(new_binary_path, 0o755)
 
@@ -158,17 +344,8 @@ def replace_binary(new_binary_path, target_path):
         shutil.copy2(str(target_path), str(backup_path))
         click.echo(f"Backup created: {backup_path}")
 
-        # On Windows, we can't replace a running executable directly
-        if platform.system().lower() == "windows":
-            old_path = target_path.with_suffix(".old")
-            if old_path.exists():
-                old_path.unlink()
-            shutil.move(str(target_path), str(old_path))
-            shutil.move(str(new_binary_path), str(target_path))
-            click.echo(f"Old binary: {old_path}")
-        else:
-            # On Unix, replace the file directly
-            shutil.move(str(new_binary_path), str(target_path))
+        # Replace the file directly
+        shutil.move(str(new_binary_path), str(target_path))
 
         click.echo("\nTo restore backup if needed:")
         click.echo(f"  mv {backup_path} {target_path}")
@@ -238,6 +415,7 @@ def upgrade(force, check):
 
         system, arch = platform_info
         binary_name = get_binary_name(system, arch)
+        is_windows_zip = system == "windows"
 
         # Find binary in release assets
         asset_url = None
@@ -254,20 +432,17 @@ def upgrade(force, check):
         # Get current executable path
         current_exe = get_executable_path()
         if not current_exe:
-            click.echo(
-                "Error: Could not determine current executable location", err=True
-            )
+            click.echo("Error: Could not determine current executable location", err=True)
             click.echo("Please install manually from GitHub Releases", err=True)
             sys.exit(1)
 
         click.echo(f"Binary location: {current_exe}")
 
         # Check write permissions
-        if not os.access(current_exe.parent, os.W_OK):
-            click.echo(f"Error: No write permission to {current_exe.parent}", err=True)
-            click.echo(
-                "Try running with sudo or install to a user-writable location", err=True
-            )
+        check_path = current_exe.parent
+        if not os.access(check_path, os.W_OK):
+            click.echo(f"Error: No write permission to {check_path}", err=True)
+            click.echo("Try running with sudo or install to a user-writable location", err=True)
             sys.exit(1)
 
         if not force:
@@ -277,7 +452,8 @@ def upgrade(force, check):
 
         # Download new binary to temporary file
         click.echo(f"\nDownloading {binary_name}...")
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".tmp") as tmp_file:
+        suffix = ".zip" if is_windows_zip else ".tmp"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
             tmp_path = Path(tmp_file.name)
 
         try:
@@ -286,14 +462,14 @@ def upgrade(force, check):
 
             # Verify downloaded binary
             click.echo("\nVerifying downloaded binary...")
-            if not verify_binary(tmp_path):
+            if not verify_binary(tmp_path, is_windows_zip=is_windows_zip):
                 click.echo("Error: Downloaded binary failed verification", err=True)
                 click.echo("The file may be corrupted. Please try again.", err=True)
                 sys.exit(1)
 
             # Replace binary
             click.echo("\nInstalling new version...")
-            if not replace_binary(tmp_path, current_exe):
+            if not replace_binary(tmp_path, current_exe, is_windows_zip=is_windows_zip):
                 sys.exit(1)
 
             # Clean up temp file immediately after successful replacement

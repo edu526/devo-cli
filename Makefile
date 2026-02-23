@@ -1,4 +1,4 @@
-.PHONY: help install install-dev uninstall clean test lint format build publish refresh venv completion binary binary-all
+.PHONY: help install install-dev uninstall clean test lint format build publish refresh venv completion binary binary-all build-windows
 
 # Default target
 help:
@@ -22,6 +22,7 @@ help:
 	@echo "  make build         - Build distribution packages"
 	@echo "  make binary        - Build standalone binary for current platform"
 	@echo "  make binary-all    - Build binary with platform-specific naming"
+	@echo "  make build-windows - Build Windows binary and create ZIP package"
 	@echo "  make release       - Create git tag and trigger CI/CD"
 	@echo ""
 	@echo "Usage:"
@@ -119,7 +120,26 @@ binary-all:
 	./build-all-platforms.sh
 	@echo "✓ Platform-specific binary build complete"
 
-# Create release tag
+# Build Windows binary with PyInstaller (onedir mode)
+# Build Windows binary with PyInstaller (onedir mode)
+build-windows:
+	@echo "Building Windows binary with PyInstaller..."
+	@echo "Note: Run this on Windows or use scripts/build-windows.bat"
+	@uname_out=$$(uname -s 2>/dev/null || echo unknown); \
+	case "$$uname_out" in \
+		MINGW*|MSYS*|CYGWIN*) \
+			cmd /c scripts\\build-windows.bat && \
+			powershell -ExecutionPolicy Bypass -File scripts\\package-windows.ps1; \
+			;; \
+		*) \
+			echo "Error: This target is for Windows only (detected $$uname_out)"; \
+			echo "On Windows, run:"; \
+			echo "  1. scripts\\build-windows.bat"; \
+			echo "  2. scripts\\package-windows.ps1"; \
+			echo "Or use: make build-binary for cross-platform build"; \
+			exit 1; \
+			;; \
+	esac
 release:
 	@echo "Creating release..."
 	@echo ""

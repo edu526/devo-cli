@@ -28,7 +28,7 @@ def test_commit_all_options(
 ):
     # Mock external dependencies
     mock_get_staged_diff.return_value = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-hello\n+world"
-    mock_get_branch_name.return_value = "feature/NDT-123"
+    mock_get_branch_name.return_value = "feature/TICKET-123"
     mock_get_remote_url.return_value = "https://github.com/edu526/devo-cli"
 
     # Mock git commands and operations in sequence
@@ -42,9 +42,7 @@ def test_commit_all_options(
 
     # Mock AI agent with text response
     mock_agent_instance = MagicMock()
-    mock_agent_instance.query.return_value = (
-        "feat(cli): Add new feature\n\n- Added a new feature to the CLI."
-    )
+    mock_agent_instance.query.return_value = "feat(cli): Add new feature\n\n- Added a new feature to the CLI."
     mock_base_agent.return_value = mock_agent_instance
 
     # Run the command with --all flag
@@ -55,7 +53,7 @@ def test_commit_all_options(
     assert "Adding all changes to the staging area..." in result.output
     assert "✅ All changes added." in result.output
     assert "✅ Commit message accepted" in result.output
-    assert "✅ Changes pushed to origin/feature/NDT-123" in result.output
+    assert "✅ Changes pushed to origin/feature/TICKET-123" in result.output
 
     # Verify git operations were called
     mock_subprocess_run.assert_any_call(["git", "add", "."], check=True)
@@ -64,13 +62,11 @@ def test_commit_all_options(
             "git",
             "commit",
             "-m",
-            "feat(cli): NDT-123 Add new feature\n\n- Added a new feature to the CLI.",
+            "feat(cli): TICKET-123 Add new feature\n\n- Added a new feature to the CLI.",
         ],
         check=True,
     )
-    mock_subprocess_run.assert_any_call(
-        ["git", "push", "origin", "feature/NDT-123"], check=True
-    )
+    mock_subprocess_run.assert_any_call(["git", "push", "origin", "feature/TICKET-123"], check=True)
 
     # Verify webbrowser was opened for PR
     mock_webbrowser_open.assert_called_once()
@@ -89,7 +85,7 @@ def test_commit_manual_message_with_ticket(
 ):
     # Mock external dependencies
     mock_get_staged_diff.return_value = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-hello\n+world"
-    mock_get_branch_name.return_value = "feature/NDT-456"
+    mock_get_branch_name.return_value = "feature/TICKET-456"
 
     # Mock git commands
     mock_subprocess_run.side_effect = [
@@ -100,9 +96,7 @@ def test_commit_manual_message_with_ticket(
 
     # Mock AI agent with text response
     mock_agent_instance = MagicMock()
-    mock_agent_instance.query.return_value = (
-        "fix(auth): Fix a bug\n\n- Fixed a critical bug."
-    )
+    mock_agent_instance.query.return_value = "fix(auth): Fix a bug\n\n- Fixed a critical bug."
     mock_base_agent.return_value = mock_agent_instance
 
     # Simulate user rejecting AI message and providing their own
@@ -112,14 +106,10 @@ def test_commit_manual_message_with_ticket(
     assert "Enter your commit message" in result.output
 
     # Check that git commit was called with the manual message, including the ticket number
-    commit_calls = [
-        call_args
-        for call_args in mock_subprocess_run.call_args_list
-        if call_args[0][0][:2] == ["git", "commit"]
-    ]
+    commit_calls = [call_args for call_args in mock_subprocess_run.call_args_list if call_args[0][0][:2] == ["git", "commit"]]
     assert len(commit_calls) == 1
     commit_message = commit_calls[0][0][0][3]  # The message argument (after -m)
-    assert "NDT-456" in commit_message
+    assert "TICKET-456" in commit_message
     assert "My manual commit message" in commit_message
 
 
@@ -136,7 +126,7 @@ def test_commit_aws_credentials_error(
 ):
     # Mock external dependencies
     mock_get_staged_diff.return_value = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-hello\n+world"
-    mock_get_branch_name.return_value = "feature/NDT-789"
+    mock_get_branch_name.return_value = "feature/TICKET-789"
 
     # Mock git commands
     mock_subprocess_run.side_effect = [
@@ -146,17 +136,13 @@ def test_commit_aws_credentials_error(
 
     # Mock AI agent to raise credentials error
     mock_agent_instance = MagicMock()
-    mock_agent_instance.query.side_effect = Exception(
-        "NoCredentialsError: Unable to locate credentials"
-    )
+    mock_agent_instance.query.side_effect = Exception("NoCredentialsError: Unable to locate credentials")
     mock_base_agent.return_value = mock_agent_instance
 
     result = runner.invoke(commit)
 
     assert result.exit_code == 0
-    assert (
-        "❌ No AWS credentials found. Please configure your AWS CLI." in result.output
-    )
+    assert "❌ No AWS credentials found. Please configure your AWS CLI." in result.output
 
 
 @patch("cli_tool.commands.commit_prompt.get_staged_diff")
@@ -172,7 +158,7 @@ def test_commit_general_error(
 ):
     # Mock external dependencies
     mock_get_staged_diff.return_value = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-hello\n+world"
-    mock_get_branch_name.return_value = "feature/NDT-999"
+    mock_get_branch_name.return_value = "feature/TICKET-999"
 
     # Mock git commands
     mock_subprocess_run.side_effect = [
@@ -222,16 +208,12 @@ def test_commit_no_ticket_in_branch(
 
     assert result.exit_code == 0
     commit_message = "refactor(core): Refactor core components"
-    mock_subprocess_run.assert_any_call(
-        ["git", "commit", "-m", commit_message], check=True
-    )
-    assert "NDT-" not in result.output
+    mock_subprocess_run.assert_any_call(["git", "commit", "-m", commit_message], check=True)
+    assert "TICKET-" not in result.output
 
 
 def test_commit_no_staged_changes(runner):
-    with patch(
-        "cli_tool.commands.commit_prompt.get_staged_diff"
-    ) as mock_get_staged_diff:
+    with patch("cli_tool.commands.commit_prompt.get_staged_diff") as mock_get_staged_diff:
         mock_get_staged_diff.return_value = ""
 
         result = runner.invoke(commit)
@@ -253,7 +235,7 @@ def test_commit_structured_output(
 ):
     # Mock external dependencies
     mock_get_staged_diff.return_value = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-hello\n+world"
-    mock_get_branch_name.return_value = "feature/NDT-111"
+    mock_get_branch_name.return_value = "feature/TICKET-111"
 
     # Mock git commands
     mock_subprocess_run.side_effect = [
@@ -264,9 +246,7 @@ def test_commit_structured_output(
 
     # Mock AI agent with text response
     mock_agent_instance = MagicMock()
-    mock_agent_instance.query.return_value = (
-        "feat(api): Add new endpoint for user management"
-    )
+    mock_agent_instance.query.return_value = "feat(api): Add new endpoint for user management"
     mock_base_agent.return_value = mock_agent_instance
 
     result = runner.invoke(commit, input="y\n")
@@ -274,11 +254,7 @@ def test_commit_structured_output(
     assert result.exit_code == 0
 
     # Should commit with the structured response
-    commit_calls = [
-        call_args
-        for call_args in mock_subprocess_run.call_args_list
-        if call_args[0][0][:2] == ["git", "commit"]
-    ]
+    commit_calls = [call_args for call_args in mock_subprocess_run.call_args_list if call_args[0][0][:2] == ["git", "commit"]]
     assert len(commit_calls) == 1
     commit_message = commit_calls[0][0][0][3]  # The message argument (after -m)
-    assert "feat(api): NDT-111 Add new endpoint for user management" in commit_message
+    assert "feat(api): TICKET-111 Add new endpoint for user management" in commit_message

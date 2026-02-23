@@ -112,3 +112,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+[tool.black]
+line-length = 150
+target-version = ['py312']
