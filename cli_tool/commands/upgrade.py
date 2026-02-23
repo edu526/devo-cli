@@ -94,8 +94,8 @@ def verify_binary(binary_path, is_windows_zip=False):
                 return False
             # Check ZIP contains devo directory with devo.exe
             with zipfile.ZipFile(binary_path, "r") as zf:
-                names = zf.namelist()
-                if not any("devo.exe" in name or "devo/devo.exe" in name for name in names):
+                names = [name.replace("\\", "/") for name in zf.namelist()]
+                if not any("devo.exe" in name for name in names):
                     click.echo("Error: ZIP does not contain devo.exe")
                     return False
             return True
@@ -165,7 +165,10 @@ def replace_binary(new_binary_path, target_path, is_windows_zip=False):
             # Create backup of entire directory
             backup_path = target_path.parent / f"{target_path.name}.backup"
             if backup_path.exists():
-                shutil.rmtree(backup_path)
+                try:
+                    shutil.rmtree(backup_path)
+                except OSError as e:
+                    click.echo(f"Warning: Could not remove old backup: {e}", err=True)
 
             shutil.copytree(str(target_path), str(backup_path))
             click.echo(f"Backup created: {backup_path}")
@@ -173,41 +176,113 @@ def replace_binary(new_binary_path, target_path, is_windows_zip=False):
             # Extract ZIP to temporary location
             temp_extract = target_path.parent / "devo_temp"
             if temp_extract.exists():
-                shutil.rmtree(temp_extract)
+                try:
+                    shutil.rmtree(temp_extract)
+                except OSError as e:
+                    click.echo(f"Warning: Could not remove old temp directory: {e}", err=True)
             temp_extract.mkdir()
 
-            with zipfile.ZipFile(new_binary_path, "r") as zf:
-                zf.extractall(temp_extract)
-
-            # Find the extracted devo directory
-            extracted_dir = None
-            for item in temp_extract.iterdir():
-                if item.is_dir() and item.name.startswith("devo"):
-                    extracted_dir = item
-                    break
-
-            if not extracted_dir:
-                click.echo("Error: Could not find extracted devo directory")
-                return False
-
-            # Move old directory out of the way
+            # Path for moving old installation out of the way
             old_path = target_path.parent / f"{target_path.name}.old"
-            if old_path.exists():
-                shutil.rmtree(old_path)
-            shutil.move(str(target_path), str(old_path))
 
-            # Move new directory into place
-            shutil.move(str(extracted_dir), str(target_path))
+            def restore_from_backup():
+                """Attempt to restore the previous installation from .old or backup."""
+                click.echo("Attempting to restore from backup...")
+                try:
+                    if temp_extract.exists():
+                        shutil.rmtree(temp_extract)
+                    if old_path.exists():
+                        if target_path.exists():
+                            shutil.rmtree(target_path)
+                        shutil.move(str(old_path), str(target_path))
+                        click.echo("Restored installation from .old directory.")
+                    elif backup_path.exists():
+                        if target_path.exists():
+                            shutil.rmtree(target_path)
+                        shutil.copytree(str(backup_path), str(target_path))
+                        click.echo("Restored installation from backup directory.")
+                    else:
+                        click.echo("No .old or backup directory found to restore from.")
+                except Exception as restore_exc:
+                    click.echo(f"Error while restoring from backup: {restore_exc}")
 
-            # Clean up temp directory
-            shutil.rmtree(temp_extract)
+            try:
+                with zipfile.ZipFile(new_binary_path, "r") as zf:
+                    zf.extractall(temp_extract)
 
-            click.echo(f"Old directory: {old_path}")
-            click.echo("\nTo restore backup if needed:")
-            click.echo(f"  rmdir /s /q {target_path}")
-            click.echo(f"  move {backup_path} {target_path}")
+                # Find the extracted devo directory (nested ZIP structure)
+                extracted_dir = None
+                for item in temp_extract.iterdir():
+                    if item.is_dir() and item.name.startswith("devo"):
+                        extracted_dir = item
+                        break
 
-            return True
+                # Move old directory out of the way
+                if old_path.exists():
+                    shutil.rmtree(old_path)
+                shutil.move(str(target_path), str(old_path))
+
+                # Move new directory into place (handles both flat and nested ZIP)
+                try:
+                    if extracted_dir is not None:
+                        # ZIP contains a top-level devo* directory; move it into place
+                        shutil.move(str(extracted_dir), str(target_path))
+                    else:
+                        # ZIP contains files at the root; move all extracted items into target_path
+                        target_path.mkdir()
+                        for item in temp_extract.iterdir():
+                            shutil.move(str(item), str(target_path / item.name))
+                except PermissionError as exc:
+                    click.echo(
+                        "Failed to replace the installation directory. "
+                        "This can happen if the CLI is currently running from that location.",
+                        err=True,
+                    )
+                    if platform.system() == "Windows":
+                        click.echo(
+                            "On Windows, please close this terminal (and any other "
+                            "instances of cli_tool) and run the upgrade again from a new terminal.",
+                            err=True,
+                        )
+                    else:
+                        click.echo(
+                            "Please ensure no running processes are using the cli_tool binary "
+                            "and try the upgrade again.",
+                            err=True,
+                        )
+                    click.echo(f"Underlying error: {exc}", err=True)
+                    restore_from_backup()
+                    raise click.ClickException("Upgrade failed while replacing the installation directory.")
+
+                # Clean up temp directory
+                try:
+                    shutil.rmtree(temp_extract)
+                except OSError:
+                    pass  # Ignore cleanup errors
+
+                # Clean up old directory
+                try:
+                    if old_path.exists():
+                        shutil.rmtree(old_path)
+                except OSError:
+                    pass  # Ignore cleanup errors
+
+                click.echo("\nTo restore backup if needed:")
+                if platform.system() == "Windows":
+                    click.echo(f"  rmdir /s /q {target_path}")
+                    click.echo(f"  move {backup_path} {target_path}")
+                else:
+                    click.echo(f"  rm -rf {target_path}")
+                    click.echo(f"  mv {backup_path} {target_path}")
+
+                return True
+
+            except click.ClickException:
+                raise
+            except Exception as e:
+                click.echo(f"Upgrade failed: {e}")
+                restore_from_backup()
+                return False
 
         # Unix single binary
         # Make new binary executable
@@ -317,7 +392,7 @@ def upgrade(force, check):
         click.echo(f"Binary location: {current_exe}")
 
         # Check write permissions
-        check_path = current_exe.parent if is_windows_zip else current_exe.parent
+        check_path = current_exe.parent
         if not os.access(check_path, os.W_OK):
             click.echo(f"Error: No write permission to {check_path}", err=True)
             click.echo("Try running with sudo or install to a user-writable location", err=True)
