@@ -94,7 +94,9 @@ jobs:
           - os: windows-latest
             platform: windows
             arch: amd64
-            build_script: scripts\build-windows.bat
+            build_script: |
+              scripts\build-windows.bat
+              scripts\package-windows.ps1
 
     runs-on: ${{ matrix.os }}
 
@@ -143,7 +145,7 @@ jobs:
         run: |
           Write-Host "🧪 Testing binary..."
           try {
-            $output = & "dist\devo.exe" --version 2>&1 | Select-Object -First 1
+            $output = & "dist\devo\devo.exe" --version 2>&1 | Select-Object -First 1
             Write-Host "Binary version output: $output"
 
             if ([string]::IsNullOrWhiteSpace($output)) {
@@ -237,9 +239,15 @@ jobs:
           # Copy macOS ARM binary
           find artifacts/devo-darwin-arm64/release -name "devo-darwin-arm64" -type f -exec cp -v {} release-assets/ \;
 
-          # Copy Windows binary and rename
-          if [ -f "artifacts/devo-windows-amd64/dist/devo.exe" ]; then
-            cp -v artifacts/devo-windows-amd64/dist/devo.exe release-assets/devo-windows-amd64.exe
+          # Copy Windows ZIP (onedir package)
+          if [ -f "artifacts/devo-windows-amd64/release/devo-windows-amd64.zip" ]; then
+            cp -v artifacts/devo-windows-amd64/release/devo-windows-amd64.zip release-assets/
+          else
+            echo "⚠️  Warning: Windows ZIP not found, checking for legacy EXE..."
+            if [ -f "artifacts/devo-windows-amd64/dist/devo/devo.exe" ]; then
+              echo "Found onedir build, but not packaged. This shouldn't happen in CI."
+              exit 1
+            fi
           fi
 
           # Generate checksums
