@@ -30,24 +30,32 @@ echo Building binary with PyInstaller...
 pyinstaller devo.spec --clean
 
 REM Check if build was successful
-if exist dist\devo.exe (
+if exist dist\devo\devo.exe (
     echo.
     echo Build successful!
     echo.
-    echo Binary location: dist\devo.exe
+    echo Binary location: dist\devo\devo.exe
+    echo Binary folder: dist\devo\
+    echo.
+    echo Note: Distribute the entire dist\devo folder
     echo.
     echo Test the binary:
-    echo   dist\devo.exe --version
-    echo   dist\devo.exe --help
+    echo   dist\devo\devo.exe --version
+    echo   dist\devo\devo.exe --help
     echo.
 
     REM Test the binary
     echo Testing binary...
-    dist\devo.exe --version
+    dist\devo\devo.exe --version
 
     echo.
     echo Binary is working!
+    echo.
+    echo To install:
+    echo   1. Copy dist\devo folder to a permanent location
+    echo   2. Add that location to your PATH
+    echo   3. Run: devo --version
 ) else (
-    echo Build failed - binary not found
+    echo Build failed - binary not found at dist\devo\devo.exe
     exit /b 1
 )

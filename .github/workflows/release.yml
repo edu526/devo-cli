@@ -4,6 +4,16 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'cli_tool/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'devo.spec'
+      - 'setup.py'
+      - 'pyproject.toml'
+      - 'requirements.txt'
+      - '.github/workflows/release.yml'
+      - '.pre-commit-config.yaml'
   workflow_dispatch:
 
 permissions:
@@ -94,7 +104,9 @@ jobs:
           - os: windows-latest
             platform: windows
             arch: amd64
-            build_script: scripts\build-windows.bat
+            build_script: |
+              scripts\build-windows.bat
+              scripts\package-windows.ps1
 
     runs-on: ${{ matrix.os }}
 
@@ -143,7 +155,7 @@ jobs:
         run: |
           Write-Host "🧪 Testing binary..."
           try {
-            $output = & "dist\devo.exe" --version 2>&1 | Select-Object -First 1
+            $output = & "dist\devo\devo.exe" --version 2>&1 | Select-Object -First 1
             Write-Host "Binary version output: $output"
 
             if ([string]::IsNullOrWhiteSpace($output)) {
@@ -155,6 +167,29 @@ jobs:
           } catch {
             Write-Host "❌ Binary test failed with error: $_"
             exit 1
+          }
+
+      - name: Check binary size (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          BINARY_SIZE=$(stat -f%z dist/devo 2>/dev/null || stat -c%s dist/devo)
+          BINARY_SIZE_MB=$((BINARY_SIZE / 1024 / 1024))
+          echo "Binary size: ${BINARY_SIZE_MB}MB"
+
+          if [ $BINARY_SIZE_MB -lt 10 ]; then
+            echo "⚠️  Warning: Binary seems too small (${BINARY_SIZE_MB}MB)"
+          fi
+
+      - name: Check binary size (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $size = (Get-Item "dist\devo\devo.exe").Length
+          $sizeMB = [math]::Round($size / 1MB, 2)
+          Write-Host "Binary size: ${sizeMB}MB"
+
+          if ($sizeMB -lt 10) {
+            Write-Host "⚠️  Warning: Binary seems too small (${sizeMB}MB)"
           }
 
       - name: Upload binary artifacts
@@ -228,19 +263,17 @@ jobs:
 
           echo "📦 Preparing binaries for release..."
 
-          # Copy Linux binary
+          # Copy Linux binary (single file)
           find artifacts/devo-linux-amd64/release -name "devo-linux-amd64" -type f -exec cp -v {} release-assets/ \;
 
-          # Copy macOS Intel binary
+          # Copy macOS Intel binary (single file)
           find artifacts/devo-darwin-amd64/release -name "devo-darwin-amd64" -type f -exec cp -v {} release-assets/ \;
 
-          # Copy macOS ARM binary
+          # Copy macOS ARM binary (single file)
           find artifacts/devo-darwin-arm64/release -name "devo-darwin-arm64" -type f -exec cp -v {} release-assets/ \;
 
-          # Copy Windows binary and rename
-          if [ -f "artifacts/devo-windows-amd64/dist/devo.exe" ]; then
-            cp -v artifacts/devo-windows-amd64/dist/devo.exe release-assets/devo-windows-amd64.exe
-          fi
+          # Copy Windows ZIP (onedir package)
+          find artifacts/devo-windows-amd64/release -name "*.zip" -type f -exec cp -v {} release-assets/ \;
 
           # Generate checksums
           cd release-assets

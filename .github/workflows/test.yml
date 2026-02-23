@@ -5,10 +5,16 @@ on:
     branches:
       - main
       - develop
-  push:
-    branches:
-      - main
-      - develop
+    paths:
+      - 'cli_tool/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'devo.spec'
+      - 'setup.py'
+      - 'pyproject.toml'
+      - 'requirements.txt'
+      - '.github/workflows/test*.yml'
+      - '.pre-commit-config.yaml'
 
 jobs:
   test:
@@ -16,3 +22,116 @@ jobs:
     uses: ./.github/workflows/test-reusable.yml
     with:
       python-version: '3.12'
+
+  build-test:
+    name: Test Binary Build (${{ matrix.platform }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    needs: test
+    strategy:
+      matrix:
+        include:
+          # Linux
+          - os: ubuntu-latest
+            platform: linux
+            arch: amd64
+            build_script: bash scripts/build.sh --ci --release
+
+          # macOS Intel
+          - os: macos-latest
+            platform: darwin
+            arch: amd64
+            build_script: bash scripts/build.sh --ci --release
+
+          # macOS Apple Silicon
+          - os: macos-14
+            platform: darwin
+            arch: arm64
+            build_script: bash scripts/build.sh --ci --release
+
+          # Windows
+          - os: windows-latest
+            platform: windows
+            arch: amd64
+            build_script: |
+              scripts\build-windows.bat
+              scripts\package-windows.ps1
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create temporary tag for version
+        run: |
+          git tag v0.0.1
+          git describe --tags
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build binary
+        env:
+          RELEASE_VERSION: v0.0.1
+          FORCE_ARCH: ${{ matrix.arch }}
+        run: ${{ matrix.build_script }}
+
+      - name: Test binary (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          echo "🧪 Testing binary..."
+          chmod +x dist/devo 2>/dev/null || true
+          BINARY_VERSION=$(./dist/devo --version 2>&1 | head -1 || echo "ERROR")
+          echo "Binary version output: $BINARY_VERSION"
+
+          if [ "$BINARY_VERSION" = "ERROR" ] || [ -z "$BINARY_VERSION" ]; then
+            echo "❌ Binary test failed - no version output"
+            exit 1
+          fi
+
+          echo "✅ Binary works! Version: $BINARY_VERSION"
+
+      - name: Test binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "🧪 Testing binary..."
+          try {
+            $output = & "dist\devo\devo.exe" --version 2>&1 | Select-Object -First 1
+            Write-Host "Binary version output: $output"
+
+            if ([string]::IsNullOrWhiteSpace($output)) {
+              Write-Host "❌ Binary test failed - no version output"
+              exit 1
+            }
+
+            Write-Host "✅ Binary works! Version: $output"
+          } catch {
+            Write-Host "❌ Binary test failed with error: $_"
+            exit 1
+          }
+
+      - name: Check binary size (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          BINARY_SIZE=$(stat -f%z dist/devo 2>/dev/null || stat -c%s dist/devo)
+          BINARY_SIZE_MB=$((BINARY_SIZE / 1024 / 1024))
+          echo "Binary size: ${BINARY_SIZE_MB}MB"
+
+          if [ $BINARY_SIZE_MB -lt 10 ]; then
+            echo "⚠️  Warning: Binary seems too small (${BINARY_SIZE_MB}MB)"
+          fi
+
+      - name: Check binary size (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $size = (Get-Item "dist\devo\devo.exe").Length
+          $sizeMB = [math]::Round($size / 1MB, 2)
+          Write-Host "Binary size: ${sizeMB}MB"
+
+          if ($sizeMB -lt 10) {
+            Write-Host "⚠️  Warning: Binary seems too small (${sizeMB}MB)"
+          }

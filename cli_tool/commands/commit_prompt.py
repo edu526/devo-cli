@@ -9,12 +9,8 @@ from cli_tool.utils.git_utils import get_branch_name, get_remote_url, get_staged
 
 
 @click.command()
-@click.option(
-    "--push", "-p", is_flag=True, help="Push the commit to the remote origin."
-)
-@click.option(
-    "--pull-request", "-pr", is_flag=True, help="Open a pull request on GitHub."
-)
+@click.option("--push", "-p", is_flag=True, help="Push the commit to the remote origin.")
+@click.option("--pull-request", "-pr", is_flag=True, help="Open a pull request on GitHub.")
 @click.option(
     "--add",
     "-a",
@@ -80,15 +76,14 @@ Generate ONE message capturing the main purpose of ALL changes.""",
         return
 
     branch_name = get_branch_name()
-    match = re.match(r"feature/NDT-(\d+)", branch_name)
+    # Extract ticket number from branch name (e.g., feature/TICKET-123-description, fix/PROJ-456-desc)
+    match = re.match(r"(?:feature|fix|chore)/([A-Za-z0-9]+-\d+)", branch_name)
     ticket_number = match.group(1) if match else None
 
     # Get additional git context for better commit message generation
     try:
         # Get git status to understand what files are being committed
-        git_status_result = subprocess.run(
-            ["git", "status", "--porcelain"], capture_output=True, text=True, check=True
-        )
+        git_status_result = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, check=True)
         git_status = git_status_result.stdout
 
         # Get recent commit messages for style consistency
@@ -123,7 +118,7 @@ RECENT COMMITS (for style):
 {recent_commits}
 
 Remember: Generate ONLY ONE commit message that captures the main purpose of ALL these changes together.
-Do NOT include the ticket number (NDT-XXX) in your response - it will be added automatically."""
+Do NOT include the ticket number in your response - it will be added automatically if present in branch name."""
 
     try:
         # Show loading message
@@ -161,12 +156,10 @@ Do NOT include the ticket number (NDT-XXX) in your response - it will be added a
         details_formatted = "" if not details else "\n\n{}".format(details)
 
         # Add ticket number to summary if present and not already included
-        if ticket_number and "NDT-" not in summary:
-            summary = "NDT-{} {}".format(ticket_number, summary)
+        if ticket_number and ticket_number not in summary:
+            summary = "{} {}".format(ticket_number, summary)
 
-        commit_message = "{}({}): {}{}".format(
-            commit_type, scope, summary, details_formatted
-        ).strip()
+        commit_message = "{}({}): {}{}".format(commit_type, scope, summary, details_formatted).strip()
 
         # Display the generated commit message
         click.echo("\n" + "=" * 60)
@@ -180,8 +173,8 @@ Do NOT include the ticket number (NDT-XXX) in your response - it will be added a
             click.echo("\n✅ Commit message accepted")
         else:
             manual_message = click.prompt("Enter your commit message")
-            if ticket_number and "NDT-" not in manual_message:
-                manual_message = " NDT-{} {}".format(ticket_number, manual_message)
+            if ticket_number and ticket_number not in manual_message:
+                manual_message = "{} {}".format(ticket_number, manual_message)
             subprocess.run(["git", "commit", "-m", manual_message], check=True)
             click.echo("✅ Manual commit message accepted")
 
@@ -194,9 +187,7 @@ Do NOT include the ticket number (NDT-XXX) in your response - it will be added a
             remote_url = get_remote_url()
             if remote_url:
                 # GitHub URL format for creating pull requests
-                pr_url = remote_url.replace(".git", "") + "/compare/{}?expand=1".format(
-                    branch_name
-                )
+                pr_url = remote_url.replace(".git", "") + "/compare/{}?expand=1".format(branch_name)
                 click.echo("\nOpening pull request URL in browser: {}".format(pr_url))
                 webbrowser.open(pr_url)
             else:

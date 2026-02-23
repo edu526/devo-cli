@@ -60,16 +60,10 @@ def codeartifact_login(ctx):
         sys.exit(1)
 
     if account_id != REQUIRED_ACCOUNT:
-        click.echo(
-            click.style(
-                f"Current credentials are for account: {account_id}", fg="yellow"
-            )
-        )
+        click.echo(click.style(f"Current credentials are for account: {account_id}", fg="yellow"))
         click.echo(click.style(f"Required account: {REQUIRED_ACCOUNT}", fg="yellow"))
         click.echo("")
-        click.echo(
-            click.style("Get credentials for the correct account from:", fg="blue")
-        )
+        click.echo(click.style("Get credentials for the correct account from:", fg="blue"))
         click.echo(f"  {AWS_SSO_URL}")
         sys.exit(1)
 
@@ -131,9 +125,7 @@ def codeartifact_login(ctx):
             spinner="dots",
         ):
             try:
-                result = subprocess.run(
-                    cmd, check=True, capture_output=True, text=True, timeout=30
-                )
+                result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=30)
                 click.echo(
                     click.style(
                         f"✓ Successfully authenticated with {domain}/{repository} ({namespace})",
@@ -176,15 +168,9 @@ def codeartifact_login(ctx):
             click.echo(f"  - {domain}")
         click.echo("")
         click.echo("Troubleshooting:")
-        click.echo(
-            f"  1. Verify you're using account {REQUIRED_ACCOUNT}: aws sts get-caller-identity"
-        )
-        click.echo(
-            f"  2. Ensure you have the {REQUIRED_ROLE} role with CodeArtifact permissions"
-        )
-        click.echo(
-            "  3. Check IAM permissions for CodeArtifact (GetAuthorizationToken, ReadFromRepository)"
-        )
+        click.echo(f"  1. Verify you're using account {REQUIRED_ACCOUNT}: aws sts get-caller-identity")
+        click.echo(f"  2. Ensure you have the {REQUIRED_ROLE} role with CodeArtifact permissions")
+        click.echo("  3. Check IAM permissions for CodeArtifact (GetAuthorizationToken, ReadFromRepository)")
         click.echo("  4. Ensure the domains and repositories exist")
         click.echo("")
         click.echo(click.style("Get fresh credentials from:", fg="blue"))
@@ -194,11 +180,7 @@ def codeartifact_login(ctx):
     if success_count > 0:
         click.echo("")
         click.echo(click.style("Note: Tokens expire in 12 hours", fg="yellow"))
-        click.echo(
-            click.style(
-                "Note: pnpm will automatically use the npm configuration", fg="yellow"
-            )
-        )
+        click.echo(click.style("Note: pnpm will automatically use the npm configuration", fg="yellow"))
         click.echo("")
 
         # List available packages from each domain
@@ -229,13 +211,9 @@ def codeartifact_login(ctx):
             if profile:
                 list_cmd.extend(["--profile", profile])
 
-            with console.status(
-                f"[blue]Fetching packages from {domain}...", spinner="dots"
-            ):
+            with console.status(f"[blue]Fetching packages from {domain}...", spinner="dots"):
                 try:
-                    result = subprocess.run(
-                        list_cmd, capture_output=True, text=True, timeout=10
-                    )
+                    result = subprocess.run(list_cmd, capture_output=True, text=True, timeout=10)
                     if result.returncode == 0 and result.stdout.strip():
                         packages = result.stdout.strip().split("\t")
                         for package in packages:
@@ -273,15 +251,10 @@ def codeartifact_login(ctx):
                                         text=True,
                                         timeout=5,
                                     )
-                                    if (
-                                        version_result.returncode == 0
-                                        and version_result.stdout.strip()
-                                    ):
+                                    if version_result.returncode == 0 and version_result.stdout.strip():
                                         version = version_result.stdout.strip()
                                         if version and version != "None":
-                                            click.echo(
-                                                f"  - {namespace}/{package}@{version}"
-                                            )
+                                            click.echo(f"  - {namespace}/{package}@{version}")
                                         else:
                                             click.echo(f"  - {namespace}/{package}")
                                     else:

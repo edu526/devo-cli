@@ -12,9 +12,7 @@ console = Console()
     help="Filter by environment (e.g., dev, staging, prod)",
     required=False,
 )
-@click.option(
-    "--region", "-r", default="us-east-1", help="AWS region (default: us-east-1)"
-)
+@click.option("--region", "-r", default="us-east-1", help="AWS region (default: us-east-1)")
 @click.option(
     "--status",
     "-s",
@@ -83,12 +81,8 @@ def eventbridge(ctx, env, region, status, output, profile):
             # Get tags
             try:
                 rule_arn = rule["Arn"]
-                tags_response = events_client.list_tags_for_resource(
-                    ResourceARN=rule_arn
-                )
-                tags = {
-                    tag["Key"]: tag["Value"] for tag in tags_response.get("Tags", [])
-                }
+                tags_response = events_client.list_tags_for_resource(ResourceARN=rule_arn)
+                tags = {tag["Key"]: tag["Value"] for tag in tags_response.get("Tags", [])}
             except ClientError:
                 tags = {}
 
@@ -107,10 +101,7 @@ def eventbridge(ctx, env, region, status, output, profile):
                         target_arn = target.get("Arn", "")
 
                         # Check simple patterns first
-                        if (
-                            f"service-{env}-" in target_arn.lower()
-                            or f"-{env}-lambda" in target_arn.lower()
-                        ):
+                        if f"service-{env}-" in target_arn.lower() or f"-{env}-lambda" in target_arn.lower():
                             env_match = True
                             break
 
@@ -199,9 +190,7 @@ def eventbridge(ctx, env, region, status, output, profile):
                 target_arn = target.get("Arn", "")
                 # Extract Lambda function name from ARN
                 if ":function:" in target_arn:
-                    func_name = target_arn.split(":function:")[-1].split(":")[
-                        0
-                    ]  # Remove version/alias
+                    func_name = target_arn.split(":function:")[-1].split(":")[0]  # Remove version/alias
                     target_list.append(func_name)
                 elif target_arn:
                     # For other services, show the last part of ARN
@@ -246,21 +235,15 @@ def eventbridge(ctx, env, region, status, output, profile):
                         if env_tag:
                             break
 
-            table.add_row(
-                rule_name, status_display, schedule, targets_display, env_tag or "N/A"
-            )
+            table.add_row(rule_name, status_display, schedule, targets_display, env_tag or "N/A")
 
         console.print(table)
         console.print(f"\n[green]Total rules: {len(filtered_rules)}[/green]")
 
         # Summary by status
-        enabled_count = sum(
-            1 for item in filtered_rules if item["rule"]["State"] == "ENABLED"
-        )
+        enabled_count = sum(1 for item in filtered_rules if item["rule"]["State"] == "ENABLED")
         disabled_count = len(filtered_rules) - enabled_count
-        console.print(
-            f"[green]Enabled: {enabled_count}[/green] | [red]Disabled: {disabled_count}[/red]\n"
-        )
+        console.print(f"[green]Enabled: {enabled_count}[/green] | [red]Disabled: {disabled_count}[/red]\n")
 
     except NoCredentialsError:
         console.print("[red]Error: AWS credentials not found[/red]")
