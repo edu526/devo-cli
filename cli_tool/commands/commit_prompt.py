@@ -76,8 +76,8 @@ Generate ONE message capturing the main purpose of ALL changes.""",
         return
 
     branch_name = get_branch_name()
-    # Extract ticket number from branch name (e.g., feature/TICKET-123-description)
-    match = re.match(r"feature/([A-Z]+-\d+)", branch_name)
+    # Extract ticket number from branch name (e.g., feature/TICKET-123-description, fix/PROJ-456-desc)
+    match = re.match(r"(?:feature|fix|chore)/([A-Za-z0-9]+-\d+)", branch_name)
     ticket_number = match.group(1) if match else None
 
     # Get additional git context for better commit message generation

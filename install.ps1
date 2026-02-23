@@ -107,14 +107,21 @@ try {
 
         Expand-Archive -Path $TempZip -DestinationPath $TempExtract -Force
 
-        # Verify extraction
-        $TempExe = Join-Path $TempExtract "devo.exe"
-        if (!(Test-Path $TempExe)) {
-            Write-Host ""
-            Write-Host "ERROR: Extraction failed - devo.exe not found" -ForegroundColor Red
-            Remove-Item $TempZip -ErrorAction SilentlyContinue
-            Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue
-            Pause-OnError ""
+        # Verify extraction - search for devo.exe at root or in a subdirectory
+        $TempExeRoot = Join-Path $TempExtract "devo.exe"
+        if (Test-Path $TempExeRoot) {
+            $TempExe = $TempExeRoot
+        } else {
+            $foundExe = Get-ChildItem -Path $TempExtract -Filter "devo.exe" -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($null -ne $foundExe) {
+                $TempExe = $foundExe.FullName
+            } else {
+                Write-Host ""
+                Write-Host "ERROR: Extraction failed - devo.exe not found" -ForegroundColor Red
+                Remove-Item $TempZip -ErrorAction SilentlyContinue
+                Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue
+                Pause-OnError ""
+            }
         }
 
         Write-Host "Extraction complete!" -ForegroundColor Green

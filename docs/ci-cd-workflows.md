@@ -7,8 +7,7 @@ This document describes the CI/CD workflows for the Devo CLI project.
 **File:** `.github/workflows/test.yml`
 
 **Triggers:**
-- Pull requests to `main` or `develop`
-- Pushes to `main` or `develop`
+- Pull requests targeting `main` or `develop` branches
 
 **Jobs:**
 
@@ -22,11 +21,11 @@ This document describes the CI/CD workflows for the Devo CLI project.
 - Uses Python 3.12 on Ubuntu
 - Runs pre-commit hooks
 
-### 3. Binary Build Test (~2 min)
-- Builds Linux binary only (fastest platform)
+### 3. Binary Build Test (~2 min per platform)
+- Builds binaries on all platforms (Linux, macOS Intel, macOS ARM, Windows)
 - Tests binary execution (`--version`)
 - Validates binary size
-- Ensures PyInstaller build works
+- Ensures PyInstaller build works on each platform
 
 **Purpose:** Fast feedback to developers. Catches most issues before merge.
 
@@ -84,10 +83,9 @@ This document describes the CI/CD workflows for the Devo CLI project.
 
 ✅ Code quality (linting, formatting)
 ✅ Unit tests
-✅ Binary compilation (Linux)
+✅ Binary compilation (all platforms)
 ✅ Binary execution
 
-❌ Multi-platform builds (only in release)
 ❌ Distribution packaging (only in release)
 
 ## Local Testing
