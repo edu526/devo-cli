@@ -101,9 +101,22 @@ class SSMSession:
             cmd.extend(["--profile", profile])
 
         # On Windows, use shell=True to find aws in PATH
-        # Don't capture output so user can see real-time feedback and errors
-        result = subprocess.run(cmd, shell=platform.system() == "Windows")
+        result = subprocess.run(cmd, shell=platform.system() == "Windows", capture_output=True, text=True)
 
+        # Check if Session Manager plugin is missing
+        if result.returncode != 0 and result.stderr:
+            error_lower = result.stderr.lower()
+            if "sessionmanagerplugin is not found" in error_lower or "session-manager-plugin" in error_lower:
+                SSMSession._show_plugin_installation_guide()
+                return 1
+
+        # If there was an error, print it and return
+        if result.returncode != 0:
+            if result.stderr:
+                console.print(result.stderr)
+            return result.returncode
+
+        # Success - this shouldn't happen as SSM sessions are blocking
         return result.returncode
 
     @staticmethod
