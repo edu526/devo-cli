@@ -27,6 +27,7 @@ setup(
         "tzdata>=2025.2",
         "strands-agents>=1.7.0",
         "gitpython>=3.1.0",
+        "boto3>=1.35.0",
     ],
     entry_points={
         "console_scripts": [

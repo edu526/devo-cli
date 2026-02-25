@@ -1,4 +1,4 @@
-.PHONY: help install install-dev uninstall clean test lint format build publish refresh venv completion binary binary-all build-windows
+.PHONY: help install install-dev uninstall clean test lint format build publish refresh venv completion binary binary-all build-windows run
 
 # Default target
 help:
@@ -49,7 +49,7 @@ endif
 # Install package in editable mode
 install:
 	@echo "Installing package in editable mode..."
-	pip install -e .
+	python3 -m pip install -e . || python -m pip install -e .
 	@echo "✓ Package installed"
 	@echo ""
 	@echo "Run 'make refresh' to update shell cache"
@@ -57,8 +57,8 @@ install:
 # Install with development dependencies
 install-dev:
 	@echo "Installing package with development dependencies..."
-	pip install -e .
-	pip install -r requirements.txt
+	python3 -m pip install -e . || python -m pip install -e .
+	python3 -m pip install -r requirements.txt || python -m pip install -r requirements.txt
 	@echo "✓ Package and dev dependencies installed"
 	@echo ""
 	@echo "Run 'make refresh' to update shell cache"
@@ -66,7 +66,7 @@ install-dev:
 # Uninstall package
 uninstall:
 	@echo "Uninstalling package..."
-	pip uninstall devo-cli -y
+	python -m pip uninstall devo-cli -y
 	@echo "✓ Package uninstalled"
 
 # Refresh shell command cache

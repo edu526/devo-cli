@@ -8,6 +8,7 @@ from cli_tool.commands.codeartifact_login import codeartifact_login
 from cli_tool.commands.commit_prompt import commit
 from cli_tool.commands.completion import completion
 from cli_tool.commands.config import config
+from cli_tool.commands.dynamodb import dynamodb
 from cli_tool.commands.eventbridge import eventbridge
 from cli_tool.commands.upgrade import upgrade
 
@@ -156,6 +157,7 @@ cli.add_command(codeartifact_login)
 cli.add_command(completion)
 cli.add_command(code_reviewer)
 cli.add_command(config)
+cli.add_command(dynamodb)
 cli.add_command(eventbridge)
 
 
