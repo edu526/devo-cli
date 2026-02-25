@@ -101,45 +101,8 @@ class SSMSession:
             cmd.extend(["--profile", profile])
 
         # On Windows, use shell=True to find aws in PATH
-        result = subprocess.run(cmd, shell=platform.system() == "Windows", capture_output=True, text=True)
-
-        # Check for common AWS permission errors
-        if result.returncode != 0:
-            error_output = result.stderr.lower()
-
-            if "403" in error_output or "forbidden" in error_output or "unauthorizedrequest" in error_output:
-                console.print("\n[red]❌ AWS Permission Error (403 Forbidden)[/red]\n")
-                console.print("[yellow]Common causes:[/yellow]")
-                console.print("  1. Missing IAM permissions for SSM Session Manager")
-                console.print("  2. Instance not registered with SSM (SSM Agent not running)")
-                console.print("  3. Wrong AWS profile or credentials")
-                console.print("  4. Instance doesn't have required IAM role\n")
-
-                console.print("[cyan]Required IAM permissions:[/cyan]")
-                console.print("  - ssm:StartSession")
-                console.print("  - ssm:TerminateSession")
-                console.print("  - ec2:DescribeInstances\n")
-
-                console.print("[cyan]Troubleshooting steps:[/cyan]")
-                profile_flag = f" --profile {profile}" if profile else ""
-                console.print(f"  1. Verify your AWS profile: [dim]aws sts get-caller-identity{profile_flag}[/dim]")
-                console.print(
-                    f"  2. Check instance SSM status: [dim]aws ssm describe-instance-information "
-                    f"--instance-id {bastion} --region {region}{profile_flag}[/dim]"
-                )
-                console.print("  3. Verify IAM permissions in AWS Console")
-                console.print("  4. Ensure the bastion instance has SSM Agent installed and running\n")
-
-            elif "invalidinstanceid" in error_output or "does not exist" in error_output:
-                console.print("\n[red]❌ Instance Not Found[/red]\n")
-                console.print(f"[yellow]The bastion instance '{bastion}' doesn't exist or is not accessible[/yellow]")
-                profile_flag = f" --profile {profile}" if profile else ""
-                console.print(f"[dim]Check: aws ec2 describe-instances --instance-ids {bastion} " f"--region {region}{profile_flag}[/dim]\n")
-
-            elif "credentials" in error_output or "not configured" in error_output:
-                console.print("\n[red]❌ AWS Credentials Error[/red]\n")
-                console.print("[yellow]AWS credentials not configured or expired[/yellow]")
-                console.print(f"[dim]Run: aws configure{' --profile ' + profile if profile else ''}[/dim]\n")
+        # Don't capture output so user can see real-time feedback and errors
+        result = subprocess.run(cmd, shell=platform.system() == "Windows")
 
         return result.returncode
 
