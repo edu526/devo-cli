@@ -1,5 +1,7 @@
 # Devo CLI 🚀
 
+[![Documentation](https://github.com/edu526/devo-cli/actions/workflows/docs.yml/badge.svg)](https://edu526.github.io/devo-cli)
+
 AI-powered command-line tool for developers with AWS Bedrock integration.
 
 ## Features
@@ -135,6 +137,9 @@ Push to main triggers automated release with binaries for all platforms.
 
 ## Documentation
 
+📚 **[Full Documentation](https://edu526.github.io/devo-cli)**
+
+Quick links:
 - [Configuration Guide](./docs/configuration.md)
 - [Development Guide](./docs/development.md)
 - [CI/CD Pipeline](./docs/cicd.md)
