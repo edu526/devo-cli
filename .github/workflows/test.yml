@@ -4,6 +4,11 @@ on:
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - '**.md'
+      - '.github/workflows/docs.yml'
 
 jobs:
   test:
