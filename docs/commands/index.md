@@ -42,6 +42,27 @@ devo codeartifact-login
 
 **Use when:** You need to access private packages from CodeArtifact.
 
+### [devo ssm](ssm.md)
+AWS Systems Manager Session Manager port forwarding with hostname support.
+
+```bash
+devo ssm <subcommand> [OPTIONS]
+```
+
+**Subcommands:**
+- `connect` - Connect to a configured database
+- `connect-with-hosts` - Connect using real hostname
+- `connect-all-with-hosts` - Connect to all databases with hostname forwarding
+- `list` - List configured databases
+- `add-db` - Add database configuration
+- `remove-db` - Remove database configuration
+- `hosts-setup` - Setup /etc/hosts entries for all databases
+- `hosts-list` - List managed hosts entries
+- `export` - Export configuration
+- `import` - Import configuration
+
+**Use when:** You need to connect to RDS, ElastiCache, or other AWS resources through a bastion instance.
+
 ### [devo dynamodb](dynamodb.md)
 DynamoDB table management and data export utilities.
 
@@ -94,6 +115,7 @@ devo completion [SHELL]
 
 ### AWS Integration
 - `codeartifact-login` - CodeArtifact authentication
+- `ssm` - Session Manager port forwarding with hostname support
 - `dynamodb` - DynamoDB table management (list, describe, export)
 - `eventbridge` - EventBridge scheduled rules monitoring
 
