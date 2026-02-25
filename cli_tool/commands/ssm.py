@@ -157,7 +157,7 @@ def connect_database(name, no_hosts, profile, config_path):
         console.print("[yellow]Press Ctrl+C to stop[/yellow]\n")
 
         try:
-            SSMSession.start_port_forwarding_to_remote(
+            exit_code = SSMSession.start_port_forwarding_to_remote(
                 bastion=db_config["bastion"],
                 host=db_config["host"],
                 port=db_config["port"],
@@ -165,6 +165,8 @@ def connect_database(name, no_hosts, profile, config_path):
                 region=db_config["region"],
                 profile=profile or db_config.get("profile"),  # Override profile if provided
             )
+            if exit_code != 0:
+                console.print("[red]Connection failed[/red]")
         except KeyboardInterrupt:
             console.print("\n[green]Connection closed[/green]")
 
