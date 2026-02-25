@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.1.0 (2026-02-25)
+
+### Features
+
+- **dynamodb**: Add DynamoDB table management and export utilities
+  ([`a27fd2f`](https://github.com/edu526/devo-cli/commit/a27fd2ff636663fb4a41c36cbf28db85b477cabe))
+
+
 ## v2.0.3 (2026-02-23)
 
 ### Bug Fixes
