@@ -1,6 +1,7 @@
 """SSM session management"""
 
 import json
+import platform
 import subprocess
 from typing import Optional
 
@@ -48,7 +49,8 @@ class SSMSession:
         if profile:
             cmd.extend(["--profile", profile])
 
-        return subprocess.run(cmd).returncode
+        # On Windows, use shell=True to find aws in PATH
+        return subprocess.run(cmd, shell=platform.system() == "Windows").returncode
 
     @staticmethod
     def start_session(instance_id: str, region: str = "us-east-1", profile: Optional[str] = None) -> int:
@@ -58,7 +60,8 @@ class SSMSession:
         if profile:
             cmd.extend(["--profile", profile])
 
-        return subprocess.run(cmd).returncode
+        # On Windows, use shell=True to find aws in PATH
+        return subprocess.run(cmd, shell=platform.system() == "Windows").returncode
 
     @staticmethod
     def start_port_forwarding(instance_id: str, remote_port: int, local_port: int, region: str = "us-east-1", profile: Optional[str] = None) -> int:
@@ -80,4 +83,5 @@ class SSMSession:
         if profile:
             cmd.extend(["--profile", profile])
 
-        return subprocess.run(cmd).returncode
+        # On Windows, use shell=True to find aws in PATH
+        return subprocess.run(cmd, shell=platform.system() == "Windows").returncode

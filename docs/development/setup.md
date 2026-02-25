@@ -28,7 +28,11 @@ If you prefer manual setup:
 ```bash
 # Create and activate virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Activate virtual environment
+source venv/bin/activate              # Linux/macOS
+venv\Scripts\activate                 # Windows CMD/PowerShell
+. venv/Scripts/activate               # Windows Git Bash
 
 # Install development dependencies
 pip install -r requirements.txt
