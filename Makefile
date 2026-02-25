@@ -39,7 +39,7 @@ venv:
 	@echo "Activate it with:"
 ifeq ($(OS),Windows_NT)
 	@echo "  PowerShell: .\venv\Scripts\Activate.ps1"
-	@echo "  CMD:        venv\Scripts\activate.bat"
+	@echo "  CMD:        venv\Scripts\activate"
 	@echo "  Git Bash:   . venv/Scripts/activate"
 else
 	@echo "  source venv/bin/activate"
