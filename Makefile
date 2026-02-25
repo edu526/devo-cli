@@ -32,6 +32,29 @@ help:
 
 # Create virtual environment
 venv:
+ifeq ($(OS),Windows_NT)
+	@if exist venv ( \
+		echo Virtual environment already exists && \
+		echo. && \
+		echo Activate it with: && \
+		echo   PowerShell: .\venv\Scripts\Activate.ps1 && \
+		echo   CMD:        venv\Scripts\activate && \
+		echo   Git Bash:   . venv/Scripts/activate && \
+		echo. && \
+		echo Then run: make install-dev \
+	) else ( \
+		echo Creating virtual environment... && \
+		python -m venv venv && \
+		echo Virtual environment created && \
+		echo. && \
+		echo Activate it with: && \
+		echo   PowerShell: .\venv\Scripts\Activate.ps1 && \
+		echo   CMD:        venv\Scripts\activate && \
+		echo   Git Bash:   . venv/Scripts/activate && \
+		echo. && \
+		echo Then run: make install-dev \
+	)
+else
 	@if [ -d "venv" ]; then \
 		echo "✓ Virtual environment already exists"; \
 	else \
@@ -41,15 +64,10 @@ venv:
 	fi
 	@echo ""
 	@echo "Activate it with:"
-ifeq ($(OS),Windows_NT)
-	@echo "  PowerShell: .\venv\Scripts\Activate.ps1"
-	@echo "  CMD:        venv\Scripts\activate"
-	@echo "  Git Bash:   . venv/Scripts/activate"
-else
 	@echo "  source venv/bin/activate"
-endif
 	@echo ""
 	@echo "Then run: make install-dev"
+endif
 
 # Install package in editable mode
 install:
