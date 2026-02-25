@@ -27,8 +27,8 @@ Devo CLI is a Python-based command-line tool that provides AI-powered developmen
 
 ### `devo commit`
 Generates conventional commit messages from staged git changes.
-- Format: `<type>(<scope>): NDT-<ticket> <summary>`
-- Extracts ticket numbers from branch names (feature/NDT-XXX-description)
+- Format: `<type>(<scope>): <summary>`
+- Extracts ticket numbers from branch names (feature/description)
 - Types: feat, fix, chore, docs, refactor, test, style, perf
 - Max 50 chars for summary line
 

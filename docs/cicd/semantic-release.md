@@ -1,4 +1,4 @@
-# Semantic Release Setup
+# Semantic Release
 
 This project uses [python-semantic-release](https://python-semantic-release.readthedocs.io/) for automated versioning and releases.
 
@@ -10,10 +10,6 @@ Semantic Release analyzes commit messages following the [Conventional Commits](h
 
 ```
 <type>(<scope>): <subject>
-
-<body>
-
-<footer>
 ```
 
 ### Version Bumping
@@ -34,18 +30,14 @@ Developer commits with conventional format
     ↓
 Push to main branch
     ↓
-Semantic Release Workflow
-    ├─ Analyze commits
+Release Workflow
+    ├─ Analyze commits (python-semantic-release)
     ├─ Determine next version
-    ├─ Update CHANGELOG.md
-    ├─ Create git tag
-    ├─ Push tag
-    └─ Trigger build workflow
-        ↓
-Build and Release Workflow
     ├─ Build binaries
-    ├─ Build Python package
-    └─ Upload to GitHub Release
+    ├─ Create git tag
+    ├─ Update CHANGELOG.md
+    ├─ Create GitHub release
+    └─ Upload binaries
 ```
 
 ## Commit Message Format
@@ -107,12 +99,12 @@ git add .
 git commit -m "feat: add new feature"
 git push origin main
 
-# Semantic Release automatically:
+# GitHub Actions automatically:
 # 1. Analyzes commits
 # 2. Determines version (e.g., 1.1.0)
-# 3. Updates CHANGELOG.md
+# 3. Builds binaries
 # 4. Creates tag v1.1.0
-# 5. Triggers build workflow
+# 5. Updates CHANGELOG.md
 # 6. Creates GitHub Release with binaries
 ```
 
@@ -120,50 +112,18 @@ git push origin main
 
 You can manually trigger the release workflow:
 
-1. Go to Actions → Semantic Release
+1. Go to Actions → Release
 2. Click "Run workflow"
 3. Select branch (main)
 4. Click "Run workflow"
-
-## Configuration
-
-### `.releaserc.json`
-
-Semantic Release configuration:
-
-```json
-{
-  "branches": ["main"],
-  "plugins": [
-    "@semantic-release/commit-analyzer",
-    "@semantic-release/release-notes-generator",
-    "@semantic-release/changelog",
-    "@semantic-release/github",
-    "@semantic-release/git"
-  ]
-}
-```
-
-### `pyproject.toml`
-
-Python-specific configuration:
-
-```toml
-[tool.semantic_release]
-version_toml = ["pyproject.toml:project.version"]
-version_variables = ["cli_tool/_version.py:__version__"]
-build_command = "pip install build && python -m build"
-major_on_zero = true
-tag_format = "v{version}"
-```
 
 ## Generated Files
 
 Semantic Release automatically updates:
 
 - `CHANGELOG.md` - Auto-generated changelog
-- `cli_tool/_version.py` - Version file
 - Git tags - Version tags (e.g., `v1.2.3`)
+- GitHub Release - With binaries and release notes
 
 ## CHANGELOG.md
 
@@ -173,10 +133,6 @@ Automatically generated with sections:
 - **Bug Fixes** - Bug fixes (`fix:`)
 - **Performance Improvements** - Performance improvements (`perf:`)
 - **Documentation** - Documentation changes (`docs:`)
-- **Code Refactoring** - Refactoring (`refactor:`)
-- **Tests** - Test changes (`test:`)
-- **Build System** - Build changes (`build:`)
-- **Continuous Integration** - CI changes (`ci:`)
 
 ## Skipping Release
 
@@ -214,36 +170,11 @@ Or use `chore:` type (doesn't trigger release).
 
 ## Best Practices
 
-1. **Always use conventional commits**
-   - Enables automatic versioning
-   - Generates meaningful changelogs
-
-2. **Write clear commit messages**
-   - Subject line: what changed
-   - Body: why it changed
-   - Footer: breaking changes
-
-3. **Group related changes**
-   - One feature = one commit
-   - Multiple fixes = multiple commits
-
-4. **Use scopes for clarity**
-   - `feat(cli):` - CLI changes
-   - `fix(parser):` - Parser fixes
-   - `docs(readme):` - README updates
-
-5. **Document breaking changes**
-   - Use `!` in type: `feat!:`
-   - Add `BREAKING CHANGE:` in footer
-   - Explain migration path
-
-## Migration from Manual Versioning
-
-If you were using manual tags:
-
-1. **Last manual tag:** `v1.5.0`
-2. **First semantic release:** Will be `v1.5.1`, `v1.6.0`, or `v2.0.0`
-3. **CHANGELOG:** Will include all commits since last tag
+1. **Always use conventional commits** - Enables automatic versioning
+2. **Write clear commit messages** - Subject line: what changed
+3. **Group related changes** - One feature = one commit
+4. **Use scopes for clarity** - `feat(cli):`, `fix(parser):`
+5. **Document breaking changes** - Use `!` and `BREAKING CHANGE:`
 
 ## Examples
 
