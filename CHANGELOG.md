@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.2.0 (2026-02-25)
+
+### Documentation
+
+- Restructure documentation with mkdocs and automated deployment
+  ([`6ae7c0f`](https://github.com/edu526/devo-cli/commit/6ae7c0fb8a02ead2fe88b174a3fc56451cbdfa92))
+
+### Features
+
+- **completion**: Add automatic shell completion setup with --install flag
+  ([`47a244d`](https://github.com/edu526/devo-cli/commit/47a244dc81430b4574f4ce66f112f6cd4fc2af00))
+
+
 ## v2.1.0 (2026-02-25)
 
 ### Features
