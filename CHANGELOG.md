@@ -2,6 +2,58 @@
 
 <!-- version list -->
 
+## v2.3.0 (2026-02-25)
+
+### Bug Fixes
+
+- **ssm**: Add plugin validation and improve error handling
+  ([`720a375`](https://github.com/edu526/devo-cli/commit/720a375224bfb3b3f9fa506b024630f27158b8b4))
+
+- **ssm**: Capture and handle port forwarding exit codes
+  ([`bf58965`](https://github.com/edu526/devo-cli/commit/bf58965fee2ac6cc3f9754ef8c88f2dca0b4e148))
+
+- **ssm**: Capture output and improve error handling for missing plugin
+  ([`7648ef2`](https://github.com/edu526/devo-cli/commit/7648ef2f4120f72295f9c41d99d6caab845d3331))
+
+- **ssm**: Remove captured output to enable real-time feedback
+  ([`4f83d20`](https://github.com/edu526/devo-cli/commit/4f83d20f88c23308b045dcbd011f3b421ee57919))
+
+- **ssm,cli**: Improve hosts setup feedback and remove unused admin check
+  ([`40b73b9`](https://github.com/edu526/devo-cli/commit/40b73b9eec2e5875b6abf029c075c924fa69e10e))
+
+- **ssm,docs**: Improve Windows compatibility and activation instructions
+  ([`261354e`](https://github.com/edu526/devo-cli/commit/261354e45f193445e2feb3f147a09218dc3f4706))
+
+### Chores
+
+- **makefile**: Improve Windows venv setup with better feedback
+  ([`9b0c81a`](https://github.com/edu526/devo-cli/commit/9b0c81a14e70eda4b1a8e96a2a2cffb3542c7030))
+
+- **spec**: Add hidden imports for dynamodb and ssm modules
+  ([`d64dc7e`](https://github.com/edu526/devo-cli/commit/d64dc7eff0a1dfe768b3c7a6294c6a10d50d1d60))
+
+### Continuous Integration
+
+- Optimize workflows to skip tests/release on docs changes
+  ([`c29e59d`](https://github.com/edu526/devo-cli/commit/c29e59dd31e25c99f2dd869ebb3f349d53284447))
+
+- **docs**: Improve GitHub Pages deployment workflow and add documentation badge
+  ([`1e091ab`](https://github.com/edu526/devo-cli/commit/1e091ab0a9a1a1774997f584d62ad7da24204d7b))
+
+### Documentation
+
+- Add status and metadata badges to README
+  ([`84f250a`](https://github.com/edu526/devo-cli/commit/84f250a6b20df1ddb96f8b00d967b39a8d1b1446))
+
+- **ssm**: Expand requirements and improve architecture documentation
+  ([`1d5fd65`](https://github.com/edu526/devo-cli/commit/1d5fd6557ee1ae0443fcd65904c9bfd587c899ce))
+
+### Features
+
+- **ssm**: Add AWS Systems Manager Session Manager integration
+  ([`1c23477`](https://github.com/edu526/devo-cli/commit/1c2347776e6ebe9e85baf73c9ad77694f39312c3))
+
+
 ## v2.2.0 (2026-02-25)
 
 ### Documentation
