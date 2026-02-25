@@ -1,6 +1,5 @@
 """SSM session management"""
 
-import ctypes
 import json
 import platform
 import subprocess
@@ -13,16 +12,6 @@ console = Console()
 
 class SSMSession:
     """Manages AWS SSM sessions"""
-
-    @staticmethod
-    def _is_windows_admin() -> bool:
-        """Check if running with administrator privileges on Windows"""
-        if platform.system() != "Windows":
-            return True
-        try:
-            return ctypes.windll.shell32.IsUserAnAdmin() != 0
-        except Exception:
-            return False
 
     @staticmethod
     def _check_session_manager_plugin() -> bool:

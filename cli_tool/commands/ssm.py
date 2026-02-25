@@ -482,6 +482,9 @@ def hosts_setup(config_path):
 
     console.print("[cyan]Setting up /etc/hosts entries...[/cyan]\n")
 
+    success_count = 0
+    error_count = 0
+
     for name, db_config in databases.items():
         # Get or assign loopback IP
         if "local_address" not in db_config or db_config["local_address"] == "127.0.0.1":
@@ -499,11 +502,21 @@ def hosts_setup(config_path):
         try:
             hosts_manager.add_entry(local_address, db_config["host"])
             console.print(f"[green]✓[/green] {name}: {db_config['host']} -> {local_address}")
+            success_count += 1
         except Exception as e:
             console.print(f"[red]✗[/red] {name}: {e}")
+            error_count += 1
 
-    console.print("\n[green]Setup complete![/green]")
-    console.print("\n[dim]Your microservices can now use the real hostnames in their configuration.[/dim]")
+    # Show appropriate completion message
+    if error_count > 0 and success_count == 0:
+        console.print("\n[red]Setup failed![/red]")
+        console.print("[yellow]All entries failed. Please run your terminal as Administrator.[/yellow]")
+    elif error_count > 0:
+        console.print("\n[yellow]Setup partially complete[/yellow]")
+        console.print(f"[dim]{success_count} succeeded, {error_count} failed[/dim]")
+    else:
+        console.print("\n[green]Setup complete![/green]")
+        console.print("\n[dim]Your microservices can now use the real hostnames in their configuration.[/dim]")
 
 
 @hosts.command("list")

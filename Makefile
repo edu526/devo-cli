@@ -32,9 +32,13 @@ help:
 
 # Create virtual environment
 venv:
-	@echo "Creating virtual environment..."
-	python3 -m venv venv || python -m venv venv
-	@echo "✓ Virtual environment created"
+	@if [ -d "venv" ]; then \
+		echo "✓ Virtual environment already exists"; \
+	else \
+		echo "Creating virtual environment..."; \
+		python3 -m venv venv || python -m venv venv; \
+		echo "✓ Virtual environment created"; \
+	fi
 	@echo ""
 	@echo "Activate it with:"
 ifeq ($(OS),Windows_NT)
