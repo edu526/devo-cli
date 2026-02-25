@@ -408,6 +408,7 @@ def upgrade(force, check):
             click.echo(f"\n✨ Successfully upgraded to version {latest_version}!")
             click.echo("\nVerify the upgrade:")
             click.echo("  devo --version")
+            click.echo("\n💡 Tip: Run 'devo completion --install' to set up shell completion")
 
             # Use os._exit to terminate immediately without cleanup handlers
             # This prevents the old binary process from trying to access the new binary
