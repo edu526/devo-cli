@@ -176,8 +176,8 @@ devo --profile my-profile <command>
 
 ## Resources
 
-- [Development Guide](./development.md)
-- [AWS Profile Support](./aws-profile.md)
-- [CI/CD Pipeline](./cicd.md)
+- [Development Guide](setup.md)
+- [AWS Profile Support](../guides/aws-setup.md)
+- [CI/CD Pipeline](../cicd/overview.md)
 
 Thank you for contributing! 🎉

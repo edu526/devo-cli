@@ -47,8 +47,8 @@ Large features get their own subdirectory under `cli_tool/`:
 
 ## Git Workflow
 
-- Branch format: `feature/NDT-<ticket_number>-description`
-- Commit format: `<type>(<scope>): NDT-<ticket> <summary>` (max 50 chars)
+- Branch format: `feature/description`
+- Commit format: `<type>(<scope>): <summary>` (max 50 chars)
 - Types: feat, fix, chore, docs, refactor, test, style, perf
 - Ticket numbers auto-extracted from branch names
 

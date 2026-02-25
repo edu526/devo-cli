@@ -51,7 +51,7 @@ make build-all
 ./dist/devo --version
 ```
 
-See [Binary Distribution Guide](./binary-distribution.md) for detailed instructions.
+See [Binary Distribution Guide](building.md) for detailed instructions.
 
 ## Running Tests
 
@@ -78,7 +78,7 @@ isort .
 
 ## Release Process
 
-This project uses Semantic Release for automated versioning. See [Semantic Release Guide](./semantic-release.md) for details.
+This project uses Semantic Release for automated versioning. See [Semantic Release Guide](../cicd/semantic-release.md) for details.
 
 ```bash
 # Commit with conventional format
