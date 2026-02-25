@@ -13,8 +13,28 @@ AWS Systems Manager Session Manager port forwarding with cross-platform hostname
 
 ## Requirements by Platform
 
+### All Platforms
+
+**AWS Session Manager Plugin** (required for all platforms):
+
+This is different from AWS CLI and must be installed separately.
+
+| Platform | Installation Guide |
+|----------|-------------------|
+| Windows | [Install on Windows](https://docs.aws.amazon.com/systems-manager/latest/userguide/install-plugin-windows.html) |
+| macOS | [Install on macOS](https://docs.aws.amazon.com/systems-manager/latest/userguide/install-plugin-macos-overview.html) |
+| Linux (Debian/Ubuntu) | [Install on Debian/Ubuntu](https://docs.aws.amazon.com/systems-manager/latest/userguide/install-plugin-debian-and-ubuntu.html) |
+| Linux (RedHat/CentOS) | [Install on RedHat/CentOS](https://docs.aws.amazon.com/systems-manager/latest/userguide/install-plugin-linux.html) |
+
+Verify installation:
+
+```bash
+session-manager-plugin
+```
+
 ### Linux
-- `socat` for port forwarding
+
+- `socat` for port forwarding (hostname forwarding feature)
 - `sudo` access for /etc/hosts modification
 
 ```bash
@@ -29,7 +49,8 @@ sudo pacman -S socat
 ```
 
 ### macOS
-- `socat` for port forwarding (via Homebrew)
+
+- `socat` for port forwarding (hostname forwarding feature)
 - `sudo` access for /etc/hosts modification
 
 ```bash
@@ -37,13 +58,17 @@ brew install socat
 ```
 
 ### Windows
-- `netsh portproxy` (built-in, no installation needed)
-- Administrator privileges required
 
-**Important**: Run Command Prompt or PowerShell as Administrator:
+- `netsh portproxy` (built-in, no installation needed)
+- Administrator privileges required **only for hostname forwarding setup** (`devo ssm hosts setup`)
+
+**Important**: Administrator privileges are only needed when setting up hostname forwarding. Regular connections without hostname forwarding (`--no-hosts`) don't require admin rights.
+
+To run commands that need admin privileges:
+
 1. Right-click on Command Prompt or PowerShell
 2. Select "Run as administrator"
-3. Run devo commands
+3. Run `devo ssm hosts setup`
 
 ## Quick Start
 
@@ -96,10 +121,22 @@ No code changes needed!
 ### Architecture
 
 ```
-Your App -> hostname:port
-         -> /etc/hosts resolves to 127.0.0.x:port
-         -> Port forwarder (socat/netsh) forwards to 127.0.0.1:local_port
-         -> SSM tunnel to remote host
+Your App -> hostname:port (e.g., mydb.rds.amazonaws.com:5432)
+         |
+         v
+/etc/hosts resolves hostname to 127.0.0.x
+         |
+         v
+Port forwarder (socat/netsh) forwards 127.0.0.x:port -> 127.0.0.1:local_port
+         |
+         v
+AWS SSM Session Manager Plugin creates encrypted tunnel
+         |
+         v
+Bastion instance (EC2 with SSM Agent)
+         |
+         v
+Remote host (RDS, ElastiCache, etc.)
 ```
 
 ### Platform-Specific Implementation
@@ -115,6 +152,16 @@ socat TCP-LISTEN:5432,bind=127.0.0.2,reuseaddr,fork TCP:127.0.0.1:15432
 ```cmd
 netsh interface portproxy add v4tov4 listenaddress=127.0.0.2 listenport=5432 connectaddress=127.0.0.1 connectport=15432
 ```
+
+### Why This Architecture?
+
+AWS SSM Session Manager Plugin only binds to `127.0.0.1` (localhost). To enable hostname forwarding with real database hostnames, we:
+
+1. Assign unique loopback IPs (127.0.0.2, 127.0.0.3, etc.) to each database hostname in /etc/hosts
+2. Use platform-specific port forwarding to redirect traffic from loopback aliases to 127.0.0.1
+3. SSM Session Manager Plugin handles the encrypted tunnel to the remote host
+
+This allows your applications to use real hostnames without code changes.
 
 ## Commands Reference
 
@@ -486,21 +533,33 @@ sudo yum install socat  # RHEL/CentOS
 - Make sure your user has sudo privileges
 
 **Error: "Connection refused"**
+
 - Verify the bastion instance is running
 - Check security groups allow SSM connections
 - Ensure SSM agent is installed on bastion
+- Verify IAM permissions for SSM sessions
+
+**Error: "SessionManagerPlugin is not found"**
+
+- Install AWS Session Manager Plugin (see Requirements section)
+- Verify installation: `session-manager-plugin`
+- This is different from AWS CLI and must be installed separately
 
 ### Windows
 
-**Error: "Permission denied"**
+**Error: "Permission denied" or "Access is denied"**
+
 - Run terminal as Administrator
 - Right-click Command Prompt/PowerShell → "Run as administrator"
+- The tool will show a helpful error message with instructions
 
 **Error: "netsh command failed"**
+
 - Ensure you're running as Administrator
 - Check Windows Firewall isn't blocking the ports
 
 **Cleanup netsh rules** (if needed):
+
 ```cmd
 # List all port proxy rules
 netsh interface portproxy show all
@@ -534,11 +593,13 @@ devo ssm add-db --name mydb --bastion i-xxx --host mydb.rds.amazonaws.com --port
 ## Security Notes
 
 - Loopback IPs (127.0.0.x) are only accessible from your local machine
-- /etc/hosts entries are managed in a dedicated section with markers
-- Port forwarding rules are cleaned up when connections are stopped
-- All traffic goes through encrypted SSM tunnels
-- No SSH keys or bastion access required
+- /etc/hosts entries are managed in a dedicated section with markers (`DEVO-CLI-SSM-START` / `DEVO-CLI-SSM-END`)
+- Port forwarding rules are automatically cleaned up when connections are stopped
+- All traffic goes through encrypted SSM tunnels (TLS 1.2+)
+- No SSH keys or direct bastion access required
 - IAM policies control access to SSM sessions
+- Requires `ssm:StartSession` permission on the bastion instance
+- Bastion instance must have SSM Agent installed and running
 
 ## Configuration File Format
 
@@ -575,6 +636,9 @@ Location: `~/.devo/ssm-config.json`
 4. **Use environment-specific profiles**: `--profile dev`, `--profile prod`
 5. **Keep configuration in version control**: Add `ssm-config.json` to git (without sensitive data)
 6. **Validate connections**: Test with `devo ssm connect` before deploying
+7. **Install Session Manager Plugin first**: Verify with `session-manager-plugin` before using SSM commands
+8. **Use unique local ports**: Avoid port conflicts by using different local ports for each database
+9. **Clean up on exit**: Press Ctrl+C to properly stop connections and clean up port forwarding rules
 
 ## See Also
 
