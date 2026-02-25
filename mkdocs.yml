@@ -50,6 +50,7 @@ nav:
       - code-reviewer: commands/code-reviewer.md
       - config: commands/config.md
       - codeartifact-login: commands/codeartifact.md
+      - ssm: commands/ssm.md
       - dynamodb: commands/dynamodb.md
       - eventbridge: commands/eventbridge.md
       - upgrade: commands/upgrade.md

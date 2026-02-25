@@ -10,6 +10,7 @@ from cli_tool.commands.completion import completion
 from cli_tool.commands.config import config
 from cli_tool.commands.dynamodb import dynamodb
 from cli_tool.commands.eventbridge import eventbridge
+from cli_tool.commands.ssm import ssm
 from cli_tool.commands.upgrade import upgrade
 
 console = Console()
@@ -159,6 +160,7 @@ cli.add_command(code_reviewer)
 cli.add_command(config)
 cli.add_command(dynamodb)
 cli.add_command(eventbridge)
+cli.add_command(ssm)
 
 
 def main():
