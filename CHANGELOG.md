@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.3.3 (2026-02-26)
+
+### Bug Fixes
+
+- **ssm**: Implement unique local port allocation to prevent conflicts
+  ([`6fe4b58`](https://github.com/edu526/devo-cli/commit/6fe4b58284d46af3b9b37049ac029a830d067369))
+
+
 ## v2.3.2 (2026-02-26)
 
 ### Bug Fixes
