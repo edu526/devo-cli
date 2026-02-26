@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.3.1 (2026-02-26)
+
+### Bug Fixes
+
+- **ssm**: Set multiprocessing start method for Windows compatibility
+  ([`e594fba`](https://github.com/edu526/devo-cli/commit/e594fba0cc8c6cc13191c9c2da0982bd8ea99700))
+
+
 ## v2.3.0 (2026-02-25)
 
 ### Bug Fixes
