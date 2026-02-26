@@ -188,14 +188,32 @@ def _connect_all_databases(config_manager, databases, no_hosts, profile_override
     port_forwarder = PortForwarder()
     threads = []
 
-    def start_connection(name, db_config):
+    # Track used local ports to avoid conflicts
+    used_local_ports = set()
+    next_available_port = 15432  # Start from a high port to avoid conflicts
+
+    def get_unique_local_port(preferred_port):
+        """Get a unique local port, incrementing if already in use"""
+        nonlocal next_available_port
+        if preferred_port not in used_local_ports:
+            used_local_ports.add(preferred_port)
+            return preferred_port
+        # Find next available port
+        while next_available_port in used_local_ports:
+            next_available_port += 1
+        used_local_ports.add(next_available_port)
+        result = next_available_port
+        next_available_port += 1
+        return result
+
+    def start_connection(name, db_config, actual_local_port):
         """Thread function to start a single connection"""
         try:
             SSMSession.start_port_forwarding_to_remote(
                 bastion=db_config["bastion"],
                 host=db_config["host"],
                 port=db_config["port"],
-                local_port=db_config["local_port"],
+                local_port=actual_local_port,
                 region=db_config["region"],
                 profile=profile_override or db_config.get("profile"),
             )
@@ -212,15 +230,23 @@ def _connect_all_databases(config_manager, databases, no_hosts, profile_override
             continue
 
         if use_hostname_forwarding:
+            # Get unique local port for this connection
+            preferred_local_port = db_config.get("local_port", db_config["port"])
+            actual_local_port = get_unique_local_port(preferred_local_port)
+
             profile_text = profile_override or db_config.get("profile", "default")
-            console.print(f"[green]✓[/green] {name}: {db_config['host']} ({local_address}:{db_config['port']}) [dim](profile: {profile_text})[/dim]")
+            port_info = f"{local_address}:{db_config['port']}"
+            if actual_local_port != preferred_local_port:
+                port_info += f" [dim](local: {actual_local_port})[/dim]"
+
+            console.print(f"[green]✓[/green] {name}: {db_config['host']} ({port_info}) [dim](profile: {profile_text})[/dim]")
 
             try:
-                # Start port forwarding
-                port_forwarder.start_forward(local_address=local_address, local_port=db_config["port"], target_port=db_config["local_port"])
+                # Start port forwarding from loopback alias to the actual local port
+                port_forwarder.start_forward(local_address=local_address, local_port=db_config["port"], target_port=actual_local_port)
 
-                # Start SSM session in separate thread
-                thread = threading.Thread(target=start_connection, args=(name, db_config), daemon=True)
+                # Start SSM session in separate thread with the unique local port
+                thread = threading.Thread(target=start_connection, args=(name, db_config, actual_local_port), daemon=True)
                 thread.start()
                 threads.append((name, thread))
 
@@ -493,8 +519,9 @@ def hosts_setup(config_path):
     success_count = 0
     error_count = 0
 
-    # Track used IP:port combinations to detect conflicts
-    used_combinations = {}
+    # Track used local_port values to detect conflicts
+    used_local_ports = {}
+    next_available_port = 15432  # Start from a high port for auto-assignment
 
     for name, db_config in databases.items():
         # Get or assign loopback IP
@@ -509,27 +536,28 @@ def hosts_setup(config_path):
         else:
             local_address = db_config["local_address"]
 
-        # Check for port conflicts
+        # Check for local_port conflicts (multiple DBs trying to use same local port)
         local_port = db_config.get("local_port", db_config["port"])
-        combination_key = f"{local_address}:{local_port}"
 
-        if combination_key in used_combinations:
-            console.print(f"[yellow]⚠[/yellow] {name}: Port conflict detected with {used_combinations[combination_key]}")
-            console.print(f"[dim]  Both using {combination_key}. Assigning new IP...[/dim]")
+        if local_port in used_local_ports:
+            console.print(f"[yellow]⚠[/yellow] {name}: Local port {local_port} already used by {used_local_ports[local_port]}")
+            console.print(f"[dim]  Assigning unique local port {next_available_port}...[/dim]")
 
-            # Assign a different IP to resolve conflict
-            local_address = hosts_manager.get_next_loopback_ip()
+            # Assign unique local port
+            local_port = next_available_port
+            next_available_port += 1
+
+            # Update config with new local_port
             config = config_manager.load()
-            config["databases"][name]["local_address"] = local_address
+            config["databases"][name]["local_port"] = local_port
             config_manager.save(config)
-            combination_key = f"{local_address}:{local_port}"
 
-        used_combinations[combination_key] = name
+        used_local_ports[local_port] = name
 
         # Add to /etc/hosts
         try:
             hosts_manager.add_entry(local_address, db_config["host"])
-            console.print(f"[green]✓[/green] {name}: {db_config['host']} -> {local_address}:{local_port}")
+            console.print(f"[green]✓[/green] {name}: {db_config['host']} -> {local_address}:{db_config['port']} (local: {local_port})")
             success_count += 1
         except Exception as e:
             console.print(f"[red]✗[/red] {name}: {e}")
