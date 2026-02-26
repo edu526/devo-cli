@@ -1,6 +1,5 @@
 """AWS Systems Manager Session Manager commands"""
 
-import sys
 import threading
 import time
 
@@ -135,10 +134,10 @@ def connect_database(name, no_hosts, profile, config_path):
                 region=db_config["region"],
                 profile=profile or db_config.get("profile"),  # Override profile if provided
             )
-            
+
             if exit_code != 0:
                 console.print("[red]SSM session failed[/red]")
-                
+
         except KeyboardInterrupt:
             console.print("\n[cyan]Stopping...[/cyan]")
         except Exception as e:
@@ -493,7 +492,7 @@ def hosts_setup(config_path):
 
     success_count = 0
     error_count = 0
-    
+
     # Track used IP:port combinations to detect conflicts
     used_combinations = {}
 
@@ -513,18 +512,18 @@ def hosts_setup(config_path):
         # Check for port conflicts
         local_port = db_config.get("local_port", db_config["port"])
         combination_key = f"{local_address}:{local_port}"
-        
+
         if combination_key in used_combinations:
             console.print(f"[yellow]⚠[/yellow] {name}: Port conflict detected with {used_combinations[combination_key]}")
             console.print(f"[dim]  Both using {combination_key}. Assigning new IP...[/dim]")
-            
+
             # Assign a different IP to resolve conflict
             local_address = hosts_manager.get_next_loopback_ip()
             config = config_manager.load()
             config["databases"][name]["local_address"] = local_address
             config_manager.save(config)
             combination_key = f"{local_address}:{local_port}"
-        
+
         used_combinations[combination_key] = name
 
         # Add to /etc/hosts
