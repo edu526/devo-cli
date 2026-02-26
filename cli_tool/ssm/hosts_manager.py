@@ -55,6 +55,10 @@ class HostsManager:
 
     def add_entry(self, ip: str, hostname: str):
         """Add a hostname entry to /etc/hosts"""
+        # On macOS, configure loopback alias if needed
+        if platform.system() == "Darwin" and ip.startswith("127.0.0.") and ip != "127.0.0.1":
+            self._configure_loopback_alias_macos(ip)
+
         content = self._read_hosts()
 
         # Initialize managed section if it doesn't exist
@@ -85,6 +89,8 @@ class HostsManager:
         if self.MARKER_START not in content:
             return
 
+        # Track IPs being removed for cleanup
+        removed_ips = []
         lines = content.split("\n")
         filtered_lines = []
         in_managed_section = False
@@ -104,10 +110,21 @@ class HostsManager:
                 # Skip lines containing the hostname
                 if hostname not in line or line.strip().startswith("#"):
                     filtered_lines.append(line)
+                else:
+                    # Extract IP for cleanup
+                    parts = line.strip().split()
+                    if len(parts) >= 2:
+                        removed_ips.append(parts[0])
             else:
                 filtered_lines.append(line)
 
         self._write_hosts("\n".join(filtered_lines))
+
+        # On macOS, remove loopback aliases that are no longer used
+        if platform.system() == "Darwin":
+            for ip in removed_ips:
+                if ip.startswith("127.0.0.") and ip != "127.0.0.1":
+                    self._remove_loopback_alias_macos(ip)
 
     def clear_all(self):
         """Remove all Devo CLI managed entries"""
@@ -115,6 +132,9 @@ class HostsManager:
 
         if self.MARKER_START not in content:
             return
+
+        # Get all managed IPs for cleanup
+        managed_ips = [ip for ip, _ in self.get_managed_entries()]
 
         # Remove entire managed section
         start_idx = content.find(self.MARKER_START)
@@ -125,6 +145,12 @@ class HostsManager:
             end_idx = content.find("\n", end_idx) + 1
             new_content = content[:start_idx] + content[end_idx:]
             self._write_hosts(new_content)
+
+        # On macOS, remove all loopback aliases
+        if platform.system() == "Darwin":
+            for ip in managed_ips:
+                if ip.startswith("127.0.0.") and ip != "127.0.0.1":
+                    self._remove_loopback_alias_macos(ip)
 
     def _read_hosts(self) -> str:
         """Read /etc/hosts file"""
@@ -173,3 +199,39 @@ class HostsManager:
                 return ip
 
         raise Exception("No available loopback IPs (127.0.0.2-254 all in use)")
+
+    def _configure_loopback_alias_macos(self, ip: str):
+        """Configure loopback alias on macOS using ifconfig"""
+        from rich.console import Console
+
+        console = Console()
+
+        # Check if alias already exists
+        try:
+            result = subprocess.run(["ifconfig", "lo0"], capture_output=True, text=True, check=True)
+            if ip in result.stdout:
+                return  # Already configured
+        except subprocess.CalledProcessError:
+            pass
+
+        # Add loopback alias
+        console.print(f"[dim]Configuring loopback alias {ip} on macOS...[/dim]")
+        try:
+            subprocess.run(["sudo", "ifconfig", "lo0", "alias", ip, "up"], capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError as e:
+            stderr = e.stderr if e.stderr else ""
+            raise Exception(f"Failed to configure loopback alias {ip}: {stderr.strip() or 'Unknown error'}")
+
+    def _remove_loopback_alias_macos(self, ip: str):
+        """Remove loopback alias on macOS using ifconfig"""
+        try:
+            # Check if alias exists before trying to remove
+            result = subprocess.run(["ifconfig", "lo0"], capture_output=True, text=True, check=True)
+            if ip not in result.stdout:
+                return  # Not configured, nothing to remove
+
+            # Remove loopback alias
+            subprocess.run(["sudo", "ifconfig", "lo0", "-alias", ip], capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError:
+            # Ignore errors on cleanup
+            pass
