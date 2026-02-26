@@ -32,6 +32,7 @@ make build-binary
 ```
 
 This creates a binary in `dist/` directory:
+
 - Linux: `dist/devo`
 - macOS: `dist/devo`
 - Windows: `dist/devo.exe`
@@ -43,6 +44,7 @@ make build-all
 ```
 
 Creates binaries with platform identifiers:
+
 - Linux AMD64: `dist/devo-linux-amd64`
 - macOS Intel: `dist/devo-darwin-amd64`
 - macOS Apple Silicon: `dist/devo-darwin-arm64`

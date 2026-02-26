@@ -13,6 +13,7 @@ curl -fsSL https://raw.githubusercontent.com/edu526/devo-cli/main/install.sh | b
 ```
 
 The installer will:
+
 1. Detect your platform (Linux/macOS, architecture)
 2. Download the latest binary
 3. Install to `/usr/local/bin` (system-wide) or `~/.local/bin` (user-only)
@@ -27,6 +28,7 @@ irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex
 ```
 
 The installer will:
+
 1. Download the latest Windows binary
 2. Install to `C:\Program Files\devo` or user directory
 3. Add to PATH automatically

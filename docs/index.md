@@ -52,12 +52,28 @@ devo --help
 
 ## Documentation
 
+### Getting Started
+
 - [Quick Start Guide](getting-started/quickstart.md) - Get started in 5 minutes
 - [Installation](getting-started/installation.md) - Detailed installation instructions
-- [Commands](commands/index.md) - Complete command reference
-- [Configuration](getting-started/configuration.md) - Configure CLI settings (Bedrock, GitHub, CodeArtifact)
+- [Configuration](getting-started/configuration.md) - Configure CLI settings
 
-**For Contributors:**
+### Guides
+
+- [Workflow Guides](guides/index.md) - Step-by-step guides for common workflows
+- [AWS Setup](guides/aws-setup.md) - Configure AWS credentials and permissions
+- [Commit Workflow](guides/commit-workflow.md) - Generate AI commit messages
+- [Code Review Workflow](guides/code-review-workflow.md) - Automated code review
+- [DynamoDB Export](guides/dynamodb-export.md) - Export table data
+- [SSM Port Forwarding](guides/ssm-port-forwarding.md) - Connect to private resources
+
+### Reference
+
+- [Commands](commands/index.md) - Complete command reference
+- [Troubleshooting](reference/troubleshooting.md) - Common issues and solutions
+
+### For Contributors
+
 - [Development Setup](development/setup.md) - Set up development environment
 - [Contributing Guide](development/contributing.md) - Learn how to contribute
 - [Building Binaries](development/building.md) - Build standalone binaries

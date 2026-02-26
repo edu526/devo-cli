@@ -5,6 +5,7 @@ Enable tab completion for Devo CLI commands in your shell.
 ## Overview
 
 Shell completion allows you to:
+
 - Press TAB to autocomplete commands
 - See available options and subcommands
 - Speed up command entry

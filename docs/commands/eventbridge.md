@@ -85,6 +85,7 @@ devo eventbridge --profile production --env prod
 ### Table Output (Default)
 
 Displays rules in a formatted table with:
+
 - **Rule Name**: EventBridge rule name
 - **Status**: ✅ ENABLED or ❌ DISABLED
 - **Schedule**: Cron or rate expression
@@ -94,6 +95,7 @@ Displays rules in a formatted table with:
 ### JSON Output
 
 Returns structured JSON with:
+
 - `name`: Rule name
 - `arn`: Rule ARN
 - `state`: ENABLED or DISABLED
@@ -188,6 +190,7 @@ devo eventbridge --region us-west-2
 ### Environment Not Detected
 
 If environment is not detected automatically:
+
 1. Add `Env` or `Environment` tag to the rule
 2. Use standard naming patterns in Lambda function names (e.g., `service-prod-lambda`)
 

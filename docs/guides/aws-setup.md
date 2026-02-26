@@ -35,6 +35,7 @@ aws configure
 ```
 
 Enter:
+
 - AWS Access Key ID
 - AWS Secret Access Key
 - Default region (e.g., `us-east-1`)
@@ -47,6 +48,7 @@ aws configure sso
 ```
 
 Follow prompts to:
+
 1. Enter SSO start URL
 2. Enter SSO region
 3. Select account and role
@@ -159,6 +161,7 @@ aws configure sso
 ```
 
 Provide:
+
 - SSO start URL: `https://your-org.awsapps.com/start`
 - SSO region: `us-east-1`
 - Account ID

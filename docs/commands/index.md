@@ -50,6 +50,7 @@ devo ssm <subcommand> [OPTIONS]
 ```
 
 **Subcommands:**
+
 - `connect` - Connect to a configured database
 - `connect-with-hosts` - Connect using real hostname
 - `connect-all-with-hosts` - Connect to all databases with hostname forwarding
@@ -71,9 +72,11 @@ devo dynamodb <subcommand> [OPTIONS]
 ```
 
 **Subcommands:**
+
 - `list` - List all DynamoDB tables
 - `describe` - Show table details
 - `export` - Export table data to CSV/JSON/JSONL
+- `list-templates` - List saved export templates
 - `list-templates` - List saved export templates
 
 **Use when:** You need to list, describe, or export DynamoDB tables.

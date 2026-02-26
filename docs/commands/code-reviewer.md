@@ -2,15 +2,15 @@
 
 AI-powered code review analyzing git diffs for quality, security, and best practices.
 
-## Overview
+## Synopsis
 
-The `code-reviewer` command performs comprehensive analysis of your code changes using AWS Bedrock AI, checking for:
+```bash
+devo code-reviewer [OPTIONS]
+```
 
-- Code quality and maintainability
-- Security vulnerabilities
-- Performance issues
-- Best practices compliance
-- Potential bugs
+## Description
+
+Performs comprehensive analysis of code changes using AWS Bedrock AI. Analyzes staged changes or specific commits for code quality, security vulnerabilities, performance issues, and best practices compliance.
 
 ## Usage
 
@@ -20,59 +20,61 @@ The `code-reviewer` command performs comprehensive analysis of your code changes
     :prog_name: devo
     :depth: 1
 
+## Options
+
+| Option | Description |
+|--------|-------------|
+| `--commit TEXT` | Analyze specific commit instead of staged changes |
+| `--help` | Show help message and exit |
+
 ## Review Categories
 
-### Code Quality
-- Code structure and organization
-- Naming conventions
-- Code duplication
-- Complexity analysis
+The command analyzes code across four main categories:
 
-### Security
-- Input validation
-- Authentication/authorization issues
-- Sensitive data exposure
-- Injection vulnerabilities
-
-### Performance
-- Inefficient algorithms
-- Resource usage
-- Database query optimization
-- Caching opportunities
-
-### Best Practices
-- Language-specific conventions
-- Design patterns
-- Error handling
-- Documentation
+- **Code Quality**: Structure, naming conventions, duplication, complexity
+- **Security**: Input validation, authentication, data exposure, injection vulnerabilities
+- **Performance**: Algorithm efficiency, resource usage, query optimization, caching
+- **Best Practices**: Language conventions, design patterns, error handling, documentation
 
 ## Output Format
 
-The review provides structured feedback with:
+Structured feedback includes:
 
-- **Severity levels**: Critical, High, Medium, Low, Info
-- **File locations**: Specific files and line numbers
-- **Descriptions**: Clear explanation of issues
-- **Recommendations**: Actionable suggestions for fixes
+- Severity levels: Critical, High, Medium, Low, Info
+- File locations with line numbers
+- Issue descriptions
+- Actionable recommendations
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `BEDROCK_MODEL_ID` | AWS Bedrock model to use | `us.anthropic.claude-3-7-sonnet-20250219-v1:0` |
+| `AWS_PROFILE` | AWS profile for credentials | Default profile |
+| `AWS_REGION` | AWS region for Bedrock | `us-east-1` |
+
+## Exit Codes
+
+| Code | Description |
+|------|-------------|
+| 0 | Success |
+| 1 | Error (no changes, access denied, etc.) |
 
 ## Examples
 
 ```bash
 # Review staged changes
-git add .
 devo code-reviewer
 
 # Review specific commit
 devo code-reviewer --commit abc123
 
-# Review changes between branches
-git diff main feature/my-branch | devo code-reviewer
+# Use specific AWS profile
+devo --profile production code-reviewer
 ```
 
-## Configuration
+## See Also
 
-Set your preferred Bedrock model:
-
-```bash
-export BEDROCK_MODEL_ID=us.anthropic.claude-3-7-sonnet-20250219-v1:0
-```
+- [Code Review Workflow Guide](../guides/code-review-workflow.md) - Step-by-step usage guide
+- [Commit Command](commit.md) - Generate commit messages
+- [AWS Setup](../guides/aws-setup.md) - Configure AWS credentials

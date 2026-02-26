@@ -57,6 +57,7 @@ devo config import team-config.json --merge
 ```
 
 **Use cases:**
+
 - Backup your configuration before making changes
 - Share configuration templates with your team
 - Sync configuration across multiple machines
@@ -104,6 +105,7 @@ devo config import team-config.json --merge
 - **fallback_model_id**: Fallback model if primary fails
 
 Available models:
+
 - `us.anthropic.claude-3-7-sonnet-20250219-v1:0` (Claude 3.7 Sonnet - default)
 - `us.anthropic.claude-sonnet-4-20250514-v1:0` (Claude Sonnet 4)
 
