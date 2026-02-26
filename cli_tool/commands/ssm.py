@@ -1,6 +1,7 @@
 """AWS Systems Manager Session Manager commands"""
 
 import multiprocessing
+import sys
 import time
 
 import click
@@ -11,6 +12,10 @@ from cli_tool.ssm.config import SSMConfigManager
 from cli_tool.ssm.hosts_manager import HostsManager
 from cli_tool.ssm.port_forwarder import PortForwarder
 from cli_tool.ssm.session import SSMSession
+
+# Set multiprocessing start method for Windows compatibility
+if sys.platform == "win32":
+    multiprocessing.set_start_method("spawn", force=True)
 
 # Backward compatibility alias
 SocatManager = PortForwarder
