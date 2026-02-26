@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.4.0 (2026-02-26)
+
+### Documentation
+
+- Restructure command documentation and add workflow guides
+  ([`dadd873`](https://github.com/edu526/devo-cli/commit/dadd8732591dc15fb6efcb091aff970f6dae2a34))
+
+### Features
+
+- **ssm**: Add macOS loopback alias management and improve error handling
+  ([`8827d26`](https://github.com/edu526/devo-cli/commit/8827d265c2accf83bb939717681e44f575cca5ea))
+
+
 ## v2.3.3 (2026-02-26)
 
 ### Bug Fixes
