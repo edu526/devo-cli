@@ -1,7 +1,7 @@
 """AWS Systems Manager Session Manager commands"""
 
-import multiprocessing
 import sys
+import threading
 import time
 
 import click
@@ -12,10 +12,6 @@ from cli_tool.ssm.config import SSMConfigManager
 from cli_tool.ssm.hosts_manager import HostsManager
 from cli_tool.ssm.port_forwarder import PortForwarder
 from cli_tool.ssm.session import SSMSession
-
-# Set multiprocessing start method for Windows compatibility
-if sys.platform == "win32":
-    multiprocessing.set_start_method("spawn", force=True)
 
 # Backward compatibility alias
 SocatManager = PortForwarder
@@ -131,7 +127,7 @@ def connect_database(name, no_hosts, profile, config_path):
             port_forwarder.start_forward(local_address=local_address, local_port=db_config["port"], target_port=db_config["local_port"])
 
             # Start SSM session
-            SSMSession.start_port_forwarding_to_remote(
+            exit_code = SSMSession.start_port_forwarding_to_remote(
                 bastion=db_config["bastion"],
                 host=db_config["host"],
                 port=db_config["port"],
@@ -139,10 +135,15 @@ def connect_database(name, no_hosts, profile, config_path):
                 region=db_config["region"],
                 profile=profile or db_config.get("profile"),  # Override profile if provided
             )
+            
+            if exit_code != 0:
+                console.print("[red]SSM session failed[/red]")
+                
         except KeyboardInterrupt:
             console.print("\n[cyan]Stopping...[/cyan]")
         except Exception as e:
             console.print(f"\n[red]Error: {e}[/red]")
+            return
         finally:
             port_forwarder.stop_all()
             console.print("[green]Connection closed[/green]")
@@ -186,7 +187,21 @@ def _connect_all_databases(config_manager, databases, no_hosts, profile_override
     managed_hosts = {host for _, host in managed_entries}
 
     port_forwarder = PortForwarder()
-    processes = []
+    threads = []
+
+    def start_connection(name, db_config):
+        """Thread function to start a single connection"""
+        try:
+            SSMSession.start_port_forwarding_to_remote(
+                bastion=db_config["bastion"],
+                host=db_config["host"],
+                port=db_config["port"],
+                local_port=db_config["local_port"],
+                region=db_config["region"],
+                profile=profile_override or db_config.get("profile"),
+            )
+        except Exception as e:
+            console.print(f"[red]✗[/red] {name}: {e}")
 
     for name, db_config in databases.items():
         local_address = db_config.get("local_address", "127.0.0.1")
@@ -205,20 +220,10 @@ def _connect_all_databases(config_manager, databases, no_hosts, profile_override
                 # Start port forwarding
                 port_forwarder.start_forward(local_address=local_address, local_port=db_config["port"], target_port=db_config["local_port"])
 
-                # Start SSM session in separate process
-                p = multiprocessing.Process(
-                    target=SSMSession.start_port_forwarding_to_remote,
-                    args=(
-                        db_config["bastion"],
-                        db_config["host"],
-                        db_config["port"],
-                        db_config["local_port"],
-                        db_config["region"],
-                        profile_override or db_config.get("profile"),  # Override profile if provided
-                    ),
-                )
-                p.start()
-                processes.append((name, p))
+                # Start SSM session in separate thread
+                thread = threading.Thread(target=start_connection, args=(name, db_config), daemon=True)
+                thread.start()
+                threads.append((name, thread))
 
                 # Small delay to avoid overwhelming the system
                 time.sleep(0.5)
@@ -228,7 +233,7 @@ def _connect_all_databases(config_manager, databases, no_hosts, profile_override
         else:
             console.print(f"[yellow]⚠[/yellow] {name}: Hostname forwarding not configured (skipping)")
 
-    if not processes:
+    if not threads:
         console.print("\n[yellow]No databases to connect[/yellow]")
         console.print("Run: devo ssm hosts setup")
         return
@@ -237,12 +242,11 @@ def _connect_all_databases(config_manager, databases, no_hosts, profile_override
     console.print("[yellow]Press Ctrl+C to stop all connections[/yellow]\n")
 
     try:
-        for name, p in processes:
-            p.join()
+        # Keep main thread alive while connections are active
+        while any(thread.is_alive() for _, thread in threads):
+            time.sleep(1)
     except KeyboardInterrupt:
         console.print("\n[cyan]Stopping all connections...[/cyan]")
-        for name, p in processes:
-            p.terminate()
         port_forwarder.stop_all()
         console.print("[green]All connections closed[/green]")
 
@@ -489,6 +493,9 @@ def hosts_setup(config_path):
 
     success_count = 0
     error_count = 0
+    
+    # Track used IP:port combinations to detect conflicts
+    used_combinations = {}
 
     for name, db_config in databases.items():
         # Get or assign loopback IP
@@ -503,10 +510,27 @@ def hosts_setup(config_path):
         else:
             local_address = db_config["local_address"]
 
+        # Check for port conflicts
+        local_port = db_config.get("local_port", db_config["port"])
+        combination_key = f"{local_address}:{local_port}"
+        
+        if combination_key in used_combinations:
+            console.print(f"[yellow]⚠[/yellow] {name}: Port conflict detected with {used_combinations[combination_key]}")
+            console.print(f"[dim]  Both using {combination_key}. Assigning new IP...[/dim]")
+            
+            # Assign a different IP to resolve conflict
+            local_address = hosts_manager.get_next_loopback_ip()
+            config = config_manager.load()
+            config["databases"][name]["local_address"] = local_address
+            config_manager.save(config)
+            combination_key = f"{local_address}:{local_port}"
+        
+        used_combinations[combination_key] = name
+
         # Add to /etc/hosts
         try:
             hosts_manager.add_entry(local_address, db_config["host"])
-            console.print(f"[green]✓[/green] {name}: {db_config['host']} -> {local_address}")
+            console.print(f"[green]✓[/green] {name}: {db_config['host']} -> {local_address}:{local_port}")
             success_count += 1
         except Exception as e:
             console.print(f"[red]✗[/red] {name}: {e}")

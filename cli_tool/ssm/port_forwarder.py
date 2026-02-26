@@ -74,22 +74,38 @@ class PortForwarder:
         ]
 
         try:
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
             # Store a marker (netsh doesn't return a process)
             self.processes[key] = None
 
         except subprocess.CalledProcessError as e:
             stderr = e.stderr if e.stderr else ""
-            if "Access is denied" in stderr or "denied" in stderr.lower():
+            stdout = e.stdout if e.stdout else ""
+            error_output = stderr + stdout
+            error_lower = error_output.lower()
+            
+            # Check for permission/elevation errors in multiple languages
+            permission_keywords = [
+                "access is denied",
+                "denied",
+                "acceso denegado",
+                "requiere elevación",
+                "requiere elevacion",
+                "requires elevation",
+                "ejecutar como administrador",
+                "run as administrator"
+            ]
+            
+            if any(keyword in error_lower for keyword in permission_keywords):
                 raise Exception(
                     "Permission denied. Please run your terminal as Administrator:\n"
-                    "  1. Right-click on Command Prompt or PowerShell\n"
+                    "  1. Right-click on Git Bash, Command Prompt or PowerShell\n"
                     "  2. Select 'Run as administrator'\n"
                     "  3. Run the command again"
                 )
             else:
-                raise Exception(f"Failed to create port proxy: {stderr}")
+                raise Exception(f"Failed to create port proxy: {error_output.strip() or 'Unknown error'}")
 
     def stop_forward(self, local_address: str, local_port: int):
         """Stop port forwarding"""
