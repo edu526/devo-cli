@@ -2,21 +2,15 @@
 
 Generate conventional commit messages from staged git changes using AI.
 
-## Overview
+## Synopsis
 
-The `commit` command analyzes your staged changes and generates a properly formatted conventional commit message following the format:
-
-```
-<type>(<scope>): <summary>
+```bash
+devo commit [OPTIONS]
 ```
 
-## Features
+## Description
 
-- Extracts ticket numbers from branch names (e.g., `feature/XYZ-123-description`)
-- Analyzes git diff to understand changes
-- Generates semantic commit types (feat, fix, chore, etc.)
-- Follows 50-character limit for summary line
-- Uses AWS Bedrock (Claude 3.7 Sonnet) for intelligent analysis
+Analyzes staged git changes and generates a properly formatted conventional commit message. Uses AWS Bedrock AI to understand code changes and create semantic commit messages following the format: `<type>(<scope>): <summary>`
 
 ## Usage
 
@@ -26,7 +20,23 @@ The `commit` command analyzes your staged changes and generates a properly forma
     :prog_name: devo
     :depth: 1
 
-## Commit Types
+## Options
+
+| Option | Description |
+|--------|-------------|
+| `--help` | Show help message and exit |
+
+## Commit Message Format
+
+```
+<type>(<scope>): <summary>
+
+[optional body]
+
+[optional footer]
+```
+
+### Commit Types
 
 | Type | Description |
 |------|-------------|
@@ -39,23 +49,55 @@ The `commit` command analyzes your staged changes and generates a properly forma
 | `style` | Code style changes |
 | `perf` | Performance improvements |
 
+### Summary Line
+
+- Maximum 50 characters
+- Imperative mood (e.g., "add" not "added")
+- No period at the end
+- Lowercase after type and scope
+
+## Ticket Number Extraction
+
+Automatically extracts ticket numbers from branch names following the pattern:
+
+```
+<type>/<TICKET-NUMBER>-description
+```
+
+Examples:
+- `feature/XYZ-123-user-auth` → Includes `XYZ-123` in commit message
+- `fix/ABC-456-login-bug` → Includes `ABC-456` in commit message
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `BEDROCK_MODEL_ID` | AWS Bedrock model to use | `us.anthropic.claude-3-7-sonnet-20250219-v1:0` |
+| `AWS_PROFILE` | AWS profile for credentials | Default profile |
+| `AWS_REGION` | AWS region for Bedrock | `us-east-1` |
+
+## Exit Codes
+
+| Code | Description |
+|------|-------------|
+| 0 | Success |
+| 1 | Error (no staged changes, access denied, etc.) |
+
 ## Examples
 
 ```bash
 # Generate commit message for staged changes
-git add .
 devo commit
+
+# Use specific AWS profile
+devo --profile production commit
 
 # Example output:
 # feat(auth): XYZ-123 add JWT token validation
 ```
 
-## Branch Naming Convention
+## See Also
 
-For automatic ticket extraction, use this branch format:
-
-```
-feature/XYZ-<ticket_number>-description
-```
-
-Example: `feature/XYZ-456-user-authentication`
+- [Commit Workflow Guide](../guides/commit-workflow.md) - Step-by-step usage guide
+- [Code Reviewer Command](code-reviewer.md) - Review code before committing
+- [AWS Setup](../guides/aws-setup.md) - Configure AWS credentials

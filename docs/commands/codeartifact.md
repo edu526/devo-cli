@@ -2,9 +2,15 @@
 
 Authenticate with AWS CodeArtifact for private package management.
 
-## Overview
+## Synopsis
 
-The `codeartifact-login` command configures pip to authenticate with your AWS CodeArtifact repository, allowing you to install and publish private Python packages.
+```bash
+devo codeartifact-login [OPTIONS]
+```
+
+## Description
+
+Configures pip to authenticate with AWS CodeArtifact repository. Obtains an authorization token and configures pip's index URL to use the private repository.
 
 ## Usage
 
@@ -14,6 +20,12 @@ The `codeartifact-login` command configures pip to authenticate with your AWS Co
     :prog_name: devo
     :depth: 1
 
+## Options
+
+| Option | Description |
+|--------|-------------|
+| `--help` | Show help message and exit |
+
 ## Configuration
 
 Default settings:
@@ -21,29 +33,7 @@ Default settings:
 - **Repository**: pypi
 - **Region**: us-east-1
 
-## Prerequisites
-
-- AWS CLI configured with valid credentials
-- Access to the CodeArtifact domain and repository
-- Appropriate IAM permissions
-
-## Examples
-
-```bash
-# Login to CodeArtifact
-devo codeartifact-login
-
-# After login, install private packages
-pip install your-private-package
-
-# Publish packages
-python -m build
-twine upload --repository codeartifact dist/*
-```
-
 ## Required IAM Permissions
-
-Your AWS user/role needs these permissions:
 
 ```json
 {
@@ -69,4 +59,33 @@ Your AWS user/role needs these permissions:
 
 ## Token Expiration
 
-CodeArtifact tokens expire after 12 hours. Re-run the command when you see authentication errors.
+Authorization tokens expire after 12 hours. Re-authenticate when you encounter authentication errors.
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `AWS_PROFILE` | AWS profile for credentials | Default profile |
+| `AWS_REGION` | AWS region for CodeArtifact | `us-east-1` |
+
+## Exit Codes
+
+| Code | Description |
+|------|-------------|
+| 0 | Success |
+| 1 | Error (access denied, invalid configuration, etc.) |
+
+## Examples
+
+```bash
+# Login to CodeArtifact
+devo codeartifact-login
+
+# Use specific AWS profile
+devo --profile production codeartifact-login
+```
+
+## See Also
+
+- [AWS Setup](../guides/aws-setup.md) - Configure AWS credentials
+- [Configuration Guide](../getting-started/configuration.md) - CodeArtifact settings

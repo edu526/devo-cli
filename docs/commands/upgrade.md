@@ -2,9 +2,15 @@
 
 Self-update the Devo CLI to the latest version.
 
-## Overview
+## Synopsis
 
-The `upgrade` command automatically downloads and installs the latest version of Devo CLI from the configured release repository.
+```bash
+devo upgrade [OPTIONS]
+```
+
+## Description
+
+Automatically downloads and installs the latest version of Devo CLI from the configured release repository. Checks for updates, downloads the appropriate binary for your platform, verifies integrity, and replaces the current installation.
 
 ## Usage
 
@@ -14,19 +20,42 @@ The `upgrade` command automatically downloads and installs the latest version of
     :prog_name: devo
     :depth: 1
 
-## How It Works
+## Options
 
-1. Checks for the latest version available
-2. Downloads the appropriate binary for your platform
-3. Verifies the download integrity
-4. Replaces the current installation
-5. Confirms successful upgrade
+| Option | Description |
+|--------|-------------|
+| `--help` | Show help message and exit |
 
 ## Supported Platforms
 
-- Linux (amd64)
-- macOS (amd64, arm64)
-- Windows (amd64)
+| Platform | Architecture | Binary Name |
+|----------|-------------|-------------|
+| Linux | amd64 | `devo-linux-amd64` |
+| macOS | amd64 | `devo-darwin-amd64` |
+| macOS | arm64 | `devo-darwin-arm64` |
+| Windows | amd64 | `devo-windows-amd64.exe` |
+
+## Upgrade Process
+
+1. Fetches latest release information from GitHub
+2. Compares current version with latest version
+3. Downloads appropriate binary for platform
+4. Verifies download integrity (SHA256)
+5. Replaces current binary
+6. Confirms successful upgrade
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DEVO_SKIP_VERSION_CHECK` | Skip version check on startup | `false` |
+
+## Exit Codes
+
+| Code | Description |
+|------|-------------|
+| 0 | Success (upgraded or already latest) |
+| 1 | Error (download failed, permission denied, etc.) |
 
 ## Examples
 
@@ -34,40 +63,22 @@ The `upgrade` command automatically downloads and installs the latest version of
 # Check and install latest version
 devo upgrade
 
-# The command will show current and new version
-Current version: 1.1.0
-Latest version: 1.2.0
-Downloading...
-✓ Successfully upgraded to v1.2.0
+# Output example:
+# Current version: 1.1.0
+# Latest version: 1.2.0
+# Downloading...
+# ✓ Successfully upgraded to v1.2.0
 ```
 
-## Version Information
+## Version Check
 
-Check your current version:
+Check current version:
 
 ```bash
 devo --version
 ```
 
-## Troubleshooting
+## See Also
 
-If upgrade fails:
-
-1. Check your internet connection
-2. Verify you have write permissions to the installation directory
-3. Try manual installation from the release page
-4. Check GitHub releases for platform-specific binaries
-
-## Manual Installation
-
-If automatic upgrade doesn't work, download manually:
-
-```bash
-# Linux/macOS
-curl -L https://github.com/your-org/devo-cli/releases/latest/download/devo-linux-amd64 -o devo
-chmod +x devo
-sudo mv devo /usr/local/bin/
-
-# Windows
-# Download from releases page and add to PATH
-```
+- [Installation Guide](../getting-started/installation.md) - Initial installation
+- [Configuration Guide](../getting-started/configuration.md) - Configure settings

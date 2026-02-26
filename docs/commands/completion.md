@@ -13,6 +13,7 @@ devo completion [SHELL]
 ```
 
 **Supported Shells:**
+
 - `bash`
 - `zsh`
 - `fish`
@@ -72,6 +73,7 @@ devo completion
 ```
 
 This will:
+
 1. Detect your current shell
 2. Show installation instructions
 3. Optionally install automatically (if supported)

@@ -15,6 +15,7 @@ chmod +x setup-dev.sh
 ```
 
 The setup script will:
+
 - Create and activate virtual environment
 - Install the CLI in development mode
 - Install all dependencies

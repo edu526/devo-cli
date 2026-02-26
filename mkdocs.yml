@@ -56,8 +56,16 @@ nav:
       - upgrade: commands/upgrade.md
       - completion: commands/completion.md
   - Guides:
-      - AWS Setup: guides/aws-setup.md
-      - Shell Completion: guides/shell-completion.md
+      - Overview: guides/index.md
+      - Workflow Guides:
+          - Commit Workflow: guides/commit-workflow.md
+          - Code Review Workflow: guides/code-review-workflow.md
+      - AWS Integration:
+          - AWS Setup: guides/aws-setup.md
+          - DynamoDB Export: guides/dynamodb-export.md
+          - SSM Port Forwarding: guides/ssm-port-forwarding.md
+      - Productivity:
+          - Shell Completion: guides/shell-completion.md
   - Development:
       - Setup: development/setup.md
       - Contributing: development/contributing.md
