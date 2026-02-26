@@ -41,6 +41,10 @@ class PortForwarder:
         """Start forwarding using socat (Linux/macOS)"""
         key = f"{local_address}:{local_port}"
 
+        # On macOS, ensure loopback alias is configured before binding
+        if self.system == "Darwin" and local_address.startswith("127.0.0.") and local_address != "127.0.0.1":
+            self._ensure_loopback_alias_macos(local_address)
+
         # Check if socat is installed
         if not self._is_command_available("socat"):
             system_name = "macOS" if self.system == "Darwin" else "Linux"
@@ -51,10 +55,25 @@ class PortForwarder:
         # Start socat
         cmd = ["socat", f"TCP-LISTEN:{local_port},bind={local_address},reuseaddr,fork", f"TCP:127.0.0.1:{target_port}"]
 
-        process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        self.processes[key] = process
-        return process.pid
+            # Give socat a moment to start and check if it failed immediately
+            import time
+
+            time.sleep(0.1)
+
+            if process.poll() is not None:
+                # Process died immediately, get error
+                _, stderr = process.communicate()
+                error_msg = stderr.decode() if stderr else "Unknown error"
+                raise Exception(f"socat failed to start: {error_msg}")
+
+            self.processes[key] = process
+            return process.pid
+
+        except FileNotFoundError:
+            raise Exception("socat command not found. This should not happen as we checked for it earlier.")
 
     def _start_forward_windows(self, local_address: str, local_port: int, target_port: int) -> None:
         """Start forwarding using netsh portproxy (Windows)"""
@@ -162,6 +181,28 @@ class PortForwarder:
             return True
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
+
+    def _ensure_loopback_alias_macos(self, ip: str):
+        """Ensure loopback alias is configured on macOS"""
+        # Check if alias already exists
+        try:
+            result = subprocess.run(["ifconfig", "lo0"], capture_output=True, text=True, check=True)
+            if ip in result.stdout:
+                return  # Already configured
+        except subprocess.CalledProcessError:
+            pass
+
+        # Add loopback alias
+        from rich.console import Console
+
+        console = Console()
+        console.print(f"[dim]Configuring loopback alias {ip} on macOS...[/dim]")
+
+        try:
+            subprocess.run(["sudo", "ifconfig", "lo0", "alias", ip, "up"], capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError as e:
+            stderr = e.stderr if e.stderr else ""
+            raise Exception(f"Failed to configure loopback alias {ip}: {stderr.strip() or 'Unknown error'}")
 
     def __del__(self):
         """Cleanup on deletion"""
