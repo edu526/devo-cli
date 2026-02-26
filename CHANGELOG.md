@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.3.2 (2026-02-26)
+
+### Bug Fixes
+
+- **ssm**: Replace multiprocessing with threading for port forwarding
+  ([`5c5f08c`](https://github.com/edu526/devo-cli/commit/5c5f08c33656cf603c47d8a5163d6c5922a1a306))
+
+### Code Style
+
+- **ssm**: Remove trailing whitespace and fix formatting
+  ([`02c4bd4`](https://github.com/edu526/devo-cli/commit/02c4bd47a51bcd705f2a3b9993b8851c9abd7245))
+
+
 ## v2.3.1 (2026-02-26)
 
 ### Bug Fixes
