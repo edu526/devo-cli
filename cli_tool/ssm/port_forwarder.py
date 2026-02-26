@@ -74,7 +74,7 @@ class PortForwarder:
         ]
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            subprocess.run(cmd, capture_output=True, text=True, check=True)
 
             # Store a marker (netsh doesn't return a process)
             self.processes[key] = None
@@ -84,7 +84,7 @@ class PortForwarder:
             stdout = e.stdout if e.stdout else ""
             error_output = stderr + stdout
             error_lower = error_output.lower()
-            
+
             # Check for permission/elevation errors in multiple languages
             permission_keywords = [
                 "access is denied",
@@ -94,9 +94,9 @@ class PortForwarder:
                 "requiere elevacion",
                 "requires elevation",
                 "ejecutar como administrador",
-                "run as administrator"
+                "run as administrator",
             ]
-            
+
             if any(keyword in error_lower for keyword in permission_keywords):
                 raise Exception(
                     "Permission denied. Please run your terminal as Administrator:\n"
