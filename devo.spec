@@ -202,14 +202,35 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 import sys
 
-# Use onedir mode only for Windows (faster startup)
-# Use onefile mode for Linux/macOS (single binary, easier distribution)
-if sys.platform == 'win32':
+# Linux: onefile mode (single binary, easier distribution)
+# macOS/Windows: onedir mode (faster startup, no temp extraction overhead)
+if sys.platform == 'linux':
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        [],
+        name='devo',
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=False,
+        console=True,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+    )
+else:
+    # macOS/Windows: onedir mode for faster startup
     exe = EXE(
         pyz,
         a.scripts,
         [],
-        exclude_binaries=True,  # onedir mode for Windows
+        exclude_binaries=True,
         name='devo',
         debug=False,
         bootloader_ignore_signals=False,
@@ -232,25 +253,4 @@ if sys.platform == 'win32':
         upx=False,
         upx_exclude=[],
         name='devo',
-    )
-else:
-    # Linux/macOS: single binary (onefile mode)
-    exe = EXE(
-        pyz,
-        a.scripts,
-        a.binaries,
-        a.zipfiles,
-        a.datas,
-        [],
-        name='devo',
-        debug=False,
-        bootloader_ignore_signals=False,
-        strip=False,
-        upx=False,
-        console=True,
-        disable_windowed_traceback=False,
-        argv_emulation=False,
-        target_arch=None,
-        codesign_identity=None,
-        entitlements_file=None,
     )

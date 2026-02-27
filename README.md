@@ -10,6 +10,7 @@ AI-powered command-line tool for developers with AWS Bedrock integration.
 - 🤖 AI code review with security analysis
 - 🔄 Self-updating capability
 - 📦 Standalone binaries (no Python required)
+- ⚡ Fast startup on macOS/Windows (optimized onedir builds)
 
 ## Quick Install
 
