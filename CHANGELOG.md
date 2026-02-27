@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.6.0 (2026-02-27)
+
+### Code Style
+
+- **install**: Remove trailing whitespace
+  ([`da51b3a`](https://github.com/edu526/devo-cli/commit/da51b3a19bdd2515469dfed7b83e5e8b36d2c615))
+
+### Features
+
+- **install**: Add macOS tarball support and improve cross-platform installation
+  ([`81b713f`](https://github.com/edu526/devo-cli/commit/81b713f3415c8e20cf214ce7b245443f315e33f6))
+
+
 ## v2.5.0 (2026-02-27)
 
 ### Code Style
