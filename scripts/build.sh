@@ -168,7 +168,7 @@ if [ "$CREATE_RELEASE" = true ]; then
     # Linux: single file
     cp dist/devo "${RELEASE_DIR}/${BINARY_NAME}"
     chmod +x "${RELEASE_DIR}/${BINARY_NAME}"
-    
+
     # Test release binary
     echo -e "${BLUE}🧪 Testing release binary...${NC}"
     "${RELEASE_DIR}/${BINARY_NAME}" --version
@@ -176,7 +176,7 @@ if [ "$CREATE_RELEASE" = true ]; then
     # macOS/Windows: directory
     cp -r dist/devo "${RELEASE_DIR}/${BINARY_NAME}"
     chmod +x "${RELEASE_DIR}/${BINARY_NAME}/devo"
-    
+
     # Test release binary
     echo -e "${BLUE}🧪 Testing release binary...${NC}"
     "${RELEASE_DIR}/${BINARY_NAME}/devo" --version
@@ -200,7 +200,7 @@ if [ "$CREATE_RELEASE" = true ]; then
   else
     # macOS/Windows: create tarball and checksum
     tar -czf "${BINARY_NAME}.tar.gz" "${BINARY_NAME}"
-    
+
     if command -v sha256sum &> /dev/null; then
       sha256sum "${BINARY_NAME}.tar.gz" > SHA256SUMS
     elif command -v shasum &> /dev/null; then
@@ -215,7 +215,7 @@ if [ "$CREATE_RELEASE" = true ]; then
   echo ""
   echo -e "${GREEN}✅ Release ready!${NC}"
   echo ""
-  
+
   if [ "$(uname -s)" = "Linux" ]; then
     echo "Binary: ${RELEASE_DIR}/${BINARY_NAME}"
     echo "Size: $(du -h ${RELEASE_DIR}/${BINARY_NAME} | cut -f1)"
