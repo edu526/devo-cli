@@ -49,25 +49,47 @@ esac
 
 BINARY_NAME="devo-${PLATFORM}-${ARCH}"
 
+# Determine file extension and download name based on platform
+case "${PLATFORM}" in
+  linux)
+    DOWNLOAD_FILE="${BINARY_NAME}"
+    ARCHIVE_FORMAT="binary"
+    ;;
+  darwin)
+    DOWNLOAD_FILE="${BINARY_NAME}.tar.gz"
+    ARCHIVE_FORMAT="tarball"
+    ;;
+  *)
+    echo -e "${RED}❌ Unsupported platform: ${PLATFORM}${NC}"
+    exit 1
+    ;;
+esac
+
 if [ "$VERSION" = "latest" ]; then
-  DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/${BINARY_NAME}"
+  DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/${DOWNLOAD_FILE}"
 else
-  DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY_NAME}"
+  DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${DOWNLOAD_FILE}"
 fi
 
 echo -e "${BLUE}Platform:${NC} ${PLATFORM}-${ARCH}"
 echo -e "${BLUE}Version:${NC} ${VERSION}"
+echo -e "${BLUE}Format:${NC} ${ARCHIVE_FORMAT}"
 echo ""
 
-# Check if curl is available
+# Check if curl and tar are available
 if ! command -v curl &> /dev/null; then
   echo -e "${RED}❌ curl is required but not installed${NC}"
   exit 1
 fi
 
+if [ "${ARCHIVE_FORMAT}" = "tarball" ] && ! command -v tar &> /dev/null; then
+  echo -e "${RED}❌ tar is required but not installed${NC}"
+  exit 1
+fi
+
 # Download binary
 echo -e "${BLUE}📥 Downloading Devo CLI...${NC}"
-if ! curl -fsSL "${DOWNLOAD_URL}" -o devo; then
+if ! curl -fsSL "${DOWNLOAD_URL}" -o "${DOWNLOAD_FILE}"; then
   echo -e "${RED}❌ Download failed${NC}"
   echo "Please check:"
   echo "  1. The URL is correct: ${DOWNLOAD_URL}"
@@ -76,16 +98,50 @@ if ! curl -fsSL "${DOWNLOAD_URL}" -o devo; then
   exit 1
 fi
 
-# Make executable
-chmod +x devo
-
-# Test the binary
-echo ""
-echo -e "${BLUE}🧪 Testing binary...${NC}"
-if ! ./devo --version; then
-  echo -e "${RED}❌ Binary test failed${NC}"
-  rm -f devo
-  exit 1
+# Extract if needed
+if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
+  echo -e "${BLUE}📦 Extracting archive...${NC}"
+  if ! tar -xzf "${DOWNLOAD_FILE}"; then
+    echo -e "${RED}❌ Extraction failed${NC}"
+    rm -f "${DOWNLOAD_FILE}"
+    exit 1
+  fi
+  rm -f "${DOWNLOAD_FILE}"
+  
+  # The tarball contains a directory with the binary and _internal folder
+  if [ ! -f "${BINARY_NAME}/devo" ]; then
+    echo -e "${RED}❌ Binary not found in archive${NC}"
+    exit 1
+  fi
+  
+  # Make executable
+  chmod +x "${BINARY_NAME}/devo"
+  
+  # Test the binary (must run from within the directory)
+  echo ""
+  echo -e "${BLUE}🧪 Testing binary...${NC}"
+  if ! "${BINARY_NAME}/devo" --version; then
+    echo -e "${RED}❌ Binary test failed${NC}"
+    rm -rf "${BINARY_NAME}"
+    exit 1
+  fi
+  
+  BINARY_PATH="${BINARY_NAME}"
+else
+  # Linux: single file binary
+  # Make executable
+  chmod +x devo
+  
+  # Test the binary
+  echo ""
+  echo -e "${BLUE}🧪 Testing binary...${NC}"
+  if ! ./devo --version; then
+    echo -e "${RED}❌ Binary test failed${NC}"
+    rm -f devo
+    exit 1
+  fi
+  
+  BINARY_PATH="devo"
 fi
 
 echo ""
@@ -125,25 +181,60 @@ case $choice in
     echo ""
     echo -e "${BLUE}Installing to ${INSTALL_DIR}...${NC}"
     mkdir -p "$INSTALL_DIR"
-    mv devo "$INSTALL_DIR/"
-    echo -e "${GREEN}✅ Installed to ${INSTALL_DIR}/devo${NC}"
+    
+    if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
+      # macOS: move entire directory
+      mv "${BINARY_PATH}" "$INSTALL_DIR/"
+      echo -e "${GREEN}✅ Installed to ${INSTALL_DIR}/${BINARY_NAME}${NC}"
+      echo ""
+      echo -e "${YELLOW}Note: Run with: ${INSTALL_DIR}/${BINARY_NAME}/devo${NC}"
+    else
+      # Linux: move single binary
+      mv "${BINARY_PATH}" "$INSTALL_DIR/"
+      echo -e "${GREEN}✅ Installed to ${INSTALL_DIR}/devo${NC}"
+    fi
     ;;
   1)
     echo ""
     echo -e "${BLUE}Installing to /usr/local/bin...${NC}"
-    if sudo mv devo /usr/local/bin/; then
-      echo -e "${GREEN}✅ Installed to /usr/local/bin/devo${NC}"
+    
+    if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
+      # macOS: move directory and create symlink
+      if sudo mv "${BINARY_PATH}" /usr/local/lib/; then
+        sudo ln -sf "/usr/local/lib/${BINARY_NAME}/devo" /usr/local/bin/devo
+        echo -e "${GREEN}✅ Installed to /usr/local/lib/${BINARY_NAME}${NC}"
+        echo -e "${GREEN}✅ Symlink created at /usr/local/bin/devo${NC}"
+      else
+        echo -e "${RED}❌ Installation failed${NC}"
+        exit 1
+      fi
     else
-      echo -e "${RED}❌ Installation failed${NC}"
-      exit 1
+      # Linux: move single binary
+      if sudo mv "${BINARY_PATH}" /usr/local/bin/; then
+        echo -e "${GREEN}✅ Installed to /usr/local/bin/devo${NC}"
+      else
+        echo -e "${RED}❌ Installation failed${NC}"
+        exit 1
+      fi
     fi
     ;;
   2)
     echo ""
     echo -e "${BLUE}Installing to ~/.local/bin...${NC}"
     mkdir -p ~/.local/bin
-    mv devo ~/.local/bin/
-    echo -e "${GREEN}✅ Installed to ~/.local/bin/devo${NC}"
+    
+    if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
+      # macOS: move directory and create symlink
+      mkdir -p ~/.local/lib
+      mv "${BINARY_PATH}" ~/.local/lib/
+      ln -sf "$HOME/.local/lib/${BINARY_NAME}/devo" ~/.local/bin/devo
+      echo -e "${GREEN}✅ Installed to ~/.local/lib/${BINARY_NAME}${NC}"
+      echo -e "${GREEN}✅ Symlink created at ~/.local/bin/devo${NC}"
+    else
+      # Linux: move single binary
+      mv "${BINARY_PATH}" ~/.local/bin/
+      echo -e "${GREEN}✅ Installed to ~/.local/bin/devo${NC}"
+    fi
 
     # Check if ~/.local/bin is in PATH
     if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
@@ -164,9 +255,17 @@ case $choice in
     ;;
   3)
     echo ""
-    echo -e "${GREEN}✅ Binary ready in current directory${NC}"
-    echo ""
-    echo -e "${YELLOW}To use from anywhere, add to PATH or move to a directory in PATH${NC}"
+    
+    if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
+      echo -e "${GREEN}✅ Binary ready in ${BINARY_PATH}${NC}"
+      echo ""
+      echo -e "${YELLOW}To use: ./${BINARY_PATH}/devo${NC}"
+      echo -e "${YELLOW}To add to PATH, move to a directory in PATH or create a symlink${NC}"
+    else
+      echo -e "${GREEN}✅ Binary ready in current directory${NC}"
+      echo ""
+      echo -e "${YELLOW}To use from anywhere, add to PATH or move to a directory in PATH${NC}"
+    fi
     ;;
   *)
     echo -e "${RED}Invalid choice${NC}"
