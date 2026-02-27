@@ -2,6 +2,7 @@ import os
 import platform
 import shutil
 import sys
+import tarfile
 import tempfile
 import zipfile
 from pathlib import Path
@@ -63,7 +64,12 @@ def get_binary_name(system, arch):
     """Get binary name for platform"""
     if system == "windows":
         return f"devo-{system}-{arch}.zip"
-    return f"devo-{system}-{arch}"
+    elif system == "darwin":
+        # macOS uses tarball (onedir mode)
+        return f"devo-{system}-{arch}.tar.gz"
+    else:
+        # Linux uses single binary (onefile mode)
+        return f"devo-{system}-{arch}"
 
 
 def get_executable_path():
@@ -71,9 +77,12 @@ def get_executable_path():
     # Check if running as PyInstaller bundle
     if getattr(sys, "frozen", False):
         exe_path = Path(sys.executable)
-        # For Windows onedir, return the parent directory
-        if platform.system().lower() == "windows" and exe_path.name == "devo.exe":
+        system = platform.system().lower()
+        
+        # Windows/macOS onedir: return the parent directory
+        if system in ["windows", "darwin"] and exe_path.name in ["devo.exe", "devo"]:
             return exe_path.parent
+        # Linux onefile: return the executable itself
         return exe_path
 
     # Running as Python script - find devo in PATH
@@ -84,20 +93,32 @@ def get_executable_path():
     return None
 
 
-def verify_binary(binary_path, is_windows_zip=False):
+def verify_binary(binary_path, is_archive=False, archive_type=None):
     """Verify downloaded binary is valid"""
     try:
-        # For Windows ZIP files, verify it's a valid ZIP
-        if is_windows_zip:
-            if not zipfile.is_zipfile(binary_path):
-                click.echo("Error: Downloaded file is not a valid ZIP archive")
-                return False
-            # Check ZIP contains devo directory with devo.exe
-            with zipfile.ZipFile(binary_path, "r") as zf:
-                names = [name.replace("\\", "/") for name in zf.namelist()]
-                if not any("devo.exe" in name for name in names):
-                    click.echo("Error: ZIP does not contain devo.exe")
+        # For archive files (ZIP/tarball), verify format
+        if is_archive:
+            if archive_type == "zip":
+                if not zipfile.is_zipfile(binary_path):
+                    click.echo("Error: Downloaded file is not a valid ZIP archive")
                     return False
+                # Check ZIP contains devo directory with devo.exe
+                with zipfile.ZipFile(binary_path, "r") as zf:
+                    names = [name.replace("\\", "/") for name in zf.namelist()]
+                    if not any("devo.exe" in name for name in names):
+                        click.echo("Error: ZIP does not contain devo.exe")
+                        return False
+            elif archive_type == "tar.gz":
+                import tarfile
+                if not tarfile.is_tarfile(binary_path):
+                    click.echo("Error: Downloaded file is not a valid tar.gz archive")
+                    return False
+                # Check tarball contains devo directory with devo executable
+                with tarfile.open(binary_path, "r:gz") as tf:
+                    names = tf.getnames()
+                    if not any("devo/devo" in name or name.endswith("/devo") for name in names):
+                        click.echo("Error: tar.gz does not contain devo executable")
+                        return False
             return True
 
         # Check file size (should be at least 10MB for PyInstaller binary)
@@ -157,11 +178,13 @@ def download_binary(url, dest_path):
         return False
 
 
-def replace_binary(new_binary_path, target_path, is_windows_zip=False):
+def replace_binary(new_binary_path, target_path, archive_type=None):
     """Replace current binary with new one"""
     try:
-        # Windows onedir: target_path is the directory, extract ZIP
-        if is_windows_zip:
+        system = platform.system().lower()
+        
+        # Handle archive extraction (Windows ZIP or macOS tarball)
+        if archive_type:
             # Create backup of entire directory
             backup_path = target_path.parent / f"{target_path.name}.backup"
             if backup_path.exists():
@@ -173,7 +196,7 @@ def replace_binary(new_binary_path, target_path, is_windows_zip=False):
             shutil.copytree(str(target_path), str(backup_path))
             click.echo(f"Backup created: {backup_path}")
 
-            # Extract ZIP to temporary location
+            # Extract archive to temporary location
             temp_extract = target_path.parent / "devo_new"
             if temp_extract.exists():
                 try:
@@ -183,10 +206,15 @@ def replace_binary(new_binary_path, target_path, is_windows_zip=False):
             temp_extract.mkdir()
 
             try:
-                with zipfile.ZipFile(new_binary_path, "r") as zf:
-                    zf.extractall(temp_extract)
+                # Extract based on archive type
+                if archive_type == "zip":
+                    with zipfile.ZipFile(new_binary_path, "r") as zf:
+                        zf.extractall(temp_extract)
+                elif archive_type == "tar.gz":
+                    with tarfile.open(new_binary_path, "r:gz") as tf:
+                        tf.extractall(temp_extract)
 
-                # Find the extracted devo directory (nested ZIP structure)
+                # Find the extracted devo directory
                 extracted_dir = None
                 for item in temp_extract.iterdir():
                     if item.is_dir() and item.name.startswith("devo"):
@@ -194,12 +222,13 @@ def replace_binary(new_binary_path, target_path, is_windows_zip=False):
                         break
 
                 if extracted_dir is None:
-                    # ZIP contains files at the root
+                    # Archive contains files at the root
                     extracted_dir = temp_extract
 
-                # Create PowerShell script to replace after process exits
-                script_path = target_path.parent / "upgrade_devo.ps1"
-                script_content = f"""
+                if system == "windows":
+                    # Windows: Use PowerShell script for replacement after exit
+                    script_path = target_path.parent / "upgrade_devo.ps1"
+                    script_content = f"""
 # Wait for current process to exit
 $processId = {os.getpid()}
 Write-Host "Waiting for process $processId to exit..."
@@ -229,23 +258,47 @@ Write-Host "Upgrade complete!"
 Write-Host "You can now run: devo --version"
 """
 
-                with open(script_path, "w", encoding="utf-8") as f:
-                    f.write(script_content)
+                    with open(script_path, "w", encoding="utf-8") as f:
+                        f.write(script_content)
 
-                click.echo("\n✨ Upgrade prepared successfully!")
-                click.echo("\nThe upgrade will complete after this process exits.")
-                click.echo("Starting upgrade script...")
+                    click.echo("\n✨ Upgrade prepared successfully!")
+                    click.echo("\nThe upgrade will complete after this process exits.")
+                    click.echo("Starting upgrade script...")
 
-                # Start the PowerShell script in a new window
-                import subprocess
+                    # Start the PowerShell script in a new window
+                    import subprocess
 
-                # Use CREATE_NEW_CONSOLE to show progress, without DETACHED_PROCESS
-                subprocess.Popen(
-                    ["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-File", str(script_path)],
-                    creationflags=subprocess.CREATE_NEW_CONSOLE,
-                )
+                    subprocess.Popen(
+                        ["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-File", str(script_path)],
+                        creationflags=subprocess.CREATE_NEW_CONSOLE,
+                    )
 
-                return True
+                    return True
+                else:
+                    # macOS: Direct replacement (can replace while running)
+                    # Remove old directory
+                    shutil.rmtree(target_path)
+                    
+                    # Move new directory into place
+                    shutil.move(str(extracted_dir), str(target_path))
+                    
+                    # Make executable
+                    exe_file = target_path / "devo"
+                    os.chmod(exe_file, 0o755)
+                    
+                    # Clean up temp directory
+                    if temp_extract.exists():
+                        try:
+                            shutil.rmtree(temp_extract)
+                        except OSError:
+                            pass
+                    
+                    click.echo(f"\nBackup location: {backup_path}")
+                    click.echo("\nTo restore backup if needed:")
+                    click.echo(f"  rm -rf {target_path}")
+                    click.echo(f"  mv {backup_path} {target_path}")
+                    
+                    return True
 
             except Exception as e:
                 click.echo(f"Error preparing upgrade: {e}", err=True)
@@ -257,7 +310,7 @@ Write-Host "You can now run: devo --version"
                         pass
                 return False
 
-        # Unix single binary
+        # Linux: single binary replacement (onefile mode)
         # Make new binary executable
         os.chmod(new_binary_path, 0o755)
 
@@ -341,7 +394,14 @@ def upgrade(force, check):
 
         system, arch = platform_info
         binary_name = get_binary_name(system, arch)
-        is_windows_zip = system == "windows"
+        
+        # Determine archive type
+        archive_type = None
+        if system == "windows":
+            archive_type = "zip"
+        elif system == "darwin":
+            archive_type = "tar.gz"
+        # Linux uses single binary (no archive)
 
         # Find binary in release assets
         asset_url = None
@@ -378,7 +438,13 @@ def upgrade(force, check):
 
         # Download new binary to temporary file
         click.echo(f"\nDownloading {binary_name}...")
-        suffix = ".zip" if is_windows_zip else ".tmp"
+        if archive_type == "zip":
+            suffix = ".zip"
+        elif archive_type == "tar.gz":
+            suffix = ".tar.gz"
+        else:
+            suffix = ".tmp"
+            
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
             tmp_path = Path(tmp_file.name)
 
@@ -388,14 +454,14 @@ def upgrade(force, check):
 
             # Verify downloaded binary
             click.echo("\nVerifying downloaded binary...")
-            if not verify_binary(tmp_path, is_windows_zip=is_windows_zip):
+            if not verify_binary(tmp_path, is_archive=bool(archive_type), archive_type=archive_type):
                 click.echo("Error: Downloaded binary failed verification", err=True)
                 click.echo("The file may be corrupted. Please try again.", err=True)
                 sys.exit(1)
 
             # Replace binary
             click.echo("\nInstalling new version...")
-            if not replace_binary(tmp_path, current_exe, is_windows_zip=is_windows_zip):
+            if not replace_binary(tmp_path, current_exe, archive_type=archive_type):
                 sys.exit(1)
 
             # Clean up temp file immediately after successful replacement

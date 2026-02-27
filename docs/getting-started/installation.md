@@ -61,18 +61,25 @@ mkdir -p ~/.local/bin && mv devo ~/.local/bin/
 ### macOS
 
 ```bash
-# Download (Intel)
-curl -L https://github.com/edu526/devo-cli/releases/latest/download/devo-darwin-amd64 -o devo
+# Download and extract (Intel)
+curl -L https://github.com/edu526/devo-cli/releases/latest/download/devo-darwin-amd64.tar.gz -o devo.tar.gz
+tar -xzf devo.tar.gz
 
-# Download (Apple Silicon)
-curl -L https://github.com/edu526/devo-cli/releases/latest/download/devo-darwin-arm64 -o devo
+# Download and extract (Apple Silicon)
+curl -L https://github.com/edu526/devo-cli/releases/latest/download/devo-darwin-arm64.tar.gz -o devo.tar.gz
+tar -xzf devo.tar.gz
 
-# Make executable
-chmod +x devo
+# Move to PATH (moves the entire directory)
+sudo mv devo-darwin-* /usr/local/bin/devo-app
+sudo ln -s /usr/local/bin/devo-app/devo /usr/local/bin/devo
 
-# Move to PATH
-sudo mv devo /usr/local/bin/
+# Or for user-only installation:
+mkdir -p ~/.local/bin
+mv devo-darwin-* ~/.local/bin/devo-app
+ln -s ~/.local/bin/devo-app/devo ~/.local/bin/devo
 ```
+
+**Note:** macOS binaries are distributed as directories (not single files) for faster startup performance.
 
 ### Windows
 

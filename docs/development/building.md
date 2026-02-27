@@ -33,9 +33,9 @@ make build-binary
 
 This creates a binary in `dist/` directory:
 
-- Linux: `dist/devo`
-- macOS: `dist/devo`
-- Windows: `dist/devo.exe`
+- Linux: `dist/devo` (single file)
+- macOS: `dist/devo/` (directory with executable)
+- Windows: `dist/devo/` (directory with executable)
 
 ### Build with Platform-Specific Naming
 
@@ -45,10 +45,10 @@ make build-all
 
 Creates binaries with platform identifiers:
 
-- Linux AMD64: `dist/devo-linux-amd64`
-- macOS Intel: `dist/devo-darwin-amd64`
-- macOS Apple Silicon: `dist/devo-darwin-arm64`
-- Windows: `dist/devo-windows-amd64.exe`
+- Linux AMD64: `dist/devo` (single file)
+- macOS Intel: `release/vX.Y.Z/devo-darwin-amd64.tar.gz` (tarball)
+- macOS Apple Silicon: `release/vX.Y.Z/devo-darwin-arm64.tar.gz` (tarball)
+- Windows: `release/vX.Y.Z/devo-windows-amd64.zip` (zip archive)
 
 ## Manual Build
 
@@ -106,12 +106,13 @@ dist/devo-linux-amd64
 make build-binary
 
 # Output (depends on architecture)
-dist/devo-darwin-amd64  # Intel
-dist/devo-darwin-arm64  # Apple Silicon
+dist/devo/devo  # Directory with executable and dependencies
 
 # Test
-./dist/devo-darwin-amd64 --version
+./dist/devo/devo --version
 ```
+
+**Note:** macOS uses onedir mode (directory with executable) for faster startup. Linux uses onefile mode (single binary) for easier distribution.
 
 ### Windows
 
@@ -227,12 +228,16 @@ strip dist/devo
 ### Improve Startup Time
 
 ```bash
-# Disable bytecode optimization
-pyinstaller --onefile --no-optimize cli_tool/cli.py
-
-# Use --onedir instead of --onefile (faster but multiple files)
+# Use --onedir instead of --onefile (faster startup, multiple files)
 pyinstaller --onedir cli_tool/cli.py
+
+# Note: macOS and Windows builds use onedir by default for performance
+# Linux uses onefile for easier distribution
 ```
+
+**Performance comparison:**
+- onefile (Linux): Single binary, 2-5s startup overhead due to extraction
+- onedir (macOS/Windows): Directory with files, ~0.1-0.3s startup (no extraction)
 
 ## Testing Binaries
 
@@ -240,13 +245,16 @@ pyinstaller --onedir cli_tool/cli.py
 
 ```bash
 # Version check
-./dist/devo --version
+./dist/devo --version  # Linux
+./dist/devo/devo --version  # macOS/Windows
 
 # Help text
-./dist/devo --help
+./dist/devo --help  # Linux
+./dist/devo/devo --help  # macOS/Windows
 
 # Command execution
-./dist/devo config show
+./dist/devo config show  # Linux
+./dist/devo/devo config show  # macOS/Windows
 ```
 
 ### Comprehensive Tests
@@ -267,11 +275,14 @@ pytest tests/
 ### Create Release Package
 
 ```bash
-# Linux/macOS - tar.gz
-tar -czf devo-linux-amd64.tar.gz -C dist devo-linux-amd64
+# Linux - single binary
+cp dist/devo release/devo-linux-amd64
 
-# Windows - zip
-powershell Compress-Archive dist/devo-windows-amd64.exe devo-windows-amd64.zip
+# macOS - tarball (already created by build.sh --release)
+tar -czf devo-darwin-amd64.tar.gz -C release/vX.Y.Z devo-darwin-amd64
+
+# Windows - zip (already created by build.sh --release)
+powershell Compress-Archive release/vX.Y.Z/devo-windows-amd64 devo-windows-amd64.zip
 ```
 
 ### Generate Checksums

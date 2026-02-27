@@ -96,10 +96,21 @@ rm -rf build dist *.spec.bak
 echo -e "${BLUE}🔨 Building binary with PyInstaller...${NC}"
 pyinstaller devo.spec --clean
 
-# Check if build was successful (single binary for Linux/macOS)
-if [ ! -f "dist/devo" ]; then
-  echo -e "${RED}❌ Build failed - binary not found at dist/devo${NC}"
-  exit 1
+# Check if build was successful
+# Linux: onefile mode (dist/devo)
+# macOS/Windows: onedir mode (dist/devo/devo)
+if [ "$(uname -s)" = "Linux" ]; then
+  if [ ! -f "dist/devo" ]; then
+    echo -e "${RED}❌ Build failed - binary not found at dist/devo${NC}"
+    exit 1
+  fi
+  BINARY_PATH="dist/devo"
+else
+  if [ ! -f "dist/devo/devo" ]; then
+    echo -e "${RED}❌ Build failed - binary not found at dist/devo/devo${NC}"
+    exit 1
+  fi
+  BINARY_PATH="dist/devo/devo"
 fi
 
 echo ""
@@ -108,7 +119,7 @@ echo ""
 
 # Test the binary
 echo -e "${BLUE}🧪 Testing binary...${NC}"
-./dist/devo --version
+"${BINARY_PATH}" --version
 echo ""
 
 # Create release if requested
@@ -152,26 +163,51 @@ if [ "$CREATE_RELEASE" = true ]; then
 
   BINARY_NAME="devo-${PLATFORM}-${ARCH}"
 
-  # Copy the binary
-  cp dist/devo "${RELEASE_DIR}/${BINARY_NAME}"
-  chmod +x "${RELEASE_DIR}/${BINARY_NAME}"
-
-  # Test release binary
-  echo -e "${BLUE}🧪 Testing release binary...${NC}"
-  "${RELEASE_DIR}/${BINARY_NAME}" --version
+  # Copy the binary (different structure for Linux vs macOS/Windows)
+  if [ "$(uname -s)" = "Linux" ]; then
+    # Linux: single file
+    cp dist/devo "${RELEASE_DIR}/${BINARY_NAME}"
+    chmod +x "${RELEASE_DIR}/${BINARY_NAME}"
+    
+    # Test release binary
+    echo -e "${BLUE}🧪 Testing release binary...${NC}"
+    "${RELEASE_DIR}/${BINARY_NAME}" --version
+  else
+    # macOS/Windows: directory
+    cp -r dist/devo "${RELEASE_DIR}/${BINARY_NAME}"
+    chmod +x "${RELEASE_DIR}/${BINARY_NAME}/devo"
+    
+    # Test release binary
+    echo -e "${BLUE}🧪 Testing release binary...${NC}"
+    "${RELEASE_DIR}/${BINARY_NAME}/devo" --version
+  fi
 
   # Create checksums
   echo ""
   echo -e "${BLUE}🔐 Creating checksums...${NC}"
   cd "${RELEASE_DIR}"
 
-  # Use shasum on macOS, sha256sum on Linux
-  if command -v sha256sum &> /dev/null; then
-    sha256sum "${BINARY_NAME}" > SHA256SUMS
-  elif command -v shasum &> /dev/null; then
-    shasum -a 256 "${BINARY_NAME}" > SHA256SUMS
+  # Create tarball for macOS/Windows (directory), checksum for Linux (single file)
+  if [ "$(uname -s)" = "Linux" ]; then
+    # Linux: checksum the single binary
+    if command -v sha256sum &> /dev/null; then
+      sha256sum "${BINARY_NAME}" > SHA256SUMS
+    elif command -v shasum &> /dev/null; then
+      shasum -a 256 "${BINARY_NAME}" > SHA256SUMS
+    else
+      echo -e "${YELLOW}⚠️  Warning: No checksum tool found${NC}"
+    fi
   else
-    echo -e "${YELLOW}⚠️  Warning: No checksum tool found${NC}"
+    # macOS/Windows: create tarball and checksum
+    tar -czf "${BINARY_NAME}.tar.gz" "${BINARY_NAME}"
+    
+    if command -v sha256sum &> /dev/null; then
+      sha256sum "${BINARY_NAME}.tar.gz" > SHA256SUMS
+    elif command -v shasum &> /dev/null; then
+      shasum -a 256 "${BINARY_NAME}.tar.gz" > SHA256SUMS
+    else
+      echo -e "${YELLOW}⚠️  Warning: No checksum tool found${NC}"
+    fi
   fi
 
   cd - > /dev/null
@@ -179,14 +215,26 @@ if [ "$CREATE_RELEASE" = true ]; then
   echo ""
   echo -e "${GREEN}✅ Release ready!${NC}"
   echo ""
-  echo "Binary: ${RELEASE_DIR}/${BINARY_NAME}"
-  echo "Size: $(du -h ${RELEASE_DIR}/${BINARY_NAME} | cut -f1)"
+  
+  if [ "$(uname -s)" = "Linux" ]; then
+    echo "Binary: ${RELEASE_DIR}/${BINARY_NAME}"
+    echo "Size: $(du -h ${RELEASE_DIR}/${BINARY_NAME} | cut -f1)"
+  else
+    echo "Binary: ${RELEASE_DIR}/${BINARY_NAME}/devo"
+    echo "Archive: ${RELEASE_DIR}/${BINARY_NAME}.tar.gz"
+    echo "Size: $(du -h ${RELEASE_DIR}/${BINARY_NAME}.tar.gz | cut -f1)"
+  fi
   echo ""
   echo "Files in release:"
   ls -lh "${RELEASE_DIR}"
 else
-  echo "Binary location: dist/devo"
-  echo "Binary size: $(du -h dist/devo | cut -f1)"
+  if [ "$(uname -s)" = "Linux" ]; then
+    echo "Binary location: dist/devo"
+    echo "Binary size: $(du -h dist/devo | cut -f1)"
+  else
+    echo "Binary location: dist/devo/devo"
+    echo "Binary size: $(du -h dist/devo | cut -f1)"
+  fi
   echo ""
   echo "To create a versioned release, run with --release flag"
 fi

@@ -27,18 +27,19 @@ Unified build script for all environments (local development, CI/CD, all platfor
 1. **Local Development** (default)
    - Uses existing virtual environment
    - Installs PyInstaller if needed
-   - Builds to `dist/devo`
+   - Builds to `dist/devo` (Linux: single file, macOS/Windows: directory)
 
 2. **Release Mode** (`--release`)
    - Creates versioned release directory
    - Platform-specific naming: `devo-{platform}-{arch}`
+   - Linux: single binary, macOS: .tar.gz, Windows: .zip
    - Generates SHA256 checksums
    - Output: `release/vX.Y.Z/`
 
 3. **CI/CD Mode** (`--ci`)
    - Installs all dependencies
    - Fetches full git history for versioning
-   - Perfect for Bitbucket Pipelines
+   - Perfect for GitHub Actions
 
 **Examples:**
 ```bash
@@ -119,28 +120,35 @@ make build-all     # Calls scripts/build.sh --release
 1. **Local development:**
    ```bash
    make build-binary
+   # Linux
    ./dist/devo --version
+   # macOS/Windows
+   ./dist/devo/devo --version
    ```
 
 2. **Create release:**
    ```bash
    git tag v1.0.0
    git push origin v1.0.0
-   # Bitbucket runs scripts/build.sh --ci --release
+   # GitHub Actions runs scripts/build.sh --ci --release
    ```
 
 3. **Distribute:**
-   - Download from Bitbucket Pipelines artifacts
-   - Upload to S3 or Bitbucket Downloads
-   - Users install with `install-binary.sh`
+   - Download from GitHub Releases
+   - Linux: single binary `devo-linux-amd64`
+   - macOS: tarball `devo-darwin-arm64.tar.gz`
+   - Windows: zip `devo-windows-amd64.zip`
+   - Users install with `install.sh` or `install.ps1`
 
 ## Platform Support
 
-| Platform | Script | Status |
-|----------|--------|--------|
-| Linux (amd64, arm64) | build.sh | ✅ |
-| macOS (amd64, arm64) | build.sh | ✅ |
-| Windows (amd64) | build-windows.bat | ✅ |
+| Platform | Script | Format | Status |
+|----------|--------|--------|--------|
+| Linux (amd64, arm64) | build.sh | Single binary (onefile) | ✅ |
+| macOS (amd64, arm64) | build.sh | Directory + tarball (onedir) | ✅ |
+| Windows (amd64) | build.sh | Directory + zip (onedir) | ✅ |
+
+**Note:** macOS and Windows use onedir mode for faster startup (~0.1-0.3s vs 2-5s with onefile).
 
 ## Troubleshooting
 

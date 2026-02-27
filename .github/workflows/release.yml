@@ -165,8 +165,17 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           echo "🧪 Testing binary..."
-          chmod +x dist/devo 2>/dev/null || true
-          BINARY_VERSION=$(./dist/devo --version 2>&1 | head -1 || echo "ERROR")
+          
+          # Linux: single file, macOS: directory
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            chmod +x dist/devo
+            BINARY_VERSION=$(./dist/devo --version 2>&1 | head -1 || echo "ERROR")
+          else
+            # macOS: directory with executable
+            chmod +x dist/devo/devo
+            BINARY_VERSION=$(./dist/devo/devo --version 2>&1 | head -1 || echo "ERROR")
+          fi
+          
           echo "Binary version output: $BINARY_VERSION"
 
           if [ "$BINARY_VERSION" = "ERROR" ] || [ -z "$BINARY_VERSION" ]; then
@@ -199,9 +208,17 @@ jobs:
       - name: Check binary size (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
-          BINARY_SIZE=$(stat -f%z dist/devo 2>/dev/null || stat -c%s dist/devo)
-          BINARY_SIZE_MB=$((BINARY_SIZE / 1024 / 1024))
-          echo "Binary size: ${BINARY_SIZE_MB}MB"
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            # Linux: single file
+            BINARY_SIZE=$(stat -f%z dist/devo 2>/dev/null || stat -c%s dist/devo)
+            BINARY_SIZE_MB=$((BINARY_SIZE / 1024 / 1024))
+            echo "Binary size: ${BINARY_SIZE_MB}MB"
+          else
+            # macOS: directory
+            BINARY_SIZE=$(du -sk dist/devo | cut -f1)
+            BINARY_SIZE_MB=$((BINARY_SIZE / 1024))
+            echo "Binary directory size: ${BINARY_SIZE_MB}MB"
+          fi
 
           if [ $BINARY_SIZE_MB -lt 10 ]; then
             echo "⚠️  Warning: Binary seems too small (${BINARY_SIZE_MB}MB)"
@@ -211,9 +228,10 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $size = (Get-Item "dist\devo\devo.exe").Length
-          $sizeMB = [math]::Round($size / 1MB, 2)
-          Write-Host "Binary size: ${sizeMB}MB"
+          # Windows: directory with devo.exe
+          $dirSize = (Get-ChildItem "dist\devo" -Recurse | Measure-Object -Property Length -Sum).Sum
+          $sizeMB = [math]::Round($dirSize / 1MB, 2)
+          Write-Host "Binary directory size: ${sizeMB}MB"
 
           if ($sizeMB -lt 10) {
             Write-Host "⚠️  Warning: Binary seems too small (${sizeMB}MB)"
@@ -293,16 +311,14 @@ jobs:
 
           echo "📦 Preparing binaries for release..."
 
-          # Copy Linux binary (single file)
+          # Copy Linux binary (single file from release directory)
           find artifacts/devo-linux-amd64/release -name "devo-linux-amd64" -type f -exec cp -v {} release-assets/ \;
 
-          # Copy macOS Intel binary (single file)
-          find artifacts/devo-darwin-amd64/release -name "devo-darwin-amd64" -type f -exec cp -v {} release-assets/ \;
+          # Copy macOS tarballs (from release directory)
+          find artifacts/devo-darwin-amd64/release -name "*.tar.gz" -type f -exec cp -v {} release-assets/ \;
+          find artifacts/devo-darwin-arm64/release -name "*.tar.gz" -type f -exec cp -v {} release-assets/ \;
 
-          # Copy macOS ARM binary (single file)
-          find artifacts/devo-darwin-arm64/release -name "devo-darwin-arm64" -type f -exec cp -v {} release-assets/ \;
-
-          # Copy Windows ZIP (onedir package)
+          # Copy Windows ZIP (from release directory)
           find artifacts/devo-windows-amd64/release -name "*.zip" -type f -exec cp -v {} release-assets/ \;
 
           # Generate checksums
