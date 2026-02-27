@@ -107,16 +107,16 @@ if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
     exit 1
   fi
   rm -f "${DOWNLOAD_FILE}"
-  
+
   # The tarball contains a directory with the binary and _internal folder
   if [ ! -f "${BINARY_NAME}/devo" ]; then
     echo -e "${RED}❌ Binary not found in archive${NC}"
     exit 1
   fi
-  
+
   # Make executable
   chmod +x "${BINARY_NAME}/devo"
-  
+
   # Test the binary (must run from within the directory)
   echo ""
   echo -e "${BLUE}🧪 Testing binary...${NC}"
@@ -125,13 +125,13 @@ if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
     rm -rf "${BINARY_NAME}"
     exit 1
   fi
-  
+
   BINARY_PATH="${BINARY_NAME}"
 else
   # Linux: single file binary
   # Make executable
   chmod +x devo
-  
+
   # Test the binary
   echo ""
   echo -e "${BLUE}🧪 Testing binary...${NC}"
@@ -140,7 +140,7 @@ else
     rm -f devo
     exit 1
   fi
-  
+
   BINARY_PATH="devo"
 fi
 
@@ -181,7 +181,7 @@ case $choice in
     echo ""
     echo -e "${BLUE}Installing to ${INSTALL_DIR}...${NC}"
     mkdir -p "$INSTALL_DIR"
-    
+
     if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
       # macOS: move entire directory
       mv "${BINARY_PATH}" "$INSTALL_DIR/"
@@ -197,7 +197,7 @@ case $choice in
   1)
     echo ""
     echo -e "${BLUE}Installing to /usr/local/bin...${NC}"
-    
+
     if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
       # macOS: move directory and create symlink
       if sudo mv "${BINARY_PATH}" /usr/local/lib/; then
@@ -222,7 +222,7 @@ case $choice in
     echo ""
     echo -e "${BLUE}Installing to ~/.local/bin...${NC}"
     mkdir -p ~/.local/bin
-    
+
     if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
       # macOS: move directory and create symlink
       mkdir -p ~/.local/lib
@@ -255,7 +255,7 @@ case $choice in
     ;;
   3)
     echo ""
-    
+
     if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
       echo -e "${GREEN}✅ Binary ready in ${BINARY_PATH}${NC}"
       echo ""
