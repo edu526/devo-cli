@@ -165,7 +165,7 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           echo "🧪 Testing binary..."
-          
+
           # Linux: single file, macOS: directory
           if [ "${{ matrix.platform }}" = "linux" ]; then
             chmod +x dist/devo
@@ -175,7 +175,7 @@ jobs:
             chmod +x dist/devo/devo
             BINARY_VERSION=$(./dist/devo/devo --version 2>&1 | head -1 || echo "ERROR")
           fi
-          
+
           echo "Binary version output: $BINARY_VERSION"
 
           if [ "$BINARY_VERSION" = "ERROR" ] || [ -z "$BINARY_VERSION" ]; then

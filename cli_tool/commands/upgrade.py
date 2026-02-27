@@ -78,7 +78,7 @@ def get_executable_path():
     if getattr(sys, "frozen", False):
         exe_path = Path(sys.executable)
         system = platform.system().lower()
-        
+
         # Windows/macOS onedir: return the parent directory
         if system in ["windows", "darwin"] and exe_path.name in ["devo.exe", "devo"]:
             return exe_path.parent
@@ -110,6 +110,7 @@ def verify_binary(binary_path, is_archive=False, archive_type=None):
                         return False
             elif archive_type == "tar.gz":
                 import tarfile
+
                 if not tarfile.is_tarfile(binary_path):
                     click.echo("Error: Downloaded file is not a valid tar.gz archive")
                     return False
@@ -182,7 +183,7 @@ def replace_binary(new_binary_path, target_path, archive_type=None):
     """Replace current binary with new one"""
     try:
         system = platform.system().lower()
-        
+
         # Handle archive extraction (Windows ZIP or macOS tarball)
         if archive_type:
             # Create backup of entire directory
@@ -278,26 +279,26 @@ Write-Host "You can now run: devo --version"
                     # macOS: Direct replacement (can replace while running)
                     # Remove old directory
                     shutil.rmtree(target_path)
-                    
+
                     # Move new directory into place
                     shutil.move(str(extracted_dir), str(target_path))
-                    
+
                     # Make executable
                     exe_file = target_path / "devo"
                     os.chmod(exe_file, 0o755)
-                    
+
                     # Clean up temp directory
                     if temp_extract.exists():
                         try:
                             shutil.rmtree(temp_extract)
                         except OSError:
                             pass
-                    
+
                     click.echo(f"\nBackup location: {backup_path}")
                     click.echo("\nTo restore backup if needed:")
                     click.echo(f"  rm -rf {target_path}")
                     click.echo(f"  mv {backup_path} {target_path}")
-                    
+
                     return True
 
             except Exception as e:
@@ -394,7 +395,7 @@ def upgrade(force, check):
 
         system, arch = platform_info
         binary_name = get_binary_name(system, arch)
-        
+
         # Determine archive type
         archive_type = None
         if system == "windows":
@@ -444,7 +445,7 @@ def upgrade(force, check):
             suffix = ".tar.gz"
         else:
             suffix = ".tmp"
-            
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
             tmp_path = Path(tmp_file.name)
 

@@ -59,15 +59,15 @@ try {
     if (Test-Path $TempDir) {
         Remove-Item $TempDir -Recurse -Force
     }
-    
+
     # Copy devo folder to temp with proper name
     Copy-Item -Path "dist\devo" -Destination $TempDir -Recurse
-    
+
     # Create ZIP from temp directory
     Push-Location "dist"
     Compress-Archive -Path "devo-windows-amd64" -DestinationPath "..\$ZipPath" -CompressionLevel Optimal
     Pop-Location
-    
+
     # Clean up temp directory
     Remove-Item $TempDir -Recurse -Force
 
@@ -81,13 +81,13 @@ try {
     $ChecksumPath = "$ReleaseDir\SHA256SUMS"
     $Hash = (Get-FileHash -Path $ZipPath -Algorithm SHA256).Hash.ToLower()
     $ChecksumLine = "$Hash  $ZipName"
-    
+
     if (Test-Path $ChecksumPath) {
         Add-Content -Path $ChecksumPath -Value $ChecksumLine
     } else {
         Set-Content -Path $ChecksumPath -Value $ChecksumLine
     }
-    
+
     Write-Host "Checksum generated: SHA256SUMS" -ForegroundColor Green
     Write-Host ""
 

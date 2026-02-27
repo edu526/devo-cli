@@ -10,8 +10,8 @@ Devo CLI uses PyInstaller to create standalone binaries. Different platforms use
 
 ### Linux: Single Binary (onefile)
 
-**Format:** Single executable file  
-**File:** `devo-linux-amd64`  
+**Format:** Single executable file
+**File:** `devo-linux-amd64`
 **Size:** ~50-80 MB
 
 **Why onefile?**
@@ -24,9 +24,9 @@ Devo CLI uses PyInstaller to create standalone binaries. Different platforms use
 
 ### macOS: Directory Bundle (onedir)
 
-**Format:** Directory with executable and dependencies  
-**Distribution:** `.tar.gz` archive  
-**File:** `devo-darwin-arm64.tar.gz` or `devo-darwin-amd64.tar.gz`  
+**Format:** Directory with executable and dependencies
+**Distribution:** `.tar.gz` archive
+**File:** `devo-darwin-arm64.tar.gz` or `devo-darwin-amd64.tar.gz`
 **Extracted size:** ~60-90 MB
 
 **Why onedir?**
@@ -39,9 +39,9 @@ Devo CLI uses PyInstaller to create standalone binaries. Different platforms use
 
 ### Windows: Directory Bundle (onedir)
 
-**Format:** Directory with executable and dependencies  
-**Distribution:** `.zip` archive  
-**File:** `devo-windows-amd64.zip`  
+**Format:** Directory with executable and dependencies
+**Distribution:** `.zip` archive
+**File:** `devo-windows-amd64.zip`
 **Extracted size:** ~60-90 MB
 
 **Why onedir?**
