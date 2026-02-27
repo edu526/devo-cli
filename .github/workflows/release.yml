@@ -314,12 +314,12 @@ jobs:
           # Copy Linux binary (single file from release directory)
           find artifacts/devo-linux-amd64/release -name "devo-linux-amd64" -type f -exec cp -v {} release-assets/ \;
 
-          # Copy macOS tarballs (from release directory)
-          find artifacts/devo-darwin-amd64/release -name "*.tar.gz" -type f -exec cp -v {} release-assets/ \;
-          find artifacts/devo-darwin-arm64/release -name "*.tar.gz" -type f -exec cp -v {} release-assets/ \;
+          # Copy macOS tarballs (only devo-darwin-*.tar.gz files)
+          find artifacts/devo-darwin-amd64/release -name "devo-darwin-*.tar.gz" -type f -exec cp -v {} release-assets/ \;
+          find artifacts/devo-darwin-arm64/release -name "devo-darwin-*.tar.gz" -type f -exec cp -v {} release-assets/ \;
 
-          # Copy Windows ZIP (from release directory)
-          find artifacts/devo-windows-amd64/release -name "*.zip" -type f -exec cp -v {} release-assets/ \;
+          # Copy Windows ZIP (only devo-windows-*.zip files)
+          find artifacts/devo-windows-amd64/release -name "devo-windows-*.zip" -type f -exec cp -v {} release-assets/ \;
 
           # Generate checksums
           cd release-assets
