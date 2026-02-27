@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.5.0 (2026-02-27)
+
+### Code Style
+
+- Remove trailing whitespace across build and docs files
+  ([`f78b679`](https://github.com/edu526/devo-cli/commit/f78b67999a7156ba5c04962e6780b11786ed4df5))
+
+### Features
+
+- **build**: Support macOS onedir binary format and improve cross-platform packaging
+  ([`d9a00a3`](https://github.com/edu526/devo-cli/commit/d9a00a305cd942cda5f32d7a1bb815180374a964))
+
+
 ## v2.4.0 (2026-02-26)
 
 ### Documentation
