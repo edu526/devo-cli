@@ -32,11 +32,9 @@ def ssm():
 @ssm.command("connect")
 @click.argument("name", required=False)
 @click.option("--no-hosts", is_flag=True, help="Disable hostname forwarding (use localhost)")
-@click.option("--profile", help="Override AWS profile for this connection")
-@click.option("--config-path", help="Custom config file path")
-def connect_database(name, no_hosts, profile, config_path):
+def connect_database(name, no_hosts):
     """Connect to a configured database (uses hostname forwarding by default)"""
-    config_manager = SSMConfigManager(config_path)
+    config_manager = SSMConfigManager()
     databases = config_manager.list_databases()
 
     if not databases:
@@ -53,7 +51,7 @@ def connect_database(name, no_hosts, profile, config_path):
         # Show options
         for i, db_name in enumerate(db_list, 1):
             db = databases[db_name]
-            profile_text = profile or db.get("profile", "default")
+            profile_text = db.get("profile", "default")
             console.print(f"  {i}. {db_name} ({db['host']}) [dim](profile: {profile_text})[/dim]")
 
         console.print(f"  {len(db_list) + 1}. Connect to all databases")
@@ -69,7 +67,7 @@ def connect_database(name, no_hosts, profile, config_path):
 
             # Connect to all
             if choice == len(db_list) + 1:
-                _connect_all_databases(config_manager, databases, no_hosts, profile)
+                _connect_all_databases(config_manager, databases, no_hosts)
                 return
 
             # Connect to selected database
@@ -112,7 +110,7 @@ def connect_database(name, no_hosts, profile, config_path):
 
     if use_hostname_forwarding:
         # Use hostname forwarding
-        profile_text = profile or db_config.get("profile", "default")
+        profile_text = db_config.get("profile", "default")
         console.print(f"[cyan]Connecting to {name}...[/cyan]")
         console.print(f"[dim]Hostname: {db_config['host']}[/dim]")
         console.print(f"[dim]Profile: {profile_text}[/dim]")
@@ -132,7 +130,7 @@ def connect_database(name, no_hosts, profile, config_path):
                 port=db_config["port"],
                 local_port=db_config["local_port"],
                 region=db_config["region"],
-                profile=profile or db_config.get("profile"),  # Override profile if provided
+                profile=db_config.get("profile"),
             )
 
             if exit_code != 0:
@@ -148,7 +146,7 @@ def connect_database(name, no_hosts, profile, config_path):
             console.print("[green]Connection closed[/green]")
     else:
         # Use localhost forwarding (simple mode)
-        profile_text = profile or db_config.get("profile", "default")
+        profile_text = db_config.get("profile", "default")
 
         if local_address != "127.0.0.1" and no_hosts:
             console.print("[yellow]Hostname forwarding disabled (using localhost)[/yellow]")
@@ -168,7 +166,7 @@ def connect_database(name, no_hosts, profile, config_path):
                 port=db_config["port"],
                 local_port=db_config["local_port"],
                 region=db_config["region"],
-                profile=profile or db_config.get("profile"),  # Override profile if provided
+                profile=db_config.get("profile"),
             )
             if exit_code != 0:
                 console.print("[red]Connection failed[/red]")
@@ -176,7 +174,7 @@ def connect_database(name, no_hosts, profile, config_path):
             console.print("\n[green]Connection closed[/green]")
 
 
-def _connect_all_databases(config_manager, databases, no_hosts, profile_override=None):
+def _connect_all_databases(config_manager, databases, no_hosts):
     """Helper function to connect to all databases"""
     console.print("[cyan]Starting all connections...[/cyan]\n")
 
@@ -215,7 +213,7 @@ def _connect_all_databases(config_manager, databases, no_hosts, profile_override
                 port=db_config["port"],
                 local_port=actual_local_port,
                 region=db_config["region"],
-                profile=profile_override or db_config.get("profile"),
+                profile=db_config.get("profile"),
             )
         except Exception as e:
             console.print(f"[red]✗[/red] {name}: {e}")
@@ -234,7 +232,7 @@ def _connect_all_databases(config_manager, databases, no_hosts, profile_override
             preferred_local_port = db_config.get("local_port", db_config["port"])
             actual_local_port = get_unique_local_port(preferred_local_port)
 
-            profile_text = profile_override or db_config.get("profile", "default")
+            profile_text = db_config.get("profile", "default")
             port_info = f"{local_address}:{db_config['port']}"
             if actual_local_port != preferred_local_port:
                 port_info += f" [dim](local: {actual_local_port})[/dim]"
@@ -277,10 +275,9 @@ def _connect_all_databases(config_manager, databases, no_hosts, profile_override
 
 
 @ssm.command("list")
-@click.option("--config-path", help="Custom config file path")
-def list_databases(config_path):
+def list_databases():
     """List configured databases"""
-    config_manager = SSMConfigManager(config_path)
+    config_manager = SSMConfigManager()
     databases = config_manager.list_databases()
 
     if not databases:
@@ -308,10 +305,9 @@ def list_databases(config_path):
 @click.option("--local-port", type=int, help="Local port (default: same as remote)")
 @click.option("--region", default="us-east-1", help="AWS region")
 @click.option("--profile", help="AWS profile")
-@click.option("--config-path", help="Custom config file path")
-def add_database(name, bastion, host, port, local_port, region, profile, config_path):
+def add_database(name, bastion, host, port, local_port, region, profile):
     """Add a database configuration"""
-    config_manager = SSMConfigManager(config_path)
+    config_manager = SSMConfigManager()
 
     config_manager.add_database(name=name, bastion=bastion, host=host, port=port, region=region, profile=profile, local_port=local_port)
 
@@ -321,10 +317,9 @@ def add_database(name, bastion, host, port, local_port, region, profile, config_
 
 @ssm.command("remove-db")
 @click.argument("name")
-@click.option("--config-path", help="Custom config file path")
-def remove_database(name, config_path):
+def remove_database(name):
     """Remove a database configuration"""
-    config_manager = SSMConfigManager(config_path)
+    config_manager = SSMConfigManager()
 
     if config_manager.remove_database(name):
         console.print(f"[green]Database '{name}' removed[/green]")
@@ -339,10 +334,9 @@ def remove_database(name, config_path):
 
 @ssm.command("shell")
 @click.argument("name")
-@click.option("--config-path", help="Custom config file path")
-def connect_instance(name, config_path):
+def connect_instance(name):
     """Connect to a configured instance via interactive shell"""
-    config_manager = SSMConfigManager(config_path)
+    config_manager = SSMConfigManager()
     instance_config = config_manager.get_instance(name)
 
     if not instance_config:
@@ -362,10 +356,9 @@ def connect_instance(name, config_path):
 
 
 @ssm.command("list-instances")
-@click.option("--config-path", help="Custom config file path")
-def list_instances(config_path):
+def list_instances():
     """List configured instances"""
-    config_manager = SSMConfigManager(config_path)
+    config_manager = SSMConfigManager()
     instances = config_manager.list_instances()
 
     if not instances:
@@ -390,10 +383,9 @@ def list_instances(config_path):
 @click.option("--instance-id", required=True, help="EC2 instance ID")
 @click.option("--region", default="us-east-1", help="AWS region")
 @click.option("--profile", help="AWS profile")
-@click.option("--config-path", help="Custom config file path")
-def add_instance(name, instance_id, region, profile, config_path):
+def add_instance(name, instance_id, region, profile):
     """Add an instance configuration"""
-    config_manager = SSMConfigManager(config_path)
+    config_manager = SSMConfigManager()
 
     config_manager.add_instance(name=name, instance_id=instance_id, region=region, profile=profile)
 
@@ -403,10 +395,9 @@ def add_instance(name, instance_id, region, profile, config_path):
 
 @ssm.command("remove-instance")
 @click.argument("name")
-@click.option("--config-path", help="Custom config file path")
-def remove_instance(name, config_path):
+def remove_instance(name):
     """Remove an instance configuration"""
-    config_manager = SSMConfigManager(config_path)
+    config_manager = SSMConfigManager()
 
     if config_manager.remove_instance(name):
         console.print(f"[green]Instance '{name}' removed[/green]")
@@ -421,10 +412,9 @@ def remove_instance(name, config_path):
 
 @ssm.command("export")
 @click.argument("output_path")
-@click.option("--config-path", help="Custom config file path")
-def export_config(output_path, config_path):
+def export_config(output_path):
     """Export SSM configuration to a file"""
-    config_manager = SSMConfigManager(config_path)
+    config_manager = SSMConfigManager()
 
     try:
         config_manager.export_config(output_path)
@@ -436,10 +426,9 @@ def export_config(output_path, config_path):
 @ssm.command("import")
 @click.argument("input_path")
 @click.option("--merge", is_flag=True, help="Merge with existing config instead of replacing")
-@click.option("--config-path", help="Custom config file path")
-def import_config(input_path, merge, config_path):
+def import_config(input_path, merge):
     """Import SSM configuration from a file"""
-    config_manager = SSMConfigManager(config_path)
+    config_manager = SSMConfigManager()
 
     try:
         config_manager.import_config(input_path, merge=merge)
@@ -449,19 +438,6 @@ def import_config(input_path, merge, config_path):
         console.print(f"[red]Config file not found: {input_path}[/red]")
     except Exception as e:
         console.print(f"[red]Error importing config: {e}[/red]")
-
-
-@ssm.command("show-config")
-@click.option("--config-path", help="Custom config file path")
-def show_config(config_path):
-    """Show the path to the SSM config file"""
-    config_manager = SSMConfigManager(config_path)
-    console.print(f"[cyan]Config file location:[/cyan] {config_manager.config_path}")
-
-    if config_manager.config_path.exists():
-        console.print("[green]File exists[/green]")
-    else:
-        console.print("[yellow]File does not exist yet (will be created on first use)[/yellow]")
 
 
 # ============================================================================
@@ -475,14 +451,20 @@ def show_config(config_path):
 @click.option("--port", default=5432, type=int, help="Remote port")
 @click.option("--local-port", type=int, help="Local port (default: same as remote)")
 @click.option("--region", default="us-east-1", help="AWS region")
-@click.option("--profile", help="AWS profile")
+@click.option("--profile", help="AWS profile (optional, uses default if not specified)")
 def forward_manual(bastion, host, port, local_port, region, profile):
-    """Manual port forwarding (without using config)"""
+    """Manual port forwarding (without using config)
+
+    Note: This command allows --profile for one-off connections.
+    For saved database configurations, profile is stored in config.
+    """
     if not local_port:
         local_port = port
 
     console.print(f"[cyan]Forwarding {host}:{port} -> localhost:{local_port}[/cyan]")
     console.print(f"[dim]Via bastion: {bastion}[/dim]")
+    if profile:
+        console.print(f"[dim]Profile: {profile}[/dim]")
     console.print("[yellow]Press Ctrl+C to stop[/yellow]\n")
 
     try:
@@ -503,10 +485,9 @@ def hosts():
 
 
 @hosts.command("setup")
-@click.option("--config-path", help="Custom config file path")
-def hosts_setup(config_path):
+def hosts_setup():
     """Setup /etc/hosts entries for all configured databases"""
-    config_manager = SSMConfigManager(config_path)
+    config_manager = SSMConfigManager()
     hosts_manager = HostsManager()
     databases = config_manager.list_databases()
 
@@ -611,10 +592,9 @@ def hosts_clear():
 
 @hosts.command("add")
 @click.argument("name")
-@click.option("--config-path", help="Custom config file path")
-def hosts_add_single(name, config_path):
+def hosts_add_single(name):
     """Add a single database hostname to /etc/hosts"""
-    config_manager = SSMConfigManager(config_path)
+    config_manager = SSMConfigManager()
     hosts_manager = HostsManager()
 
     db_config = config_manager.get_database(name)
@@ -643,10 +623,9 @@ def hosts_add_single(name, config_path):
 
 @hosts.command("remove")
 @click.argument("name")
-@click.option("--config-path", help="Custom config file path")
-def hosts_remove_single(name, config_path):
+def hosts_remove_single(name):
     """Remove a database hostname from /etc/hosts"""
-    config_manager = SSMConfigManager(config_path)
+    config_manager = SSMConfigManager()
     hosts_manager = HostsManager()
 
     db_config = config_manager.get_database(name)

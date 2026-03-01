@@ -27,26 +27,19 @@ console = Console()
     default="table",
     help="Output format (default: table)",
 )
-@click.option(
-    "--profile",
-    envvar="AWS_PROFILE",
-    default=None,
-    help="AWS profile to use for authentication",
-)
 @click.pass_context
-def eventbridge(ctx, env, region, status, output, profile):
+def eventbridge(ctx, env, region, status, output):
     """Check EventBridge scheduled rules status by environment."""
-    import boto3
     from botocore.exceptions import ClientError, NoCredentialsError
 
-    # Use command-level profile if provided, otherwise use context profile
-    if not profile:
-        profile = ctx.obj.get("profile")
+    from cli_tool.utils.aws import create_aws_client, select_profile
+
+    # Get profile from context or prompt user to select
+    profile = select_profile(ctx.obj.get("profile"))
 
     try:
         # Create EventBridge client
-        session = boto3.Session(profile_name=profile, region_name=region)
-        events_client = session.client("events")
+        events_client = create_aws_client("events", profile_name=profile, region_name=region)
 
         console.print(f"\n[blue]Fetching EventBridge rules from {region}...[/blue]\n")
 

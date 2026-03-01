@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import boto3
 import click
 from botocore.exceptions import BotoCoreError, ClientError
 from rich.console import Console
@@ -275,8 +274,9 @@ def export_table_command(
 
     try:
         # Initialize AWS session
-        session = boto3.Session(profile_name=profile, region_name=region)
-        dynamodb_client = session.client("dynamodb")
+        from cli_tool.utils.aws import create_aws_client
+
+        dynamodb_client = create_aws_client("dynamodb", profile_name=profile, region_name=region)
 
         # Validate table exists
         if not validate_table_exists(dynamodb_client, table_name):

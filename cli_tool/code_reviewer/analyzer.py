@@ -26,9 +26,14 @@ from cli_tool.ui.console_ui import console_ui
 class CodeReviewAnalyzer:
     """Main class for analyzing code using AI agents with BaseAgent."""
 
-    def __init__(self):
-        """Initialize the analyzer."""
+    def __init__(self, profile_name: Optional[str] = None):
+        """Initialize the analyzer.
+
+        Args:
+            profile_name: AWS profile name for Bedrock access (optional)
+        """
         self.project_root = Path(__file__).parent.parent
+        self.profile_name = profile_name
 
     def _create_agent(self, use_short_prompt: bool = True) -> BaseAgent:
         """Create and configure the BaseAgent with code review tools."""
@@ -47,6 +52,7 @@ class CodeReviewAnalyzer:
         return BaseAgent(
             name="CodeReviewer",
             system_prompt=prompt,
+            profile_name=self.profile_name,
             tools=tools,
         )
 
