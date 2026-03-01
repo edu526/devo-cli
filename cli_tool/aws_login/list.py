@@ -17,16 +17,19 @@ def list_profiles():
     if not profiles:
         console.print("[yellow]No AWS profiles found in ~/.aws/config[/yellow]")
         console.print("\nTo configure SSO, run:")
+        console.print("  devo aws-login --configure")
+        console.print("\nOr manually:")
         console.print("  aws configure sso")
         sys.exit(0)
 
     table = Table(title="Available AWS Profiles")
     table.add_column("Profile", style="cyan")
+    table.add_column("Source", style="dim")
     table.add_column("Status", style="green")
 
-    for prof in profiles:
+    for prof, source in profiles:
         identity = verify_credentials(prof)
         status = "✓ Active" if identity else "✗ Expired/Invalid"
-        table.add_row(prof, status)
+        table.add_row(prof, source, status)
 
     console.print(table)

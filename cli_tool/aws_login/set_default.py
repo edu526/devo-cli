@@ -28,22 +28,33 @@ def set_default_profile(profile_name=None):
     # If no profile specified, show selection
     if not profile_name:
         console.print("[blue]Available profiles:[/blue]")
-        for i, prof in enumerate(profiles, 1):
-            console.print(f"  {i}. {prof}")
+        for i, (prof_name, source) in enumerate(profiles, 1):
+            # Format source with color
+            if source == "sso":
+                source_label = f"[cyan]{source}[/cyan]"
+            elif source == "static":
+                source_label = f"[yellow]{source}[/yellow]"
+            elif source == "both":
+                source_label = f"[green]{source}[/green]"
+            else:
+                source_label = f"[dim]{source}[/dim]"
+
+            console.print(f"  {i}. {prof_name} [{source_label}]")
 
         choice = click.prompt("\nSelect profile number", type=int)
         if 1 <= choice <= len(profiles):
-            profile_name = profiles[choice - 1]
+            profile_name, _ = profiles[choice - 1]
         else:
             console.print("[red]Invalid selection[/red]")
             sys.exit(1)
 
     # Verify profile exists
-    if profile_name not in profiles:
+    profile_names = [p[0] for p in profiles]
+    if profile_name not in profile_names:
         console.print(f"[red]Profile '{profile_name}' not found[/red]")
         console.print("\nAvailable profiles:")
-        for prof in profiles:
-            console.print(f"  - {prof}")
+        for prof_name, source in profiles:
+            console.print(f"  - {prof_name} [{source}]")
         sys.exit(1)
 
     # Set in current process (won't affect parent shell, but shows intent)

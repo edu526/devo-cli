@@ -29,7 +29,7 @@ def refresh_all_profiles():
     profiles_to_refresh = []
     profiles_valid = []
 
-    for prof in profiles:
+    for prof, source in profiles:
         needs_refresh, expiration, reason = check_profile_needs_refresh(prof)
 
         if needs_refresh:

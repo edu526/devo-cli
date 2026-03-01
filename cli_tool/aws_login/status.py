@@ -23,29 +23,35 @@ def show_status():
 
     table = Table(show_header=True, header_style="bold cyan")
     table.add_column("Profile", style="cyan", width=20)
+    table.add_column("Source", style="dim", width=12)
     table.add_column("Status", width=15)
     table.add_column("Expires At (Local)", width=25)
     table.add_column("Time Remaining", width=20)
 
-    for prof in profiles:
+    for prof, source in profiles:
+        # For static credentials, show appropriate message
+        if source == "static":
+            table.add_row(prof, source, "[dim]Static[/dim]", "N/A", "N/A")
+            continue
+
         prof_config = get_profile_config(prof)
 
         if not prof_config:
-            table.add_row(prof, "[red]Error[/red]", "N/A", "N/A")
+            table.add_row(prof, source, "[yellow]No Config[/yellow]", "N/A", "N/A")
             continue
 
         # Check if SSO profile
         has_sso = "sso_start_url" in prof_config or "sso_session" in prof_config
 
         if not has_sso:
-            table.add_row(prof, "[dim]Not SSO[/dim]", "N/A", "N/A")
+            table.add_row(prof, source, "[dim]Not SSO[/dim]", "N/A", "N/A")
             continue
 
         # Get expiration of account credentials (not SSO token)
         expiration = get_profile_credentials_expiration(prof)
 
         if not expiration:
-            table.add_row(prof, "[red]No Credentials[/red]", "N/A", "N/A")
+            table.add_row(prof, source, "[red]No Credentials[/red]", "N/A", "N/A")
             continue
 
         # Calculate time left
@@ -70,7 +76,7 @@ def show_status():
             status_str = "[green]Valid[/green]"
             time_str = f"[green]{hours}h {minutes}m[/green]"
 
-        table.add_row(prof, status_str, expires_str, time_str)
+        table.add_row(prof, source, status_str, expires_str, time_str)
 
     console.print(table)
     console.print(f"\n[dim]Current time (UTC): {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}[/dim]")

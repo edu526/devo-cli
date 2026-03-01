@@ -13,10 +13,19 @@ REQUIRED_ROLE = AWS_REQUIRED_ROLE
 
 
 def get_aws_profiles():
-    """Get available AWS profiles from config and credentials files."""
+    """
+    Get available AWS profiles from config and credentials files.
+
+    Returns:
+        List of tuples (profile_name, source) where source is:
+        - 'sso': Profile only in config with SSO configuration
+        - 'static': Profile only in credentials
+        - 'both': Profile in both config and credentials
+        - 'config': Profile in config without SSO
+    """
     from cli_tool.aws_login.config import list_aws_profiles
 
-    # Get profiles from ~/.aws/config (includes SSO profiles)
+    # Get profiles with source information
     profiles = list_aws_profiles()
 
     return profiles if profiles else []
@@ -78,7 +87,7 @@ def select_aws_profile(required_account=None, show_messages=True):
 
     # If only one profile, use it automatically
     if len(profiles) == 1:
-        selected_profile = profiles[0]
+        selected_profile, source = profiles[0]
 
         # Verify the profile works
         account_id, user_arn = verify_aws_credentials(selected_profile, required_account)
@@ -108,13 +117,13 @@ def select_aws_profile(required_account=None, show_messages=True):
             return None
 
         if show_messages:
-            click.echo(click.style(f"✓ Using profile: {selected_profile}", fg="green"))
+            click.echo(click.style(f"✓ Using profile: {selected_profile} [{source}]", fg="green"))
         return selected_profile
 
     # Always show the profile list
     click.echo(click.style("Available AWS profiles:", fg="blue"))
-    for i, profile in enumerate(profiles, 1):
-        click.echo(f"  {i}. {profile}")
+    for i, (profile_name, source) in enumerate(profiles, 1):
+        click.echo(f"  {i}. {profile_name} [{source}]")
     click.echo("")
 
     choice = click.prompt(
@@ -134,7 +143,7 @@ def select_aws_profile(required_account=None, show_messages=True):
     try:
         index = int(choice) - 1
         if 0 <= index < len(profiles):
-            selected_profile = profiles[index]
+            selected_profile, source = profiles[index]
 
             # Verify the selected profile works
             account_id, user_arn = verify_aws_credentials(selected_profile, required_account)
