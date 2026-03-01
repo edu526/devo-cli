@@ -1,6 +1,7 @@
 """Set default AWS profile."""
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -45,63 +46,100 @@ def set_default_profile(profile_name=None):
             console.print(f"  - {prof}")
         sys.exit(1)
 
-    # Detect user's shell
-    shell = os.environ.get("SHELL", "")
-    shell_name = Path(shell).name if shell else "bash"
-
-    # Determine config file and export line based on shell
-    home = Path.home()
-    if "zsh" in shell_name:
-        config_file = home / ".zshrc"
-        export_line = f"export AWS_PROFILE={profile_name}"
-    elif "fish" in shell_name:
-        config_file = home / ".config" / "fish" / "config.fish"
-        export_line = f"set -gx AWS_PROFILE {profile_name}"
-    else:
-        config_file = home / ".bashrc"
-        export_line = f"export AWS_PROFILE={profile_name}"
-
-    # Update or add AWS_PROFILE in config file
-    if config_file.exists():
-        try:
-            with open(config_file, "r") as f:
-                lines = f.readlines()
-
-            # Find and update existing AWS_PROFILE line
-            new_lines = []
-            found = False
-            for line in lines:
-                if "AWS_PROFILE" in line and ("export" in line or "set -gx" in line):
-                    # Replace the line
-                    new_lines.append(f"{export_line}\n")
-                    found = True
-                else:
-                    new_lines.append(line)
-
-            if found:
-                # Write updated content
-                with open(config_file, "w") as f:
-                    f.writelines(new_lines)
-                console.print(f"\n[green]✓ Updated AWS_PROFILE in {config_file}[/green]")
-            else:
-                # Add new line
-                with open(config_file, "a") as f:
-                    f.write("\n# AWS default profile (added by devo-cli)\n")
-                    f.write(f"{export_line}\n")
-                console.print(f"\n[green]✓ Added to {config_file}[/green]")
-
-        except Exception as e:
-            console.print(f"\n[yellow]Could not update {config_file}: {e}[/yellow]")
-    else:
-        console.print(f"\n[yellow]Config file {config_file} does not exist[/yellow]")
-
     # Set in current process (won't affect parent shell, but shows intent)
     os.environ["AWS_PROFILE"] = profile_name
 
-    console.print(f"\n[green]✓ Set '{profile_name}' as default profile[/green]")
-    console.print("\n[yellow]To apply in your current terminal, run:[/yellow]")
-    console.print(f"  source {config_file}")
-    console.print("\n[yellow]Or open a new terminal[/yellow]")
+    # Detect if running in Git Bash on Windows
+    is_git_bash = os.name == "nt" and os.environ.get("SHELL", "").endswith("bash")
+
+    # Handle Windows differently (but not Git Bash)
+    if os.name == "nt" and not is_git_bash:
+        # Windows: Set user environment variable persistently
+        try:
+            # Use setx to set user environment variable
+            result = subprocess.run(["setx", "AWS_PROFILE", profile_name], capture_output=True, text=True, timeout=10)
+
+            if result.returncode == 0:
+                console.print(f"\n[green]✓ Set '{profile_name}' as default profile[/green]")
+                console.print("\n[yellow]To apply in your current terminal:[/yellow]")
+                console.print("  1. Close and reopen your terminal")
+                console.print("  2. Or run in PowerShell:")
+                console.print(f"     $env:AWS_PROFILE='{profile_name}'")
+                console.print("  3. Or run in CMD:")
+                console.print(f"     set AWS_PROFILE={profile_name}")
+            else:
+                console.print(f"\n[red]Failed to set environment variable: {result.stderr}[/red]")
+                console.print("\n[yellow]You can set it manually:[/yellow]")
+                console.print("  PowerShell:")
+                console.print(f"    $env:AWS_PROFILE='{profile_name}'")
+                console.print("  CMD:")
+                console.print(f"    set AWS_PROFILE={profile_name}")
+
+        except Exception as e:
+            console.print(f"\n[yellow]Could not set environment variable: {e}[/yellow]")
+            console.print("\n[yellow]You can set it manually:[/yellow]")
+            console.print("  PowerShell:")
+            console.print(f"    $env:AWS_PROFILE='{profile_name}'")
+            console.print("  CMD:")
+            console.print(f"    set AWS_PROFILE={profile_name}")
+
+    else:
+        # Linux/macOS: Update shell config file
+        shell = os.environ.get("SHELL", "")
+        shell_name = Path(shell).name if shell else "bash"
+
+        # Determine config file and export line based on shell
+        home = Path.home()
+        if "zsh" in shell_name:
+            config_file = home / ".zshrc"
+            export_line = f"export AWS_PROFILE={profile_name}"
+        elif "fish" in shell_name:
+            config_file = home / ".config" / "fish" / "config.fish"
+            export_line = f"set -gx AWS_PROFILE {profile_name}"
+        else:
+            config_file = home / ".bashrc"
+            export_line = f"export AWS_PROFILE={profile_name}"
+
+        # Update or add AWS_PROFILE in config file
+        if config_file.exists():
+            try:
+                with open(config_file, "r") as f:
+                    lines = f.readlines()
+
+                # Find and update existing AWS_PROFILE line
+                new_lines = []
+                found = False
+                for line in lines:
+                    if "AWS_PROFILE" in line and ("export" in line or "set -gx" in line):
+                        # Replace the line
+                        new_lines.append(f"{export_line}\n")
+                        found = True
+                    else:
+                        new_lines.append(line)
+
+                if found:
+                    # Write updated content
+                    with open(config_file, "w") as f:
+                        f.writelines(new_lines)
+                    console.print(f"\n[green]✓ Updated AWS_PROFILE in {config_file}[/green]")
+                else:
+                    # Add new line
+                    with open(config_file, "a") as f:
+                        f.write("\n# AWS default profile (added by devo-cli)\n")
+                        f.write(f"{export_line}\n")
+                    console.print(f"\n[green]✓ Added to {config_file}[/green]")
+
+            except Exception as e:
+                console.print(f"\n[yellow]Could not update {config_file}: {e}[/yellow]")
+        else:
+            console.print(f"\n[yellow]Config file {config_file} does not exist[/yellow]")
+
+        console.print(f"\n[green]✓ Set '{profile_name}' as default profile[/green]")
+        console.print("\n[yellow]To apply in your current terminal, run:[/yellow]")
+        console.print(f"  source {config_file}")
+        console.print("\n[yellow]Or open a new terminal[/yellow]")
+
+    # Common instructions for all platforms
     console.print("\n[cyan]You can now use AWS CLI without --profile:[/cyan]")
     console.print("  aws s3 ls")
     console.print("  aws sts get-caller-identity")
