@@ -33,6 +33,15 @@ devo config <subcommand> [OPTIONS]
 
 ## AWS Integration
 
+### [devo aws-login](aws-login.md)
+Automate AWS SSO authentication and credential caching.
+
+```bash
+devo aws-login [OPTIONS]
+```
+
+**Use when:** You need to login to AWS using SSO without manually copying credentials.
+
 ### [devo codeartifact-login](codeartifact.md)
 Authenticate with AWS CodeArtifact for private package management.
 
@@ -117,6 +126,7 @@ devo completion [SHELL]
 - `code-reviewer` - Automated code review
 
 ### AWS Integration
+- `aws-login` - AWS SSO authentication
 - `codeartifact-login` - CodeArtifact authentication
 - `ssm` - Session Manager port forwarding with hostname support
 - `dynamodb` - DynamoDB table management (list, describe, export)

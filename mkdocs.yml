@@ -46,26 +46,28 @@ nav:
       - Configuration: getting-started/configuration.md
   - Commands:
       - Overview: commands/index.md
-      - commit: commands/commit.md
+      - aws-login: commands/aws-login.md
       - code-reviewer: commands/code-reviewer.md
-      - config: commands/config.md
       - codeartifact-login: commands/codeartifact.md
-      - ssm: commands/ssm.md
+      - commit: commands/commit.md
+      - completion: commands/completion.md
+      - config: commands/config.md
       - dynamodb: commands/dynamodb.md
       - eventbridge: commands/eventbridge.md
+      - ssm: commands/ssm.md
       - upgrade: commands/upgrade.md
-      - completion: commands/completion.md
   - Guides:
       - Overview: guides/index.md
-      - Workflow Guides:
+      - Getting Started:
+          - AWS Setup: guides/aws-setup.md
+          - AWS Login Workflow: guides/aws-login-workflow.md
+          - Shell Completion: guides/shell-completion.md
+      - Development Workflows:
           - Commit Workflow: guides/commit-workflow.md
           - Code Review Workflow: guides/code-review-workflow.md
-      - AWS Integration:
-          - AWS Setup: guides/aws-setup.md
+      - AWS Services:
           - DynamoDB Export: guides/dynamodb-export.md
           - SSM Port Forwarding: guides/ssm-port-forwarding.md
-      - Productivity:
-          - Shell Completion: guides/shell-completion.md
   - Development:
       - Setup: development/setup.md
       - Contributing: development/contributing.md

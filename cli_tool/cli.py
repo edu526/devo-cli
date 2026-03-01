@@ -3,6 +3,7 @@ import os
 import click
 from rich.console import Console
 
+from cli_tool.commands.aws_login import aws_login
 from cli_tool.commands.code_reviewer import code_reviewer
 from cli_tool.commands.codeartifact_login import codeartifact_login
 from cli_tool.commands.commit_prompt import commit
@@ -99,9 +100,9 @@ def cli(ctx, profile):
 
     # Check if we need AWS credentials (skip for help, version, and completion commands)
     # Also skip if --help or -h is in the command line arguments
-    # Skip for commands that don't need AWS: upgrade, config, completion
+    # Skip for commands that don't need AWS: upgrade, config, completion, aws_login
     skip_profile_check = (
-        ctx.invoked_subcommand in ["completion", "upgrade", "config", None]
+        ctx.invoked_subcommand in ["completion", "upgrade", "config", "aws-login", "aws_login", None]
         or "--help" in sys.argv
         or "-h" in sys.argv
         or "--version" in sys.argv
@@ -154,6 +155,7 @@ def cli(ctx, profile):
 
 cli.add_command(commit)
 cli.add_command(upgrade)
+cli.add_command(aws_login)
 cli.add_command(codeartifact_login)
 cli.add_command(completion)
 cli.add_command(code_reviewer)
