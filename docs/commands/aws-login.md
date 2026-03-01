@@ -94,6 +94,30 @@ devo aws-login --refresh-all
 
 Automatically refreshes all profiles that are expired or expiring within 10 minutes. Groups profiles by SSO session to minimize login prompts.
 
+### Set Default Profile
+
+```bash
+# Set a profile as default
+devo aws-login --set-default production
+
+# Interactive selection
+devo aws-login --set-default
+```
+
+Sets the AWS_PROFILE environment variable as default:
+
+- **Linux/macOS**: Updates `.bashrc`, `.zshrc`, or `config.fish`
+- **Windows**: Sets user environment variable with `setx`
+- **Git Bash (Windows)**: Updates `.bashrc`
+
+After setting default, you can use AWS CLI without `--profile`:
+
+```bash
+aws s3 ls
+aws sts get-caller-identity
+devo codeartifact-login
+```
+
 ## Configuration
 
 ### SSO Session Format (Recommended)
@@ -136,7 +160,10 @@ Both formats are supported.
 ## Using Credentials
 
 ```bash
-# Set as default
+# Set as default (recommended)
+devo aws-login --set-default production
+
+# Or export manually
 export AWS_PROFILE=production
 
 # Use with AWS CLI
@@ -166,6 +193,9 @@ devo aws-login --configure --profile production
 
 # Check status
 devo aws-login --status
+
+# Set default
+devo aws-login --set-default production
 
 # Refresh all
 devo aws-login --refresh-all
