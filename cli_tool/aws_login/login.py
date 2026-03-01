@@ -32,19 +32,29 @@ def perform_login(profile_name=None):
                     sys.exit(1)
                 console.print("\n[blue]Profile configured! Now logging in...[/blue]\n")
             else:
-                console.print("\nTo configure SSO manually, run:")
-                console.print("  aws configure sso")
-                console.print("\nOr use:")
+                console.print("\nTo configure SSO, run:")
                 console.print("  devo aws-login --configure")
+                console.print("\nOr manually:")
+                console.print("  aws configure sso")
                 sys.exit(1)
         else:
             console.print("[blue]Available profiles:[/blue]")
-            for i, prof in enumerate(profiles, 1):
-                console.print(f"  {i}. {prof}")
+            for i, (prof_name, source) in enumerate(profiles, 1):
+                # Format source with color
+                if source == "sso":
+                    source_label = f"[cyan]{source}[/cyan]"
+                elif source == "static":
+                    source_label = f"[yellow]{source}[/yellow]"
+                elif source == "both":
+                    source_label = f"[green]{source}[/green]"
+                else:
+                    source_label = f"[dim]{source}[/dim]"
+
+                console.print(f"  {i}. {prof_name} [{source_label}]")
 
             choice = click.prompt("\nSelect profile number", type=int)
             if 1 <= choice <= len(profiles):
-                profile_name = profiles[choice - 1]
+                profile_name, _ = profiles[choice - 1]
             else:
                 console.print("[red]Invalid selection[/red]")
                 sys.exit(1)
@@ -56,6 +66,8 @@ def perform_login(profile_name=None):
     if not sso_config:
         console.print(f"[yellow]Profile '{profile_name}' is not configured for SSO[/yellow]")
         console.print("\nTo configure SSO, run:")
+        console.print("  devo aws-login --configure")
+        console.print("\nOr manually:")
         console.print(f"  aws configure sso --profile {profile_name}")
         sys.exit(1)
 

@@ -26,45 +26,70 @@ def select_profile(current_profile: Optional[str] = None, allow_none: bool = Fal
     if current_profile:
         return current_profile
 
-    # Get available profiles
+    # Get available profiles (list of tuples: (name, source))
     profiles = get_aws_profiles()
 
     if len(profiles) == 0:
         if allow_none:
             return None
         click.echo(click.style("No AWS profiles found", fg="red"))
-        click.echo("Configure AWS CLI first: aws configure")
+        click.echo("To configure SSO, run: devo aws-login --configure")
         raise click.Abort()
 
     if len(profiles) == 1:
         # Auto-select if only one profile exists
-        profile = profiles[0]
-        click.echo(click.style(f"✓ Using profile: {profile}", fg="green"))
+        profile_name, source = profiles[0]
+        click.echo(click.style(f"✓ Using profile: {profile_name} [{source}]", fg="green"))
         click.echo("")
-        return profile
+        return profile_name
 
     # Multiple profiles - prompt user to select
-    click.echo(click.style("Multiple AWS profiles found:", fg="blue"))
-    for i, p in enumerate(profiles, 1):
-        # Highlight default profile if it exists
-        if p == "default":
-            click.echo(f"  {i}. {p} [default]")
+    click.echo(click.style("Available profiles:", fg="blue"))
+    for i, (profile_name, source) in enumerate(profiles, 1):
+        # Format source label
+        if source == "sso":
+            source_label = click.style("[sso]", fg="cyan")
+        elif source == "static":
+            source_label = click.style("[static]", fg="yellow")
+        elif source == "both":
+            source_label = click.style("[sso+static]", fg="green")
         else:
-            click.echo(f"  {i}. {p}")
+            source_label = click.style("[config]", fg="white")
+
+        # Highlight default profile if it exists
+        if profile_name == "default":
+            click.echo(f"  {i}. {profile_name} {source_label} [default]")
+        else:
+            click.echo(f"  {i}. {profile_name} {source_label}")
     click.echo("")
 
     # Set default choice to "default" profile if it exists, otherwise first
-    default_choice = profiles.index("default") + 1 if "default" in profiles else 1
-    choice = click.prompt("Select a profile number", type=int, default=default_choice)
+    profile_names = [p[0] for p in profiles]
+    default_choice = profile_names.index("default") + 1 if "default" in profile_names else 1
 
-    if 1 <= choice <= len(profiles):
-        profile = profiles[choice - 1]
-        click.echo(click.style(f"✓ Using profile: {profile}", fg="green"))
-        click.echo("")
-        return profile
-    else:
-        click.echo(click.style("Invalid selection", fg="red"))
-        raise click.Abort()
+    # Loop until we get valid input
+    while True:
+        try:
+            choice_str = click.prompt("Select profile number", type=str, default=str(default_choice))
+            # Strip any whitespace and non-numeric characters (handles escape codes)
+            choice_str = "".join(c for c in choice_str if c.isdigit())
+
+            if not choice_str:
+                choice = default_choice
+            else:
+                choice = int(choice_str)
+
+            if 1 <= choice <= len(profiles):
+                profile_name, source = profiles[choice - 1]
+                click.echo(click.style(f"✓ Using profile: {profile_name} [{source}]", fg="green"))
+                click.echo("")
+                return profile_name
+            else:
+                click.echo(click.style(f"Invalid selection. Please enter a number between 1 and {len(profiles)}", fg="red"))
+        except (ValueError, KeyboardInterrupt):
+            click.echo(click.style("\nInvalid input. Please enter a number.", fg="red"))
+        except click.Abort:
+            raise
 
 
 def check_aws_cli() -> bool:

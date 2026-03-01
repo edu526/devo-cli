@@ -82,30 +82,95 @@ def parse_sso_config(profile_name):
 
 
 def list_aws_profiles():
-    """List available AWS profiles from config."""
+    """
+    List available AWS profiles from both config and credentials files.
+
+    Returns:
+        List of tuples (profile_name, source) where source is:
+        - 'sso': Profile only in config with SSO configuration
+        - 'static': Profile only in credentials
+        - 'both': Profile in both config and credentials
+        - 'config': Profile in config without SSO
+    """
+    config_profiles = {}  # profile_name -> has_sso
+    credentials_profiles = set()
+
+    # Read from ~/.aws/config
     config_path = get_aws_config_path()
-    if not config_path.exists():
-        return []
+    if config_path.exists():
+        try:
+            with open(config_path, "r") as f:
+                current_profile = None
+                has_sso = False
 
-    profiles = []
-    try:
-        with open(config_path, "r") as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith("[profile "):
-                    profile_name = line[9:-1].strip()
-                    profiles.append(profile_name)
-                elif line == "[default]":
-                    # Handle [default] profile
-                    if "default" not in profiles:
-                        profiles.append("default")
-                # Skip sso-session sections
-                elif line.startswith("[sso-session "):
-                    continue
+                for line in f:
+                    line = line.strip()
 
-        return profiles
-    except Exception:
-        return []
+                    # Check for profile section
+                    if line.startswith("[profile "):
+                        # Save previous profile
+                        if current_profile:
+                            config_profiles[current_profile] = has_sso
+                        # Start new profile
+                        current_profile = line[9:-1].strip()
+                        has_sso = False
+                    elif line == "[default]":
+                        # Save previous profile
+                        if current_profile:
+                            config_profiles[current_profile] = has_sso
+                        # Start default profile
+                        current_profile = "default"
+                        has_sso = False
+                    elif line.startswith("[sso-session "):
+                        # Save previous profile and skip sso-session sections
+                        if current_profile:
+                            config_profiles[current_profile] = has_sso
+                        current_profile = None
+                        has_sso = False
+                    elif current_profile and ("sso_" in line or line.startswith("sso_")):
+                        # Profile has SSO configuration
+                        has_sso = True
+
+                # Save last profile
+                if current_profile:
+                    config_profiles[current_profile] = has_sso
+        except Exception:
+            pass
+
+    # Read from ~/.aws/credentials
+    credentials_path = get_aws_credentials_path()
+    if credentials_path.exists():
+        try:
+            with open(credentials_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("[") and line.endswith("]"):
+                        profile_name = line[1:-1].strip()
+                        credentials_profiles.add(profile_name)
+        except Exception:
+            pass
+
+    # Combine results with source information
+    all_profiles = set(config_profiles.keys()) | credentials_profiles
+    result = []
+
+    for profile in sorted(all_profiles):
+        in_config = profile in config_profiles
+        in_credentials = profile in credentials_profiles
+        has_sso = config_profiles.get(profile, False)
+
+        if in_config and in_credentials:
+            source = "both"
+        elif in_credentials:
+            source = "static"
+        elif has_sso:
+            source = "sso"
+        else:
+            source = "config"
+
+        result.append((profile, source))
+
+    return result
 
 
 def get_profile_config(profile_name):
