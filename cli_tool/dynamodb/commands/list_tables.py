@@ -3,9 +3,10 @@
 import sys
 from typing import Optional
 
-import boto3
 from rich.console import Console
 from rich.table import Table
+
+from cli_tool.utils.aws import create_aws_client
 
 console = Console()
 
@@ -13,8 +14,7 @@ console = Console()
 def list_tables_command(profile: Optional[str], region: str) -> None:
     """List all DynamoDB tables in the region."""
     try:
-        session = boto3.Session(profile_name=profile, region_name=region)
-        dynamodb_client = session.client("dynamodb")
+        dynamodb_client = create_aws_client("dynamodb", profile_name=profile, region_name=region)
 
         # Get all tables with pagination
         tables = []

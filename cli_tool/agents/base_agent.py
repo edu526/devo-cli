@@ -57,6 +57,7 @@ class BaseAgent:
         system_prompt: str,
         llm_model_id: str = BEDROCK_MODEL_ID,
         region_name: str = "us-east-1",
+        profile_name: Optional[str] = None,
         tools: Optional[List[Any]] = None,
         enable_rich_logging: bool = False,
         custom_callback_handler: Optional[Callable] = None,
@@ -69,6 +70,7 @@ class BaseAgent:
             system_prompt: System prompt for the agent
             llm_model_id: AWS Bedrock model ID
             region_name: AWS region name
+            profile_name: AWS profile name (optional)
             tools: List of tools to provide to the agent
             enable_rich_logging: Enable rich console logging instead of ConsoleUI (default: False)
             custom_callback_handler: Optional custom callback for streaming events
@@ -77,6 +79,7 @@ class BaseAgent:
         self.system_prompt = system_prompt
         self.llm_model_id = llm_model_id
         self.region_name = region_name
+        self.profile_name = profile_name
         self.tools = tools or []
         self.enable_rich_logging = enable_rich_logging
         self.custom_callback_handler = custom_callback_handler
@@ -130,11 +133,21 @@ class BaseAgent:
 
     def _create_agent(self) -> Agent:
         """Create and configure the Strands agent."""
+        from cli_tool.utils.aws import create_aws_session
+
+        # Create boto3 session with proper credential handling
+        boto_session = create_aws_session(
+            profile_name=self.profile_name,
+            region_name=self.region_name,
+        )
+
         try:
             # Try primary model
+            # Note: When boto_session is provided, region_name should not be passed
+            # as the session already has the region configured
             bedrock_model = BedrockModel(
+                boto_session=boto_session,
                 model_id=self.llm_model_id,
-                region_name=self.region_name,
             )
 
             if self.enable_rich_logging and self.console:
@@ -166,8 +179,8 @@ class BaseAgent:
 
             # Fallback to secondary model
             fallback_model = BedrockModel(
+                boto_session=boto_session,
                 model_id=FALLBACK_MODEL_ID,
-                region_name=self.region_name,
             )
 
             return Agent(

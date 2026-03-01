@@ -8,7 +8,7 @@ from cli_tool.commands.code_reviewer import code_reviewer
 from cli_tool.commands.codeartifact_login import codeartifact_login
 from cli_tool.commands.commit_prompt import commit
 from cli_tool.commands.completion import completion
-from cli_tool.commands.config import config
+from cli_tool.commands.config import config_command
 from cli_tool.commands.dynamodb import dynamodb
 from cli_tool.commands.eventbridge import eventbridge
 from cli_tool.commands.ssm import ssm
@@ -81,7 +81,6 @@ except ImportError:
 @click.group(cls=AliasedGroup)
 @click.option(
     "--profile",
-    envvar="AWS_PROFILE",
     default=None,
     help="AWS profile to use (must come before command, e.g., 'devo --profile dev eventbridge')",
 )
@@ -89,66 +88,14 @@ except ImportError:
 @click.pass_context
 def cli(ctx, profile):
     """CLI for developers with AI-powered features."""
-    import sys
-
     # Ensure context object exists
     ctx.ensure_object(dict)
 
-    # If no profile specified, check if credentials exist
-    if not profile:
-        profile = os.environ.get("AWS_PROFILE")
-
-    # Check if we need AWS credentials (skip for help, version, and completion commands)
-    # Also skip if --help or -h is in the command line arguments
-    # Skip for commands that don't need AWS: upgrade, config, completion, aws_login
-    skip_profile_check = (
-        ctx.invoked_subcommand in ["completion", "upgrade", "config", "aws-login", "aws_login", None]
-        or "--help" in sys.argv
-        or "-h" in sys.argv
-        or "--version" in sys.argv
-        or "-v" in sys.argv
-    )
-
-    # For AWS commands, ensure profile is set (auto-select or prompt if needed)
-    if not skip_profile_check and not profile:
-        from cli_tool.utils.aws_profile import get_aws_profiles
-
-        profiles = get_aws_profiles()
-
-        if len(profiles) == 0:
-            # No profiles found, let AWS CLI handle the error
-            pass
-        elif len(profiles) == 1:
-            # Auto-select if only one profile exists
-            profile = profiles[0]
-            click.echo(click.style(f"✓ Using profile: {profile}", fg="green"))
-            click.echo("")
-        elif "default" in profiles:
-            # If default exists, use it automatically
-            profile = "default"
-            click.echo(click.style(f"✓ Using profile: {profile}", fg="green"))
-            click.echo("")
-        else:
-            # Multiple profiles without default - prompt user to select
-            click.echo(click.style("Multiple AWS profiles found:", fg="blue"))
-            for i, p in enumerate(profiles, 1):
-                click.echo(f"  {i}. {p}")
-            click.echo("")
-
-            choice = click.prompt("Select a profile number", type=int, default=1)
-
-            if 1 <= choice <= len(profiles):
-                profile = profiles[choice - 1]
-                click.echo(click.style(f"✓ Using profile: {profile}", fg="green"))
-                click.echo("")
-            else:
-                click.echo(click.style("Invalid selection", fg="red"))
-                sys.exit(1)
-
-    # Store profile in context for all subcommands
+    # Store profile in context for commands that need it
+    # Note: We don't automatically use AWS_PROFILE here - let commands decide
     ctx.obj["profile"] = profile
 
-    # Set AWS_PROFILE environment variable if profile is specified
+    # Set AWS_PROFILE environment variable if profile is specified via --profile
     if profile:
         os.environ["AWS_PROFILE"] = profile
 
@@ -159,7 +106,7 @@ cli.add_command(aws_login)
 cli.add_command(codeartifact_login)
 cli.add_command(completion)
 cli.add_command(code_reviewer)
-cli.add_command(config)
+cli.add_command(config_command)
 cli.add_command(dynamodb)
 cli.add_command(eventbridge)
 cli.add_command(ssm)

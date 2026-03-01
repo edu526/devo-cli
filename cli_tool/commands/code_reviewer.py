@@ -87,7 +87,10 @@ def code_reviewer(
         devo --profile my-profile code-reviewer
     """
     try:
-        analyzer = CodeReviewAnalyzer()
+        from cli_tool.utils.aws import select_profile
+
+        profile = select_profile(ctx.obj.get("profile"))
+        analyzer = CodeReviewAnalyzer(profile_name=profile)
         result = analyzer.analyze_pr(
             base_branch=base_branch,
             repo_path=repo_path,

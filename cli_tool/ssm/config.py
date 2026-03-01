@@ -4,31 +4,22 @@ import json
 from pathlib import Path
 from typing import Dict, Optional
 
+from cli_tool.utils.config_manager import load_config, save_config
+
 
 class SSMConfigManager:
-    """Manages SSM connection configurations"""
-
-    def __init__(self, config_path: Optional[str] = None):
-        if config_path:
-            self.config_path = Path(config_path)
-        else:
-            # Default: ~/.devo/ssm-config.json
-            self.config_path = Path.home() / ".devo" / "ssm-config.json"
-
-        self.config_path.parent.mkdir(parents=True, exist_ok=True)
+    """Manages SSM connection configurations using consolidated config."""
 
     def load(self) -> Dict:
-        """Load SSM configuration from file"""
-        if not self.config_path.exists():
-            return {"databases": {}, "instances": {}}
+        """Load SSM configuration from consolidated config."""
+        config = load_config()
+        return config.get("ssm", {"databases": {}, "instances": {}})
 
-        with open(self.config_path, "r") as f:
-            return json.load(f)
-
-    def save(self, config: Dict):
-        """Save SSM configuration to file"""
-        with open(self.config_path, "w") as f:
-            json.dump(config, f, indent=2)
+    def save(self, ssm_config: Dict):
+        """Save SSM configuration to consolidated config."""
+        config = load_config()
+        config["ssm"] = ssm_config
+        save_config(config)
 
     def add_database(
         self,

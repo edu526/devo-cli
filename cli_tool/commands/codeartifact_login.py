@@ -1,4 +1,3 @@
-import os
 import subprocess
 import sys
 
@@ -32,11 +31,10 @@ def codeartifact_login(ctx):
       devo codeartifact-login
       devo --profile my-profile codeartifact-login
     """
-    # Get profile from context
-    profile = ctx.obj.get("profile") if ctx.obj else None
+    from cli_tool.utils.aws import select_profile
 
-    if not profile:
-        profile = os.environ.get("AWS_PROFILE")
+    # Get profile from context or prompt user to select
+    profile = select_profile(ctx.obj.get("profile"))
 
     click.echo(click.style("=== CodeArtifact Multi-Domain Login ===", fg="green"))
     click.echo("")

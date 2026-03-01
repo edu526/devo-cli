@@ -26,6 +26,8 @@ from cli_tool.utils.git_utils import get_branch_name, get_remote_url, get_staged
 @click.pass_context
 def commit(ctx, push, pull_request, add, all):
     """Generate a commit message based on staged changes with AI."""
+    from cli_tool.utils.aws import select_profile
+
     if all:
         add = True
         push = True
@@ -35,6 +37,9 @@ def commit(ctx, push, pull_request, add, all):
         click.echo("Adding all changes to the staging area...")
         subprocess.run(["git", "add", "."], check=True)
         click.echo("✅ All changes added.")
+
+    # Get profile from context or prompt user to select
+    profile = select_profile(ctx.obj.get("profile"))
 
     agent_ai = BaseAgent(
         name="CommitMessageGenerator",
@@ -68,6 +73,7 @@ INCORRECT (DO NOT DO):
    refactor(commit): replace Z
 
 Generate ONE message capturing the main purpose of ALL changes.""",
+        profile_name=profile,
         enable_rich_logging=False,  # Disable rich logging to avoid duplicate output
     )
     diff_text = get_staged_diff()

@@ -1,7 +1,6 @@
 """AWS profile selection and credential verification utilities."""
 
 import json
-import os
 import subprocess
 
 import click
@@ -14,23 +13,13 @@ REQUIRED_ROLE = AWS_REQUIRED_ROLE
 
 
 def get_aws_profiles():
-    """Get available AWS profiles from credentials file."""
-    credentials_file = os.path.expanduser("~/.aws/credentials")
-    if not os.path.exists(credentials_file):
-        return []
+    """Get available AWS profiles from config and credentials files."""
+    from cli_tool.aws_login.config import list_aws_profiles
 
-    profiles = []
-    try:
-        with open(credentials_file, "r") as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith("[") and line.endswith("]"):
-                    profile = line[1:-1]
-                    profiles.append(profile)
-    except Exception:
-        pass
+    # Get profiles from ~/.aws/config (includes SSO profiles)
+    profiles = list_aws_profiles()
 
-    return profiles
+    return profiles if profiles else []
 
 
 def verify_aws_credentials(profile=None, required_account=None):

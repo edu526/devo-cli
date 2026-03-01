@@ -29,7 +29,9 @@ def dynamodb(ctx):
 @click.pass_context
 def list_tables(ctx, region: str):
     """List all DynamoDB tables in the region."""
-    profile = ctx.obj.get("profile")
+    from cli_tool.utils.aws import select_profile
+
+    profile = select_profile(ctx.obj.get("profile"))
     list_tables_command(profile, region)
 
 
@@ -44,7 +46,9 @@ def list_tables(ctx, region: str):
 @click.pass_context
 def describe_table(ctx, table_name: str, region: str):
     """Show detailed information about a table."""
-    profile = ctx.obj.get("profile")
+    from cli_tool.utils.aws import select_profile
+
+    profile = select_profile(ctx.obj.get("profile"))
     describe_table_command(profile, table_name, region)
 
 
@@ -219,7 +223,9 @@ def export_table(
       # Query with key condition
       devo dynamodb export my-table --key-condition "userId = :uid"
     """
-    profile = ctx.obj.get("profile")
+    from cli_tool.utils.aws import select_profile
+
+    profile = select_profile(ctx.obj.get("profile"))
     export_table_command(
         profile=profile,
         table_name=table_name,
