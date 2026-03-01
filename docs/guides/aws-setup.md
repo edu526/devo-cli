@@ -5,7 +5,7 @@ Devo CLI requires AWS credentials to access Bedrock AI models and CodeArtifact. 
 ## Prerequisites
 
 - AWS account with appropriate permissions
-- AWS CLI installed
+- AWS CLI v2 installed
 
 ## Quick Setup
 
@@ -26,9 +26,37 @@ sudo ./aws/install
 # Download and run: https://awscli.amazonaws.com/AWSCLIV2.msi
 ```
 
-### 2. Configure AWS Credentials
+Verify installation:
 
-#### Option A: AWS Configure (Simple)
+```bash
+aws --version
+# Should show: aws-cli/2.x.x or higher
+```
+
+### 2. Configure AWS SSO (Recommended)
+
+For organizations using AWS SSO, use the `devo aws-login` command:
+
+```bash
+# Configure SSO profile interactively
+devo aws-login --configure --profile production
+
+# Login
+devo aws-login --profile production
+```
+
+The command will:
+
+1. Prompt for SSO start URL
+2. Open browser for authentication
+3. Show available accounts and roles
+4. Configure default region
+
+**See the [AWS Login Workflow](aws-login-workflow.md) guide for detailed SSO setup.**
+
+### 3. Alternative: AWS Configure (For IAM Users)
+
+If not using SSO:
 
 ```bash
 aws configure
@@ -41,20 +69,7 @@ Enter:
 - Default region (e.g., `us-east-1`)
 - Default output format (e.g., `json`)
 
-#### Option B: AWS SSO (Recommended)
-
-```bash
-aws configure sso
-```
-
-Follow prompts to:
-
-1. Enter SSO start URL
-2. Enter SSO region
-3. Select account and role
-4. Set profile name
-
-### 3. Verify Credentials
+### 4. Verify Credentials
 
 ```bash
 # Check identity
@@ -62,20 +77,6 @@ aws sts get-caller-identity
 
 # Test Bedrock access
 aws bedrock list-foundation-models --region us-east-1
-```
-
-### 4. Configure Devo CLI
-
-```bash
-# Set AWS region
-devo config set aws.region us-east-1
-
-# Set account ID (from get-caller-identity)
-devo config set aws.account_id 123456789012
-
-# For SSO users
-devo config set aws.sso_url https://your-org.awsapps.com/start
-devo config set aws.required_role Developer
 ```
 
 ## Required IAM Permissions
@@ -128,20 +129,18 @@ Your AWS user/role needs these permissions:
 
 ## Using AWS Profiles
 
-If you have multiple AWS accounts or roles:
-
-### Create Named Profiles
+If you have multiple AWS accounts or roles, use the `devo aws-login` command:
 
 ```bash
-# Configure additional profile
-aws configure --profile production
-aws configure --profile staging
-```
+# Configure multiple profiles
+devo aws-login --configure --profile dev
+devo aws-login --configure --profile staging
+devo aws-login --configure --profile production
 
-### Use with Devo CLI
+# Check status
+devo aws-login --status
 
-```bash
-# Use specific profile
+# Use with Devo CLI
 devo --profile production commit
 devo --profile staging code-reviewer
 
@@ -150,46 +149,38 @@ export AWS_PROFILE=production
 devo commit
 ```
 
+**See the [AWS Login Workflow](aws-login-workflow.md) guide for managing multiple profiles.**
+
 ## AWS SSO Setup
 
-For organizations using AWS SSO:
-
-### 1. Configure SSO Profile
+For organizations using AWS SSO, we recommend using the `devo aws-login` command for simplified authentication:
 
 ```bash
+# Configure SSO profile
+devo aws-login --configure --profile my-profile
+
+# Login
+devo aws-login --profile my-profile
+
+# Check status
+devo aws-login --status
+
+# Refresh expired credentials
+devo aws-login --refresh-all
+```
+
+**For detailed SSO workflows, see the [AWS Login Workflow](aws-login-workflow.md) guide.**
+
+### Manual SSO Configuration (Alternative)
+
+If you prefer to use AWS CLI directly:
+
+```bash
+# Configure SSO
 aws configure sso
-```
 
-Provide:
-
-- SSO start URL: `https://your-org.awsapps.com/start`
-- SSO region: `us-east-1`
-- Account ID
-- Role name
-- Profile name: `my-sso-profile`
-
-### 2. Login to SSO
-
-```bash
+# Login
 aws sso login --profile my-sso-profile
-```
-
-### 3. Use with Devo CLI
-
-```bash
-# Use SSO profile
-devo --profile my-sso-profile commit
-
-# Or set as default
-export AWS_PROFILE=my-sso-profile
-devo commit
-```
-
-### 4. Configure Devo CLI for SSO
-
-```bash
-devo config set aws.sso_url https://your-org.awsapps.com/start
-devo config set aws.required_role Developer
 ```
 
 ## Bedrock Model Access
@@ -254,9 +245,14 @@ aws bedrock list-foundation-models --region us-east-1
 
 ### SSO Session Expired
 
+Use the `devo aws-login` command to refresh:
+
 ```bash
-# Re-login to SSO
-aws sso login --profile my-sso-profile
+# Refresh specific profile
+devo aws-login --profile my-profile
+
+# Or refresh all profiles
+devo aws-login --refresh-all
 ```
 
 ### Wrong Account/Role
@@ -312,6 +308,7 @@ devo commit
 
 ## Next Steps
 
+- [AWS Login Workflow](aws-login-workflow.md) - Detailed SSO authentication guide
 - [Configuration Guide](../getting-started/configuration.md) - Detailed configuration options
 - [Commands](../commands/index.md) - Learn available commands
 - [Troubleshooting](../reference/troubleshooting.md) - Common issues

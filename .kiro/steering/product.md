@@ -14,6 +14,8 @@ Devo CLI is a Python-based command-line tool that provides AI-powered developmen
 - Uses strands-agents framework with Pydantic for structured outputs
 
 ### AWS Integration
+- SSO authentication with automatic credential caching
+- Auto-refresh for expired/expiring credentials
 - CodeArtifact authentication for private package repositories
 - Bedrock AI model integration (configurable via BEDROCK_MODEL_ID env var)
 - Default region: us-east-1
@@ -37,6 +39,17 @@ AI-powered code review analyzing git diffs.
 - Reviews staged or committed changes
 - Checks: code quality, security, best practices, performance
 - Structured output with severity levels and actionable feedback
+
+### `devo aws-login`
+Automates AWS SSO authentication and credential management.
+- Interactive SSO profile configuration
+- Browser-based authentication flow
+- Automatic credential caching (8-12 hour expiration)
+- Profile listing and verification
+- Auto-refresh for expired/expiring credentials (--refresh-all)
+- Detects both legacy SSO format and new sso-session format
+- Groups profiles by SSO session to minimize login prompts
+- Shows real expiration time in local timezone
 
 ### `devo codeartifact-login`
 Authenticates with AWS CodeArtifact for package management.
