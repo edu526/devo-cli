@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v2.7.0 (2026-03-01)
+
+### Continuous Integration
+
+- **release**: Refine artifact filtering in release workflow
+  ([`8033ac8`](https://github.com/edu526/devo-cli/commit/8033ac89a64dcd2db487436bd49fef33425f6661))
+
+### Documentation
+
+- **aws-login**: Add set-default profile documentation
+  ([`2b3ee4a`](https://github.com/edu526/devo-cli/commit/2b3ee4aa20fdba567c73e3bb659598cbfe60753c))
+
+### Features
+
+- **aws-login**: Add AWS SSO authentication and credential management
+  ([`2b7860c`](https://github.com/edu526/devo-cli/commit/2b7860c0028c654bcf9b83bbf889e79ec20fa5bd))
+
+- **aws-login**: Add Windows environment variable support for default profile
+  ([`bd95f05`](https://github.com/edu526/devo-cli/commit/bd95f054a432031fcbc3f610e745aa9c304fe8d1))
+
+
 ## v2.6.0 (2026-02-27)
 
 ### Code Style
