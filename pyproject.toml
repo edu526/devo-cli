@@ -138,8 +138,9 @@ addopts = [
 # Note: Coverage threshold (--cov-fail-under=75) is enforced in CI only
 # to allow developers to run subsets of tests locally without coverage failures
 # CI should enforce:
-# - 80% for cli_tool/core/ modules
-# - 70% for cli_tool/commands/ modules
+# - 60% overall coverage (current baseline)
+# - 80% for cli_tool/core/ modules (goal)
+# - 70% for cli_tool/commands/ modules (goal)
 
 [tool.coverage.report]
 exclude_lines = [
