@@ -202,7 +202,7 @@ cd devo-cli
 ```bash
 make venv
 source venv/bin/activate
-make install-dev
+make install
 make completion
 ```
 
