@@ -1,5 +1,45 @@
 # Code Organization Standard
 
+## Project Structure Overview
+
+The Devo CLI project follows a clean, scalable architecture that separates commands from core infrastructure:
+
+```
+cli_tool/
+├── __init__.py
+├── _version.py              # Auto-generated from git tags
+├── cli.py                   # CLI entry point
+├── config.py                # Global configuration
+│
+├── commands/                # All feature commands
+│   ├── __init__.py
+│   ├── aws_login/
+│   ├── autocomplete/
+│   ├── code_reviewer/
+│   ├── codeartifact/
+│   ├── commit/
+│   ├── config_cmd/
+│   ├── dynamodb/
+│   ├── eventbridge/
+│   ├── ssm/
+│   └── upgrade/
+│
+└── core/                    # Core infrastructure (shared)
+    ├── __init__.py
+    ├── agents/              # AI agent framework
+    ├── ui/                  # Rich UI components
+    └── utils/               # Shared utilities
+```
+
+## Key Benefits
+
+1. **Clear Separation**: Commands vs Core infrastructure
+2. **Scalability**: Easy to add new commands without cluttering root
+3. **Navigation**: All features in one place (`commands/`)
+4. **Import Clarity**:
+   - Commands: `from cli_tool.commands.ssm import ssm`
+   - Core: `from cli_tool.core.agents import BaseAgent`
+
 ## Command Structure
 
 All commands in Devo CLI must follow this standardized structure for consistency and maintainability.
@@ -11,7 +51,7 @@ All commands in Devo CLI must follow this standardized structure for consistency
 **ALL commands MUST follow this structure, regardless of size or complexity:**
 
 ```
-cli_tool/feature_name/
+cli_tool/commands/feature_name/
 ├── __init__.py              # Public API exports (includes CLI command)
 ├── README.md                # Feature documentation (optional)
 ├── commands/                # CLI command definitions
@@ -44,7 +84,7 @@ cli_tool/feature_name/
 - All feature code contained within feature directory
 - CLI command exported from `__init__.py` for direct import in `cli.py`
 
-**Examples:** `ssm/`, `dynamodb/`, `code_reviewer/`
+**Examples:** `commands/ssm/`, `commands/dynamodb/`, `commands/code_reviewer/`
 
 **No exceptions:** Even single-command features use this structure for consistency.
 
@@ -113,7 +153,7 @@ def register_resource_commands(parent_group):
 All configuration must use the centralized config manager:
 
 ```python
-from cli_tool.utils.config_manager import load_config, save_config
+from cli_tool.core.utils.config_manager import load_config, save_config
 
 # Read config
 config = load_config()
@@ -126,7 +166,7 @@ save_config(config)
 
 ### Feature-Specific Config Helpers
 
-Create helper functions in `cli_tool/utils/config_manager.py`:
+Create helper functions in `cli_tool/core/utils/config_manager.py`:
 
 ```python
 def get_feature_config() -> Dict:
@@ -143,62 +183,61 @@ def save_feature_config(feature_config: Dict):
 
 ## Separation of Concerns
 
-### Commands Layer (`cli_tool/commands/` or `cli_tool/feature/commands/`)
+### Commands Layer (`cli_tool/commands/feature/commands/`)
 - Click decorators and CLI interface
 - User input validation
 - Output formatting with Rich
 - Error handling and user messages
 - **NO business logic**
 
-### Core Layer (`cli_tool/feature/core/`)
+### Core Layer (`cli_tool/commands/feature/core/`)
 - Business logic
 - Data processing
 - API calls
 - **NO Click dependencies**
 - **NO Rich console output** (return data, let commands format)
 
-### Utils Layer (`cli_tool/feature/utils/`)
+### Utils Layer (`cli_tool/commands/feature/utils/`)
 - Helper functions
 - Data transformations
 - Validators
 - **Reusable across commands**
 
-## Current State vs Standard
+### Shared Core (`cli_tool/core/`)
+- `agents/` - AI agent framework (BaseAgent)
+- `ui/` - Rich UI components (console_ui)
+- `utils/` - Shared utilities (config_manager, aws, git_utils)
 
-### ✅ Follows Standard
-- `cli_tool/ssm/` - Reference implementation with commands/, core/, utils/
-- `cli_tool/dynamodb/` - Well organized with commands/, core/, utils/
-- `cli_tool/code_reviewer/` - Good separation with commands/, core/, prompt/, tools/
-- `cli_tool/eventbridge/` - Organized with commands/, core/, utils/
-- `cli_tool/config_cmd/` - Organized with commands/, core/
-- `cli_tool/aws_login/` - Reorganized with commands/, core/
-- `cli_tool/upgrade/` - Reorganized with core/ (single command, no commands/ needed)
-- `cli_tool/autocomplete/` - Reorganized with commands/, core/
-- `cli_tool/codeartifact/` - Reorganized with commands/, core/
-- `cli_tool/commit/` - Reorganized with commands/, core/
+## Current State
 
-### ⚠️ Needs Refactoring
-None - All features have been migrated!
+### ✅ All Features Migrated
+- `cli_tool/commands/ssm/` - Reference implementation with commands/, core/, utils/
+- `cli_tool/commands/dynamodb/` - Well organized with commands/, core/, utils/
+- `cli_tool/commands/code_reviewer/` - Good separation with commands/, core/, prompt/, tools/
+- `cli_tool/commands/eventbridge/` - Organized with commands/, core/, utils/
+- `cli_tool/commands/config_cmd/` - Organized with commands/, core/
+- `cli_tool/commands/aws_login/` - Reorganized with commands/, core/
+- `cli_tool/commands/upgrade/` - Reorganized with commands/, core/
+- `cli_tool/commands/autocomplete/` - Reorganized with commands/, core/
+- `cli_tool/commands/codeartifact/` - Reorganized with commands/, core/
+- `cli_tool/commands/commit/` - Reorganized with commands/, core/
 
-## Migration Plan
+### ✅ Core Infrastructure
+- `cli_tool/core/agents/` - AI agent framework
+- `cli_tool/core/ui/` - Rich UI components
+- `cli_tool/core/utils/` - Shared utilities
 
-### Phase 1: Standardize Existing Features ✅ COMPLETED
-1. ✅ **SSM** - COMPLETED
-2. ✅ **AWS Login** - COMPLETED
-3. ✅ **Upgrade** - COMPLETED
-4. ✅ **Autocomplete** - COMPLETED (renamed from completion)
-5. ✅ **CodeArtifact** - COMPLETED
-6. ✅ **Commit** - COMPLETED
-7. ✅ **EventBridge** - COMPLETED (already had proper structure)
-8. ✅ **Config** - COMPLETED (already had proper structure)
-9. ✅ **DynamoDB** - COMPLETED (moved CLI logic to commands/cli.py)
-10. ✅ **Code Reviewer** - COMPLETED (reorganized with commands/, core/)
+## Migration Completed
 
-### Phase 2: Remove cli_tool/commands/ ✅ COMPLETED
-- Eliminated thin wrapper layer
-- Commands now imported directly from feature modules in `cli.py`
-- Follows industry standard for large Python CLI projects
-- Cleaner, more direct architecture
+### Phase 1: Standardize Features ✅ COMPLETED
+All features migrated to standardized structure within their directories.
+
+### Phase 2: Top-Level Reorganization ✅ COMPLETED
+- Created `cli_tool/commands/` - All feature commands
+- Created `cli_tool/core/` - Shared infrastructure
+- Moved all features to `commands/`
+- Moved agents, ui, utils to `core/`
+- Updated all imports across the codebase
 
 ### Phase 3: New Features
 All new features must follow the standard structure from day one.
@@ -207,7 +246,7 @@ All new features must follow the standard structure from day one.
 
 ### ✅ Good: SSM Structure (Reference Implementation)
 ```
-cli_tool/ssm/
+cli_tool/commands/ssm/
 ├── __init__.py
 ├── commands/
 │   ├── __init__.py
@@ -244,7 +283,7 @@ cli_tool/ssm/
 
 ### ✅ Good: DynamoDB Structure
 ```
-cli_tool/dynamodb/
+cli_tool/commands/dynamodb/
 ├── __init__.py
 ├── commands/
 │   ├── __init__.py
@@ -260,6 +299,17 @@ cli_tool/dynamodb/
     └── filter_builder.py    # Query building
 ```
 
+### ❌ Bad: Mixed Structure at Root Level
+```
+cli_tool/
+├── ssm/                     # Feature
+├── dynamodb/                # Feature
+├── agents/                  # Infrastructure
+├── ui/                      # Infrastructure
+├── utils/                   # Infrastructure
+└── cli.py                   # Entry point
+```
+
 ### ❌ Bad: Large Single File
 ```
 cli_tool/commands/
@@ -268,7 +318,7 @@ cli_tool/commands/
 
 ### ❌ Bad: Missing Subdirectories for Command Groups
 ```
-cli_tool/ssm/commands/
+cli_tool/commands/ssm/commands/
 ├── database_connect.py      # Should be database/connect.py
 ├── database_list.py         # Should be database/list.py
 ├── instance_shell.py        # Should be instance/shell.py

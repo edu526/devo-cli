@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from cli_tool.commit import commit
+from cli_tool.commands.commit import commit
 
 
 @pytest.fixture
@@ -11,13 +11,13 @@ def runner():
     return CliRunner()
 
 
-@patch("cli_tool.commit.commands.generate.select_profile")
-@patch("cli_tool.commit.commands.generate.get_staged_diff")
-@patch("cli_tool.commit.commands.generate.get_branch_name")
-@patch("cli_tool.commit.commands.generate.get_remote_url")
-@patch("cli_tool.commit.core.generator.BaseAgent")
-@patch("cli_tool.commit.commands.generate.subprocess.run")
-@patch("cli_tool.commit.commands.generate.webbrowser.open")
+@patch("cli_tool.commands.commit.commands.generate.select_profile")
+@patch("cli_tool.commands.commit.commands.generate.get_staged_diff")
+@patch("cli_tool.commands.commit.commands.generate.get_branch_name")
+@patch("cli_tool.commands.commit.commands.generate.get_remote_url")
+@patch("cli_tool.commands.commit.core.generator.BaseAgent")
+@patch("cli_tool.commands.commit.commands.generate.subprocess.run")
+@patch("cli_tool.commands.commit.commands.generate.webbrowser.open")
 def test_commit_all_options(
     mock_webbrowser_open,
     mock_subprocess_run,
@@ -75,11 +75,11 @@ def test_commit_all_options(
     mock_webbrowser_open.assert_called_once()
 
 
-@patch("cli_tool.commit.commands.generate.select_profile")
-@patch("cli_tool.commit.commands.generate.get_staged_diff")
-@patch("cli_tool.commit.commands.generate.get_branch_name")
-@patch("cli_tool.commit.core.generator.BaseAgent")
-@patch("cli_tool.commit.commands.generate.subprocess.run")
+@patch("cli_tool.commands.commit.commands.generate.select_profile")
+@patch("cli_tool.commands.commit.commands.generate.get_staged_diff")
+@patch("cli_tool.commands.commit.commands.generate.get_branch_name")
+@patch("cli_tool.commands.commit.core.generator.BaseAgent")
+@patch("cli_tool.commands.commit.commands.generate.subprocess.run")
 def test_commit_manual_message_with_ticket(
     mock_subprocess_run,
     mock_base_agent,
@@ -119,11 +119,11 @@ def test_commit_manual_message_with_ticket(
     assert "My manual commit message" in commit_message
 
 
-@patch("cli_tool.commit.commands.generate.select_profile")
-@patch("cli_tool.commit.commands.generate.get_staged_diff")
-@patch("cli_tool.commit.commands.generate.get_branch_name")
-@patch("cli_tool.commit.core.generator.BaseAgent")
-@patch("cli_tool.commit.commands.generate.subprocess.run")
+@patch("cli_tool.commands.commit.commands.generate.select_profile")
+@patch("cli_tool.commands.commit.commands.generate.get_staged_diff")
+@patch("cli_tool.commands.commit.commands.generate.get_branch_name")
+@patch("cli_tool.commands.commit.core.generator.BaseAgent")
+@patch("cli_tool.commands.commit.commands.generate.subprocess.run")
 def test_commit_aws_credentials_error(
     mock_subprocess_run,
     mock_base_agent,
@@ -154,11 +154,11 @@ def test_commit_aws_credentials_error(
     assert "❌ No AWS credentials found. Please configure your AWS CLI." in result.output
 
 
-@patch("cli_tool.commit.commands.generate.select_profile")
-@patch("cli_tool.commit.commands.generate.get_staged_diff")
-@patch("cli_tool.commit.commands.generate.get_branch_name")
-@patch("cli_tool.commit.core.generator.BaseAgent")
-@patch("cli_tool.commit.commands.generate.subprocess.run")
+@patch("cli_tool.commands.commit.commands.generate.select_profile")
+@patch("cli_tool.commands.commit.commands.generate.get_staged_diff")
+@patch("cli_tool.commands.commit.commands.generate.get_branch_name")
+@patch("cli_tool.commands.commit.core.generator.BaseAgent")
+@patch("cli_tool.commands.commit.commands.generate.subprocess.run")
 def test_commit_general_error(
     mock_subprocess_run,
     mock_base_agent,
@@ -189,11 +189,11 @@ def test_commit_general_error(
     assert "❌ Error sending request: Some other error" in result.output
 
 
-@patch("cli_tool.commit.commands.generate.select_profile")
-@patch("cli_tool.commit.commands.generate.get_staged_diff")
-@patch("cli_tool.commit.commands.generate.get_branch_name")
-@patch("cli_tool.commit.core.generator.BaseAgent")
-@patch("cli_tool.commit.commands.generate.subprocess.run")
+@patch("cli_tool.commands.commit.commands.generate.select_profile")
+@patch("cli_tool.commands.commit.commands.generate.get_staged_diff")
+@patch("cli_tool.commands.commit.commands.generate.get_branch_name")
+@patch("cli_tool.commands.commit.core.generator.BaseAgent")
+@patch("cli_tool.commands.commit.commands.generate.subprocess.run")
 def test_commit_no_ticket_in_branch(
     mock_subprocess_run,
     mock_base_agent,
@@ -227,10 +227,10 @@ def test_commit_no_ticket_in_branch(
     assert "TICKET-" not in result.output
 
 
-@patch("cli_tool.commit.commands.generate.select_profile")
+@patch("cli_tool.commands.commit.commands.generate.select_profile")
 def test_commit_no_staged_changes(mock_select_profile, runner):
     mock_select_profile.return_value = "default"
-    with patch("cli_tool.commit.commands.generate.get_staged_diff") as mock_get_staged_diff:
+    with patch("cli_tool.commands.commit.commands.generate.get_staged_diff") as mock_get_staged_diff:
         mock_get_staged_diff.return_value = ""
 
         result = runner.invoke(commit)
@@ -239,11 +239,11 @@ def test_commit_no_staged_changes(mock_select_profile, runner):
         assert "No staged changes found." in result.output
 
 
-@patch("cli_tool.commit.commands.generate.select_profile")
-@patch("cli_tool.commit.commands.generate.get_staged_diff")
-@patch("cli_tool.commit.commands.generate.get_branch_name")
-@patch("cli_tool.commit.core.generator.BaseAgent")
-@patch("cli_tool.commit.commands.generate.subprocess.run")
+@patch("cli_tool.commands.commit.commands.generate.select_profile")
+@patch("cli_tool.commands.commit.commands.generate.get_staged_diff")
+@patch("cli_tool.commands.commit.commands.generate.get_branch_name")
+@patch("cli_tool.commands.commit.core.generator.BaseAgent")
+@patch("cli_tool.commands.commit.commands.generate.subprocess.run")
 def test_commit_structured_output(
     mock_subprocess_run,
     mock_base_agent,

@@ -12,9 +12,9 @@ All source code lives in `cli_tool/` package:
 - `cli_tool/config.py` - AWS Bedrock models, paths, configuration
 - `cli_tool/_version.py` - Auto-generated from git tags (NEVER edit manually)
 - `cli_tool/commands/` - Each CLI command as separate module
-- `cli_tool/agents/` - AI agent base classes (BaseAgent wrapper)
-- `cli_tool/ui/` - Rich-based terminal UI components
-- `cli_tool/utils/` - Shared utilities (AWS, git)
+- `cli_tool/core/agents/` - AI agent base classes (BaseAgent wrapper)
+- `cli_tool/core/ui/` - Rich-based terminal UI components
+- `cli_tool/core/utils/` - Shared utilities (AWS, git)
 
 ## Architecture Patterns
 
@@ -25,17 +25,17 @@ All source code lives in `cli_tool/` package:
 4. Follow existing command structure for consistency
 
 ### AI Agent Pattern
-- Extend `BaseAgent` from `cli_tool/agents/base_agent.py`
+- Extend `BaseAgent` from `cli_tool/core/agents/base_agent.py`
 - Use Pydantic models for structured outputs
 - Define system prompts inline or in dedicated prompt modules
 - For complex features, create subdirectory with `prompt/` folder (see `code_reviewer/`)
 
 ### Feature Modules
-Large features get their own subdirectory under `cli_tool/`:
+Large features get their own subdirectory under `cli_tool/commands/`:
 - Main logic files (e.g., `analyzer.py`, `git_utils.py`)
 - `prompt/` subdirectory for AI prompts
 - `tools/` subdirectory for feature-specific tools
-- Example: `cli_tool/code_reviewer/`
+- Example: `cli_tool/commands/code_reviewer/`
 
 ## Naming Conventions (REQUIRED)
 
