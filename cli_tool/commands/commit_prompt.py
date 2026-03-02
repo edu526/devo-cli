@@ -39,6 +39,7 @@ def commit(ctx, push, pull_request, add, all):
         click.echo("✅ All changes added.")
 
     # Get profile from context or prompt user to select
+    ctx.ensure_object(dict)
     profile = select_profile(ctx.obj.get("profile"))
 
     agent_ai = BaseAgent(
