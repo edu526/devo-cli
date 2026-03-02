@@ -3,9 +3,9 @@ import os
 import click
 from rich.console import Console
 
+from cli_tool.codeartifact import codeartifact_login
 from cli_tool.commands.aws_login import aws_login
 from cli_tool.commands.code_reviewer import code_reviewer
-from cli_tool.commands.codeartifact_login import codeartifact_login
 from cli_tool.commands.commit_prompt import commit
 from cli_tool.commands.completion import autocomplete
 from cli_tool.commands.config import config_command
