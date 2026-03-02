@@ -2,8 +2,7 @@
 max-line-length = 150
 exclude = .git,__pycache__,build,dist,.venv,*.egg-info
 # E203, W503, W504: Conflicts with Black formatter
-# E111, E114: Project uses 2-space indentation (not 4)
-ignore = E203,W503,W504,E111,E114
+ignore = E203,W503,W504
 show-source = true
 statistics = true
 per-file-ignores =

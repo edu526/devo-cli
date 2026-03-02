@@ -4,6 +4,34 @@
 
 This guide provides comprehensive documentation for testing the Devo CLI project. The testing strategy ensures reliability, maintainability, and cross-platform compatibility through a well-organized test suite with clear patterns and best practices.
 
+**Quick Reference:**
+```bash
+# Run all tests (fast, excludes slow tests)
+pytest
+
+# Run with coverage report
+pytest --cov=cli_tool --cov-report=html
+
+# Run specific category
+pytest -m unit              # Unit tests only
+pytest -m integration       # Integration tests only
+
+# Run in parallel (faster)
+pytest -n auto
+
+# Run only failed tests from last run
+pytest --lf
+
+# Show test execution time
+pytest --durations=10
+```
+
+**Test Statistics:**
+- Total tests: 614 (30 slow tests skipped by default)
+- Execution time: ~29 seconds
+- Test categories: unit, integration, platform, slow
+- Coverage target: 75% minimum
+
 ## Table of Contents
 
 - [Test Directory Structure](#test-directory-structure)
@@ -15,6 +43,9 @@ This guide provides comprehensive documentation for testing the Devo CLI project
 - [Writing New Tests](#writing-new-tests)
 - [Troubleshooting](#troubleshooting)
 - [CI/CD Integration](#cicd-integration)
+- [Best Practices](#best-practices)
+- [Common Test Patterns](#common-test-patterns)
+- [Additional Resources](#additional-resources)
 
 ## Test Directory Structure
 
@@ -166,6 +197,27 @@ pytest -m platform
 
 # Include slow tests
 pytest -m slow
+
+# Run unit and integration tests (exclude platform and slow)
+pytest -m "unit or integration"
+
+# Run everything except slow tests (default)
+pytest -m "not slow"
+```
+
+**Run specific test files or directories:**
+```bash
+# Run all tests in a directory
+pytest tests/test_commands/test_commit/
+
+# Run specific test file
+pytest tests/test_commands/test_commit/test_commit_generation.py
+
+# Run specific test function
+pytest tests/test_commands/test_commit/test_commit_generation.py::test_commit_with_staged_changes
+
+# Run all tests for a specific command
+pytest tests/test_commands/test_dynamodb/
 ```
 
 **Run with coverage:**
@@ -883,6 +935,34 @@ with mock_aws():
   # Client was created before mock activation
 ```
 
+#### DynamoDB mock table not found
+
+**Problem:** Table created in fixture but not accessible in test.
+
+**Solution:**
+- Ensure the mock_aws context is active when creating the table
+- Create tables within the test function or use a fixture with proper scope
+- Verify the table name matches exactly
+
+```python
+@pytest.mark.integration
+def test_with_dynamodb_table(cli_runner):
+  """Test with properly scoped DynamoDB table."""
+  with mock_aws():
+    # Create table in same context as test
+    dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+    table = dynamodb.create_table(
+      TableName='test-table',
+      KeySchema=[{'AttributeName': 'id', 'KeyType': 'HASH'}],
+      AttributeDefinitions=[{'AttributeName': 'id', 'AttributeType': 'S'}],
+      BillingMode='PAY_PER_REQUEST'
+    )
+
+    # Run test
+    result = cli_runner.invoke(command, ['test-table'])
+    assert result.exit_code == 0
+```
+
 #### Tests modify real git repository
 
 **Problem:** Git operations not mocked.
@@ -949,6 +1029,47 @@ pytest -n auto
 ```
 
 4. Mark slow tests with `@pytest.mark.slow` to skip by default
+
+#### Test execution tips for faster development
+
+**Run only changed tests:**
+```bash
+# Run tests for specific module
+pytest tests/test_commands/test_commit/
+
+# Run tests matching a pattern
+pytest -k "commit"
+
+# Run only failed tests from last run
+pytest --lf
+
+# Run failed tests first, then others
+pytest --ff
+```
+
+**Skip slow tests during development:**
+```bash
+# Default behavior (slow tests already skipped)
+pytest
+
+# Explicitly skip slow tests
+pytest -m "not slow"
+
+# Run only slow tests
+pytest -m slow
+```
+
+**Use verbose output for debugging:**
+```bash
+# Show test names as they run
+pytest -v
+
+# Show full output (no capture)
+pytest -s
+
+# Show local variables on failure
+pytest -l
+```
 
 #### Intermittent test failures
 
@@ -1228,11 +1349,49 @@ tox
 9. **Maintain test code quality** - Same standards as production code
 10. **Update tests with code changes** - Keep tests in sync with implementation
 
+### Lessons Learned
+
+**Mock Scope Management:**
+- Always create AWS resources (tables, clients) within the same `mock_aws()` context as the test
+- Use context managers (`with mock_aws():`) rather than decorators for better control
+- Verify mocks are active before creating boto3 clients
+
+**Fixture Organization:**
+- Keep fixtures close to where they're used (command-specific fixtures in command test directories)
+- Use function scope by default to ensure test isolation
+- Only use module/session scope for expensive, read-only resources
+
+**Test Data Management:**
+- Store complex test data in JSON files in `tests/fixtures/`
+- Use the `fixtures_dir` fixture for consistent path resolution
+- Keep fixture data realistic but minimal
+
+**CLI Testing:**
+- Use `CliRunner` for all CLI command tests
+- Provide input to interactive prompts using `input='y\n'` parameter
+- Test both success and error exit codes
+- Verify error messages are user-friendly
+
+**Performance:**
+- Mock all external calls (AWS, Git, file system, network)
+- Use parallel execution (`pytest -n auto`) for faster test runs
+- Mark slow tests with `@pytest.mark.slow` to skip during development
+- Profile tests regularly (`pytest --durations=10`) to identify bottlenecks
+
 ### Code Coverage Goals
 
 - **Core business logic (cli_tool/core/):** 80% minimum
 - **CLI commands (cli_tool/commands/):** 70% minimum
 - **Overall project:** 75% minimum
+
+**Current Status (as of 2025-01-30):**
+- Total tests: 614 tests (30 slow tests skipped by default)
+- Test execution time: ~29 seconds
+- Overall coverage: 42% (work in progress)
+- Core modules: Varies by module (config_manager: 69%, git_utils: 100%, base_agent: 74%)
+- Command modules: Varies by command (commit: 98%, codeartifact: 99%, upgrade: 95%)
+
+**Note:** The test infrastructure is complete and functional. Coverage will improve as more tests are added for remaining modules.
 
 ### Test Performance
 
@@ -1247,6 +1406,107 @@ tox
 - **Comments:** Explain complex test logic
 - **Examples:** Provide examples in this README
 - **Updates:** Keep documentation current with changes
+
+## Common Test Patterns
+
+### Testing CLI Commands with Multiple Options
+
+When testing commands with various option combinations:
+
+```python
+@pytest.mark.integration
+@pytest.mark.parametrize("options,expected", [
+  (["--format", "json"], "json"),
+  (["--format", "csv"], "csv"),
+  (["-f", "jsonl"], "jsonl"),
+])
+def test_export_with_format_options(cli_runner, mock_dynamodb_table, options, expected):
+  """Test export command with different format options."""
+  result = cli_runner.invoke(export_table, ["test-table"] + options)
+  assert result.exit_code == 0
+  assert expected in result.output.lower()
+```
+
+### Testing AWS Service Interactions
+
+When testing commands that interact with AWS services:
+
+```python
+@pytest.mark.integration
+def test_dynamodb_list_tables(cli_runner):
+  """Test listing DynamoDB tables."""
+  with mock_aws():
+    # Create mock DynamoDB resource
+    dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+    dynamodb.create_table(
+      TableName='test-table',
+      KeySchema=[{'AttributeName': 'id', 'KeyType': 'HASH'}],
+      AttributeDefinitions=[{'AttributeName': 'id', 'AttributeType': 'S'}],
+      BillingMode='PAY_PER_REQUEST'
+    )
+
+    # Test the command
+    result = cli_runner.invoke(list_tables)
+    assert result.exit_code == 0
+    assert 'test-table' in result.output
+```
+
+### Testing Configuration Management
+
+When testing configuration operations:
+
+```python
+@pytest.mark.integration
+def test_config_set_nested_key(cli_runner, temp_config_dir, mocker):
+  """Test setting nested configuration keys."""
+  config_file = temp_config_dir / 'config.json'
+  mocker.patch('cli_tool.core.utils.config_manager.CONFIG_FILE', config_file)
+
+  # Set nested key
+  result = cli_runner.invoke(config_set, ['aws.region', 'us-west-2'])
+  assert result.exit_code == 0
+
+  # Verify the value was set
+  import json
+  with open(config_file) as f:
+    config = json.load(f)
+  assert config['aws']['region'] == 'us-west-2'
+```
+
+### Testing Error Messages
+
+When verifying error handling and user-friendly messages:
+
+```python
+@pytest.mark.integration
+def test_command_missing_required_argument(cli_runner):
+  """Test command with missing required argument shows helpful error."""
+  result = cli_runner.invoke(export_table)
+  assert result.exit_code != 0
+  # Check for helpful error message
+  assert 'table' in result.output.lower() or 'required' in result.output.lower()
+```
+
+### Testing with Temporary Files
+
+When testing file operations:
+
+```python
+@pytest.mark.unit
+def test_export_to_file(tmp_path):
+  """Test exporting data to a file."""
+  output_file = tmp_path / "export.json"
+
+  # Perform export
+  export_data(data, str(output_file))
+
+  # Verify file was created and contains expected data
+  assert output_file.exists()
+  import json
+  with open(output_file) as f:
+    exported = json.load(f)
+  assert len(exported) > 0
+```
 
 ## Additional Resources
 
@@ -1267,5 +1527,5 @@ If you encounter issues not covered in this guide:
 
 ---
 
-**Last Updated:** 2025-01-XX
+**Last Updated:** 2025-01-30
 **Maintained By:** Devo CLI Team
