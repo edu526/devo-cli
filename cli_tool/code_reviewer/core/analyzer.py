@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from cli_tool.agents.base_agent import BaseAgent
-from cli_tool.code_reviewer.git_utils import GitManager
+from cli_tool.code_reviewer.core.git_utils import GitManager
 from cli_tool.code_reviewer.prompt.code_reviewer import (
     CODE_REVIEWER_PROMPT,
     CODE_REVIEWER_PROMPT_SHORT,
