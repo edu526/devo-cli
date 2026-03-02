@@ -13,68 +13,24 @@ on:
 jobs:
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    uses: ./.github/workflows/lint-reusable.yml
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-          cache-dependency-path: 'pyproject.toml'
-
-      - name: Install dependencies
-        run: |
-          pip install -e ".[dev]"
-
-      - name: Run flake8
-        run: flake8 cli_tool tests
-
-      - name: Run isort check
-        run: isort --check-only cli_tool tests
-
-  test-ubuntu-312:
-    name: Test on ubuntu-latest with Python 3.12
+  test:
+    name: Test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.12', '3.13']
     uses: ./.github/workflows/test-reusable.yml
     with:
-      os: ubuntu-latest
-      python-version: '3.12'
-
-  test-ubuntu-313:
-    name: Test on ubuntu-latest with Python 3.13
-    uses: ./.github/workflows/test-reusable.yml
-    with:
-      os: ubuntu-latest
-      python-version: '3.13'
-
-  test-windows-312:
-    name: Test on windows-latest with Python 3.12
-    uses: ./.github/workflows/test-reusable.yml
-    with:
-      os: windows-latest
-      python-version: '3.12'
-
-  test-windows-313:
-    name: Test on windows-latest with Python 3.13
-    uses: ./.github/workflows/test-reusable.yml
-    with:
-      os: windows-latest
-      python-version: '3.13'
-
-  test-macos-312:
-    name: Test on macos-latest with Python 3.12
-    uses: ./.github/workflows/test-reusable.yml
-    with:
-      os: macos-latest
-      python-version: '3.12'
+      os: ${{ matrix.os }}
+      python-version: ${{ matrix.python-version }}
 
   build-test:
     name: Test Binary Build (${{ matrix.platform }}-${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
-    needs: [test-ubuntu-312, test-ubuntu-313, test-windows-312, test-windows-313, test-macos-312]
+    needs: [test]
     strategy:
       matrix:
         include:
