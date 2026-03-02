@@ -7,7 +7,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from cli_tool.aws_login.config import get_profile_config
+from cli_tool.aws_login.core.config import get_profile_config
 
 console = Console()
 

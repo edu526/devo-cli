@@ -8,8 +8,8 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from cli_tool.aws_login.config import get_profile_config, list_aws_profiles
-from cli_tool.aws_login.credentials import (
+from cli_tool.aws_login.core.config import get_profile_config, list_aws_profiles
+from cli_tool.aws_login.core.credentials import (
     check_profile_needs_refresh,
     verify_credentials,
 )
