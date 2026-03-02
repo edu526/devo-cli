@@ -373,7 +373,7 @@ class TestMacOSTarballExtraction:
         # Extract the tarball
         extract_path.mkdir()
         with tarfile.open(tarball_path, "r:gz") as tf:
-            tf.extractall(extract_path)
+            tf.extractall(extract_path, filter='data')
 
         # Verify extraction
         assert (extract_path / "devo" / "devo").exists()
@@ -451,7 +451,7 @@ class TestMacOSTarballExtraction:
         # Extract
         extract_path.mkdir()
         with tarfile.open(tarball_path, "r:gz") as tf:
-            tf.extractall(extract_path)
+            tf.extractall(extract_path, filter='data')
 
         # Verify permissions
         exe_path = extract_path / "devo" / "devo"
