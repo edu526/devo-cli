@@ -6,13 +6,13 @@ from rich.console import Console
 from cli_tool.codeartifact import codeartifact_login
 from cli_tool.commands.aws_login import aws_login
 from cli_tool.commands.code_reviewer import code_reviewer
-from cli_tool.commands.commit_prompt import commit
 from cli_tool.commands.completion import autocomplete
 from cli_tool.commands.config import config_command
 from cli_tool.commands.dynamodb import dynamodb
 from cli_tool.commands.eventbridge import eventbridge
 from cli_tool.commands.ssm import ssm
 from cli_tool.commands.upgrade import upgrade
+from cli_tool.commit import commit
 
 console = Console()
 
