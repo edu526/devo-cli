@@ -172,6 +172,7 @@ def save_feature_config(feature_config: Dict):
 - `cli_tool/dynamodb/` - Well organized with commands/, core/, utils/
 - `cli_tool/code_reviewer/` - Good separation with prompt/, tools/
 - `cli_tool/aws_login/` - Reorganized with commands/, core/
+- `cli_tool/upgrade/` - Reorganized with core/ (single command, no commands/ needed)
 
 ### ⚠️ Needs Refactoring
 - `cli_tool/commands/upgrade.py` - Should be `cli_tool/upgrade/` with commands/, core/
@@ -186,7 +187,8 @@ def save_feature_config(feature_config: Dict):
 ### Phase 1: Standardize Existing Features (Priority Order)
 1. ✅ **SSM** - COMPLETED
 2. ✅ **AWS Login** - COMPLETED
-3. **Upgrade** - Convert `cli_tool/commands/upgrade.py` → `cli_tool/upgrade/`
+3. ✅ **Upgrade** - COMPLETED
+4. **Completion** - Convert `cli_tool/commands/completion.py` → `cli_tool/completion/`
 4. **Completion** - Convert `cli_tool/commands/completion.py` → `cli_tool/completion/`
 5. **CodeArtifact** - Convert `cli_tool/commands/codeartifact_login.py` → `cli_tool/codeartifact/`
 6. **Commit** - Convert `cli_tool/commands/commit_prompt.py` → `cli_tool/commit/`
