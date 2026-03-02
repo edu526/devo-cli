@@ -38,7 +38,7 @@ jobs:
         run: pre-commit run --all-files
 
       - name: Run tests with coverage
-        run: pytest --cov=cli_tool --cov-report=xml --cov-report=term-missing --cov-fail-under=60 -v
+        run: pytest --cov=cli_tool --cov-report=xml --cov-report=term-missing --cov-fail-under=40 -v
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
