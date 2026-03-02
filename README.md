@@ -8,9 +8,16 @@ AI-powered command-line tool for developers with AWS Bedrock integration.
 
 - 📝 AI-powered commit message generation
 - 🤖 AI code review with security analysis
+- 🔐 AWS SSO authentication and credential management
+- 🗄️ DynamoDB table management and export utilities
+- 📡 EventBridge rule management
+- 🖥️ AWS Systems Manager Session Manager integration
+- 📦 CodeArtifact authentication
+- ⚙️ Configuration management system
 - 🔄 Self-updating capability
 - 📦 Standalone binaries (no Python required)
 - ⚡ Fast startup on macOS/Windows (optimized onedir builds)
+- 🐚 Shell autocompletion support
 
 ## Quick Install
 
@@ -28,25 +35,60 @@ irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex
 
 ## Usage
 
+### AI-Powered Features
+
 ```bash
 # AI commit message generation
 devo commit
 
 # AI code review
 devo code-reviewer --base-branch main
+```
 
-# Update to latest version
-devo upgrade
+### AWS Integration
 
-# CodeArtifact login
+```bash
+# AWS SSO login
+devo aws-login
+devo aws-login list
+devo aws-login refresh
+
+# CodeArtifact authentication
 devo codeartifact-login
+```
 
+### AWS Services
+
+```bash
+# DynamoDB operations
+devo dynamodb list
+devo dynamodb export my-table --filter "userId = user123"
+
+# EventBridge rules
+devo eventbridge list
+devo eventbridge enable my-rule
+
+# SSM Session Manager
+devo ssm database connect my-db
+devo ssm instance shell i-1234567890abcdef0
+devo ssm forward my-service 8080
+```
+
+### Configuration & Tools
+
+```bash
 # Configuration management
 devo config show
 devo config set bedrock.model_id us.anthropic.claude-sonnet-4-20250514-v1:0
 
+# Shell autocompletion
+devo autocomplete --install
+
+# Update to latest version
+devo upgrade
+
 # Use specific AWS profile
-devo --profile my-profile commit
+devo --profile my-profile dynamodb list
 ```
 
 ### Commit Command Options
@@ -61,6 +103,60 @@ Options:
   -A, --all            Execute add, commit, push, and PR in sequence
   --profile TEXT       AWS profile to use
 ```
+
+## Available Commands
+
+### AI-Powered Features
+
+- `commit` - Generate conventional commit messages from staged changes
+- `code-reviewer` - AI-powered code review with security analysis
+
+### AWS Authentication
+
+- `aws-login` - AWS SSO authentication and credential management
+  - `list` - List all profiles with status
+  - `login [PROFILE]` - Login to specific profile
+  - `refresh` - Refresh expired credentials
+  - `set-default [PROFILE]` - Set default profile
+  - `configure [PROFILE]` - Configure new SSO profile
+
+- `codeartifact-login` - Authenticate with AWS CodeArtifact
+
+### AWS Services
+
+- `dynamodb` - DynamoDB table management
+  - `list` - List all tables
+  - `describe TABLE` - Describe table structure
+  - `export TABLE` - Export table data (CSV, JSON, JSONL, TSV)
+  - `list-templates` - List saved export templates
+
+- `eventbridge` - EventBridge rule management
+  - `list` - List all rules
+  - `enable RULE` - Enable a rule
+  - `disable RULE` - Disable a rule
+  - `describe RULE` - Describe rule details
+
+- `ssm` - AWS Systems Manager Session Manager
+  - `database connect NAME` - Connect to RDS database via SSM
+  - `instance shell INSTANCE_ID` - Start shell session
+  - `forward SERVICE PORT` - Port forwarding
+  - `hosts setup` - Setup /etc/hosts entries
+
+### Configuration & Tools
+
+- `config` - Configuration management
+  - `show` - View current configuration
+  - `set KEY VALUE` - Set configuration value
+  - `get KEY` - Get configuration value
+  - `edit` - Open config in editor
+  - `export FILE` - Export configuration
+  - `import FILE` - Import configuration
+  - `reset` - Reset to defaults
+
+- `autocomplete` - Shell autocompletion setup
+  - `--install` - Automatically install completion
+
+- `upgrade` - Update to latest version
 
 ## Configuration
 
@@ -140,8 +236,23 @@ Push to main triggers automated release with binaries for all platforms.
 
 📚 **[Full Documentation](https://edu526.github.io/devo-cli)**
 
-Quick links:
+### User Guides
 - [Configuration Guide](./docs/configuration.md)
+- [AWS Login Guide](./cli_tool/commands/aws_login/README.md)
+- [DynamoDB Guide](./cli_tool/commands/dynamodb/README.md)
+- [SSM Session Manager Guide](./cli_tool/commands/ssm/README.md)
+- [EventBridge Guide](./cli_tool/commands/eventbridge/README.md)
+
+### Command References
+- [commit](./cli_tool/commands/commit/README.md) - AI commit message generation
+- [code-reviewer](./cli_tool/commands/code_reviewer/README.md) - AI code review
+- [aws-login](./cli_tool/commands/aws_login/README.md) - AWS SSO authentication
+- [codeartifact-login](./cli_tool/commands/codeartifact/README.md) - CodeArtifact auth
+- [config](./cli_tool/commands/config_cmd/README.md) - Configuration management
+- [autocomplete](./cli_tool/commands/autocomplete/README.md) - Shell completion
+- [upgrade](./cli_tool/commands/upgrade/README.md) - Self-update system
+
+### Developer Guides
 - [Development Guide](./docs/development.md)
 - [CI/CD Pipeline](./docs/cicd.md)
 - [Semantic Release](./docs/semantic-release.md)
