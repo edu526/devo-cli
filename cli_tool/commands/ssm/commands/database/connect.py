@@ -72,7 +72,7 @@ def _connect_all_databases(config_manager, databases, no_hosts):
                 "-",
                 f"{db_config['host']}:{db_config['port']}",
                 db_config.get("profile", "default"),
-                "[yellow]⚠ Not in /etc/hosts[/yellow]"
+                "[yellow]⚠ Not in /etc/hosts[/yellow]",
             )
             continue
 
@@ -86,12 +86,7 @@ def _connect_all_databases(config_manager, databases, no_hosts):
                 status = f"[yellow]✓ Port {actual_local_port}[/yellow]"
 
             table.add_row(
-                name,
-                f"{local_address}:{db_config['port']}",
-                str(actual_local_port),
-                f"{db_config['host']}:{db_config['port']}",
-                profile_text,
-                status
+                name, f"{local_address}:{db_config['port']}", str(actual_local_port), f"{db_config['host']}:{db_config['port']}", profile_text, status
             )
 
             try:
@@ -109,7 +104,7 @@ def _connect_all_databases(config_manager, databases, no_hosts):
                 "-",
                 f"{db_config['host']}:{db_config['port']}",
                 db_config.get("profile", "default"),
-                "[yellow]⚠ No hostname forwarding[/yellow]"
+                "[yellow]⚠ No hostname forwarding[/yellow]",
             )
 
     console.print(table)
@@ -130,7 +125,6 @@ def _connect_all_databases(config_manager, databases, no_hosts):
         console.print("\n[cyan]Stopping all connections...[/cyan]")
         port_forwarder.stop_all()
         console.print("[green]All connections closed[/green]")
-
 
 
 @click.command()
@@ -205,7 +199,12 @@ def connect_database(name, no_hosts):
     if use_hostname_forwarding:
         profile_text = db_config.get("profile", "default")
         console.print(f"[cyan]Connecting to {name}...[/cyan]")
-        console.print(f"[dim]{local_address}:{db_config['port']} -> 127.0.0.1:{db_config['local_port']} -> {db_config['host']}:{db_config['port']} ({profile_text})[/dim]")
+        connection_info = (
+            f"{local_address}:{db_config['port']} -> "
+            f"127.0.0.1:{db_config['local_port']} -> "
+            f"{db_config['host']}:{db_config['port']} ({profile_text})"
+        )
+        console.print(f"[dim]{connection_info}[/dim]")
         console.print("[yellow]Press Ctrl+C to stop[/yellow]\n")
 
         port_forwarder = PortForwarder()
