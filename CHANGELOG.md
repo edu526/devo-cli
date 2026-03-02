@@ -2,6 +2,42 @@
 
 <!-- version list -->
 
+## v3.0.0 (2026-03-02)
+
+### Bug Fixes
+
+- **commit-prompt**: Ensure context object initialization before profile selection
+  ([`4d44b1c`](https://github.com/edu526/devo-cli/commit/4d44b1ca902b8938052652e18ebd11e3b12c7bf2))
+
+### Continuous Integration
+
+- **docs**: Refactor GitHub Pages deployment workflow
+  ([`8152cd2`](https://github.com/edu526/devo-cli/commit/8152cd2f011084c5da31233adc07589957f32a2f))
+
+### Documentation
+
+- **config**: Restructure command documentation with consolidated sections
+  ([`0531e9a`](https://github.com/edu526/devo-cli/commit/0531e9aee450f7d692ea7b63068705c58d32724e))
+
+### Features
+
+- **aws-login**: Enhance profile discovery with source tracking
+  ([`d6249cf`](https://github.com/edu526/devo-cli/commit/d6249cf99427db47f2d3e74dc88487be3f468085))
+
+### Refactoring
+
+- **aws**: Move profile selection to command level
+  ([`2389143`](https://github.com/edu526/devo-cli/commit/2389143824ec20d7c643ff7c6bae97f9c93a9f71))
+
+- **commit-prompt**: Move select_profile import to module level
+  ([`fe3b216`](https://github.com/edu526/devo-cli/commit/fe3b2164298777d30d90ab216def8bfb631ed6e8))
+
+### Testing
+
+- **commit-prompt**: Mock select_profile in no staged changes test
+  ([`c1f6620`](https://github.com/edu526/devo-cli/commit/c1f66207912c8ee7ed278dad8f8ddb36346cc8e0))
+
+
 ## v2.7.0 (2026-03-01)
 
 ### Continuous Integration
