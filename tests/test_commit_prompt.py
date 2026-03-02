@@ -11,6 +11,7 @@ def runner():
     return CliRunner()
 
 
+@patch("cli_tool.commands.commit_prompt.select_profile")
 @patch("cli_tool.commands.commit_prompt.get_staged_diff")
 @patch("cli_tool.commands.commit_prompt.get_branch_name")
 @patch("cli_tool.commands.commit_prompt.get_remote_url")
@@ -24,9 +25,11 @@ def test_commit_all_options(
     mock_get_remote_url,
     mock_get_branch_name,
     mock_get_staged_diff,
+    mock_select_profile,
     runner,
 ):
     # Mock external dependencies
+    mock_select_profile.return_value = "default"
     mock_get_staged_diff.return_value = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-hello\n+world"
     mock_get_branch_name.return_value = "feature/TICKET-123"
     mock_get_remote_url.return_value = "https://github.com/edu526/devo-cli"
@@ -72,6 +75,7 @@ def test_commit_all_options(
     mock_webbrowser_open.assert_called_once()
 
 
+@patch("cli_tool.commands.commit_prompt.select_profile")
 @patch("cli_tool.commands.commit_prompt.get_staged_diff")
 @patch("cli_tool.commands.commit_prompt.get_branch_name")
 @patch("cli_tool.commands.commit_prompt.BaseAgent")
@@ -81,9 +85,11 @@ def test_commit_manual_message_with_ticket(
     mock_base_agent,
     mock_get_branch_name,
     mock_get_staged_diff,
+    mock_select_profile,
     runner,
 ):
     # Mock external dependencies
+    mock_select_profile.return_value = "default"
     mock_get_staged_diff.return_value = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-hello\n+world"
     mock_get_branch_name.return_value = "feature/TICKET-456"
 
@@ -113,6 +119,7 @@ def test_commit_manual_message_with_ticket(
     assert "My manual commit message" in commit_message
 
 
+@patch("cli_tool.commands.commit_prompt.select_profile")
 @patch("cli_tool.commands.commit_prompt.get_staged_diff")
 @patch("cli_tool.commands.commit_prompt.get_branch_name")
 @patch("cli_tool.commands.commit_prompt.BaseAgent")
@@ -122,9 +129,11 @@ def test_commit_aws_credentials_error(
     mock_base_agent,
     mock_get_branch_name,
     mock_get_staged_diff,
+    mock_select_profile,
     runner,
 ):
     # Mock external dependencies
+    mock_select_profile.return_value = "default"
     mock_get_staged_diff.return_value = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-hello\n+world"
     mock_get_branch_name.return_value = "feature/TICKET-789"
 
@@ -145,6 +154,7 @@ def test_commit_aws_credentials_error(
     assert "❌ No AWS credentials found. Please configure your AWS CLI." in result.output
 
 
+@patch("cli_tool.commands.commit_prompt.select_profile")
 @patch("cli_tool.commands.commit_prompt.get_staged_diff")
 @patch("cli_tool.commands.commit_prompt.get_branch_name")
 @patch("cli_tool.commands.commit_prompt.BaseAgent")
@@ -154,9 +164,11 @@ def test_commit_general_error(
     mock_base_agent,
     mock_get_branch_name,
     mock_get_staged_diff,
+    mock_select_profile,
     runner,
 ):
     # Mock external dependencies
+    mock_select_profile.return_value = "default"
     mock_get_staged_diff.return_value = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-hello\n+world"
     mock_get_branch_name.return_value = "feature/TICKET-999"
 
@@ -177,6 +189,7 @@ def test_commit_general_error(
     assert "❌ Error sending request: Some other error" in result.output
 
 
+@patch("cli_tool.commands.commit_prompt.select_profile")
 @patch("cli_tool.commands.commit_prompt.get_staged_diff")
 @patch("cli_tool.commands.commit_prompt.get_branch_name")
 @patch("cli_tool.commands.commit_prompt.BaseAgent")
@@ -186,9 +199,11 @@ def test_commit_no_ticket_in_branch(
     mock_base_agent,
     mock_get_branch_name,
     mock_get_staged_diff,
+    mock_select_profile,
     runner,
 ):
     # Mock external dependencies
+    mock_select_profile.return_value = "default"
     mock_get_staged_diff.return_value = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-hello\n+world"
     mock_get_branch_name.return_value = "main"  # No ticket number in branch name
 
@@ -222,6 +237,7 @@ def test_commit_no_staged_changes(runner):
         assert "No staged changes found." in result.output
 
 
+@patch("cli_tool.commands.commit_prompt.select_profile")
 @patch("cli_tool.commands.commit_prompt.get_staged_diff")
 @patch("cli_tool.commands.commit_prompt.get_branch_name")
 @patch("cli_tool.commands.commit_prompt.BaseAgent")
@@ -231,9 +247,11 @@ def test_commit_structured_output(
     mock_base_agent,
     mock_get_branch_name,
     mock_get_staged_diff,
+    mock_select_profile,
     runner,
 ):
     # Mock external dependencies
+    mock_select_profile.return_value = "default"
     mock_get_staged_diff.return_value = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-hello\n+world"
     mock_get_branch_name.return_value = "feature/TICKET-111"
 

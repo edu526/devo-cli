@@ -5,6 +5,7 @@ import webbrowser
 import click
 
 from cli_tool.agents.base_agent import BaseAgent
+from cli_tool.utils.aws import select_profile
 from cli_tool.utils.git_utils import get_branch_name, get_remote_url, get_staged_diff
 
 
@@ -26,8 +27,6 @@ from cli_tool.utils.git_utils import get_branch_name, get_remote_url, get_staged
 @click.pass_context
 def commit(ctx, push, pull_request, add, all):
     """Generate a commit message based on staged changes with AI."""
-    from cli_tool.utils.aws import select_profile
-
     if all:
         add = True
         push = True
