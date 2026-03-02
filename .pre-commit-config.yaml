@@ -39,3 +39,23 @@ repos:
       - id: commitizen
         stages: [commit-msg]
 
+  - repo: local
+    hooks:
+      - id: pytest-unit
+        name: Run unit tests
+        entry: bash
+        args:
+          - -c
+          - |
+            if [ -f "venv/bin/pytest" ]; then
+              venv/bin/pytest -m unit --tb=short -x
+            elif [ -f "venv/Scripts/pytest.exe" ]; then
+              venv/Scripts/pytest.exe -m unit --tb=short -x
+            else
+              echo "Error: pytest not found in venv"
+              exit 1
+            fi
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+

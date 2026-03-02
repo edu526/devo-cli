@@ -10,3 +10,9 @@ flake8>=6.0.0
 black>=24.0.0
 isort>=5.0.0
 pre-commit>=3.0.0
+
+# Test dependencies (added for comprehensive testing strategy)
+pytest-cov>=4.0.0  # Coverage measurement
+pytest-benchmark>=4.0.0  # Performance testing
+pytest-xdist>=3.0.0  # Parallel test execution
+moto[dynamodb,iam,events,ssm]>=5.0.0  # AWS service mocking

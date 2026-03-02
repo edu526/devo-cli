@@ -1,6 +1,114 @@
 # Quick Start Guide
 
-## For New Developers
+## Installation
+
+### Binary Installation (Recommended)
+
+**Linux/macOS:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/edu526/devo-cli/main/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex
+```
+
+### Verify Installation
+
+```bash
+devo --version
+devo --help
+```
+
+## First Steps
+
+### 1. Configure AWS Credentials
+
+```bash
+# If you don't have AWS CLI configured
+aws configure
+
+# Or use AWS SSO
+devo aws-login configure
+devo aws-login
+```
+
+### 2. Setup Shell Autocompletion
+
+```bash
+devo autocomplete --install
+source ~/.bashrc  # or ~/.zshrc
+```
+
+### 3. Try AI Features
+
+```bash
+# Make some changes to your code
+git add .
+
+# Generate commit message
+devo commit
+
+# Review code changes
+devo code-reviewer
+```
+
+## Common Workflows
+
+### Daily Development
+
+```bash
+# 1. Make code changes
+# ... edit files ...
+
+# 2. Stage changes
+git add .
+
+# 3. Generate commit message and commit
+devo commit
+
+# 4. Push changes
+devo commit -p
+
+# 5. Create PR
+devo commit -pr
+```
+
+### AWS Operations
+
+```bash
+# Login to AWS
+devo aws-login
+
+# Export DynamoDB table
+devo dynamodb export my-table
+
+# Connect to database via SSM
+devo ssm database connect my-db
+
+# Manage EventBridge rules
+devo eventbridge list
+devo eventbridge enable my-rule
+```
+
+### Configuration
+
+```bash
+# View current config
+devo config show
+
+# Change Bedrock model
+devo config set bedrock.model_id us.anthropic.claude-sonnet-4-20250514-v1:0
+
+# Change AWS region
+devo config set aws.region us-west-2
+
+# Backup configuration
+devo config export ~/devo-config-backup.json
+```
+
+## For Developers
 
 ### One Command Setup
 
@@ -28,7 +136,7 @@ devo <TAB>
 make test
 ```
 
-## Daily Workflow
+## Daily Development Workflow
 
 ```bash
 # 1. Make changes
@@ -40,6 +148,12 @@ make refresh
 # 3. Test
 devo <command>
 make test
+
+# 4. Lint
+make lint
+
+# 5. Commit
+devo commit
 ```
 
 ## Common Commands
@@ -49,6 +163,7 @@ make help          # Show all available commands
 make refresh       # Refresh after code changes
 make test          # Run tests
 make lint          # Check code style
+make format        # Format code
 devo commit        # Generate commit message
 ```
 
@@ -57,19 +172,20 @@ devo commit        # Generate commit message
 - Run `make help` for all commands
 - Check `docs/contributing.md` for detailed guide
 - See `README.md` for full documentation
+- Visit [Full Documentation](https://edu526.github.io/devo-cli)
 
-## First Time?
+## Quick Command Reference
 
-```bash
-# 1. Clone repo
-git clone <repository-url>
-cd devo-cli
+| Command | Description |
+|---------|-------------|
+| `devo commit` | AI commit message generation |
+| `devo code-reviewer` | AI code review |
+| `devo aws-login` | AWS SSO authentication |
+| `devo dynamodb list` | List DynamoDB tables |
+| `devo ssm database connect` | Connect to database |
+| `devo config show` | Show configuration |
+| `devo upgrade` | Update to latest version |
 
-# 2. Run setup
-chmod +x setup-dev.sh
-./setup-dev.sh
+See [Command Reference](./docs/commands.md) for complete list.
 
-# 3. Start coding!
-```
-
-You're ready to contribute! 🚀
+You're ready to go! 🚀

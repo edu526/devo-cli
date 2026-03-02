@@ -1,6 +1,6 @@
 import os
 
-from cli_tool.utils.config_manager import get_config_value
+from cli_tool.core.utils.config_manager import get_config_value
 
 BASE_DIR = os.path.dirname(__file__)
 

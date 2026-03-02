@@ -8,4 +8,5 @@ statistics = true
 per-file-ignores =
     # Allow long lines in prompt files (they contain documentation strings)
     cli_tool/code_reviewer/prompt/*.py:E501
-
+    # Test files: Allow unused imports (fixtures) and unused variables (mocks)
+    tests/**/*.py:F401,F841,F811,F402

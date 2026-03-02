@@ -3,14 +3,14 @@ import os
 import click
 from rich.console import Console
 
+from cli_tool.commands.autocomplete import autocomplete
 from cli_tool.commands.aws_login import aws_login
-from cli_tool.commands.code_reviewer import code_reviewer
-from cli_tool.commands.codeartifact_login import codeartifact_login
-from cli_tool.commands.commit_prompt import commit
-from cli_tool.commands.completion import completion
-from cli_tool.commands.config import config_command
+from cli_tool.commands.code_reviewer.commands.analyze import code_reviewer
+from cli_tool.commands.codeartifact import codeartifact_login
+from cli_tool.commands.commit import commit
+from cli_tool.commands.config_cmd import register_config_commands
 from cli_tool.commands.dynamodb import dynamodb
-from cli_tool.commands.eventbridge import eventbridge
+from cli_tool.commands.eventbridge import register_eventbridge_commands
 from cli_tool.commands.ssm import ssm
 from cli_tool.commands.upgrade import upgrade
 
@@ -104,11 +104,11 @@ cli.add_command(commit)
 cli.add_command(upgrade)
 cli.add_command(aws_login)
 cli.add_command(codeartifact_login)
-cli.add_command(completion)
+cli.add_command(autocomplete)
 cli.add_command(code_reviewer)
-cli.add_command(config_command)
+cli.add_command(register_config_commands())
 cli.add_command(dynamodb)
-cli.add_command(eventbridge)
+cli.add_command(register_eventbridge_commands())
 cli.add_command(ssm)
 
 
@@ -117,7 +117,7 @@ def main():
         cli(obj={})
     finally:
         # Show update notification after command execution
-        from cli_tool.utils.version_check import show_update_notification
+        from cli_tool.core.utils.version_check import show_update_notification
 
         show_update_notification()
 

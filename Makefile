@@ -1,4 +1,4 @@
-.PHONY: help install install-dev uninstall clean test lint format build publish refresh venv completion binary binary-all build-windows run
+.PHONY: help install uninstall clean test lint format build publish refresh venv completion binary binary-all build-windows run
 
 # Default target
 help:
@@ -6,8 +6,7 @@ help:
 	@echo ""
 	@echo "Setup & Installation:"
 	@echo "  make venv          - Create virtual environment"
-	@echo "  make install       - Install package in editable mode"
-	@echo "  make install-dev   - Install with development dependencies"
+	@echo "  make install       - Install package with all dependencies (dev + docs)"
 	@echo "  make uninstall     - Uninstall the package"
 	@echo "  make refresh       - Refresh shell cache (use after install)"
 	@echo "  make completion    - Setup shell autocompletion"
@@ -41,7 +40,7 @@ ifeq ($(OS),Windows_NT)
 		echo "  CMD:        venv\Scripts\activate"; \
 		echo "  Git Bash:   . venv/Scripts/activate"; \
 		echo ""; \
-		echo "Then run: make install-dev"; \
+		echo "Then run: make install"; \
 	else \
 		echo "Creating virtual environment..."; \
 		python -m venv venv; \
@@ -52,7 +51,7 @@ ifeq ($(OS),Windows_NT)
 		echo "  CMD:        venv\Scripts\activate"; \
 		echo "  Git Bash:   . venv/Scripts/activate"; \
 		echo ""; \
-		echo "Then run: make install-dev"; \
+		echo "Then run: make install"; \
 	fi
 else
 	@if [ -d "venv" ]; then \
@@ -66,23 +65,14 @@ else
 	@echo "Activate it with:"
 	@echo "  source venv/bin/activate"
 	@echo ""
-	@echo "Then run: make install-dev"
+	@echo "Then run: make install"
 endif
 
-# Install package in editable mode
+# Install package in editable mode with dev dependencies
 install:
-	@echo "Installing package in editable mode..."
-	python3 -m pip install -e . || python -m pip install -e .
-	@echo "✓ Package installed"
-	@echo ""
-	@echo "Run 'make refresh' to update shell cache"
-
-# Install with development dependencies
-install-dev:
-	@echo "Installing package with development dependencies..."
-	python3 -m pip install -e . || python -m pip install -e .
-	python3 -m pip install -r requirements.txt || python -m pip install -r requirements.txt
-	@echo "✓ Package and dev dependencies installed"
+	@echo "Installing package with all dependencies (dev + docs)..."
+	pip install -e ".[dev,docs]"
+	@echo "✓ Package and all dependencies installed"
 	@echo ""
 	@echo "Run 'make refresh' to update shell cache"
 
@@ -103,17 +93,40 @@ refresh:
 # Run tests
 test:
 	@echo "Running tests..."
-	pytest tests/ -v
+	@if [ -f "venv/bin/pytest" ]; then \
+		venv/bin/pytest tests/ -v; \
+	elif [ -f "venv/Scripts/pytest.exe" ]; then \
+		venv/Scripts/pytest.exe tests/ -v; \
+	else \
+		echo "Error: pytest not found in venv. Run 'make install' first."; \
+		exit 1; \
+	fi
 
 # Run linting
 lint:
 	@echo "Running flake8..."
-	flake8 cli_tool/ tests/
+	@if [ -f "venv/bin/flake8" ]; then \
+		venv/bin/flake8 cli_tool/ tests/; \
+	elif [ -f "venv/Scripts/flake8.exe" ]; then \
+		venv/Scripts/flake8.exe cli_tool/ tests/; \
+	else \
+		echo "Error: flake8 not found in venv. Run 'make install' first."; \
+		exit 1; \
+	fi
 
 # Format code
 format:
-	@echo "Formatting imports with isort..."
-	isort cli_tool/ tests/
+	@echo "Formatting code with black and isort..."
+	@if [ -f "venv/bin/black" ]; then \
+		venv/bin/isort cli_tool/ tests/ && \
+		venv/bin/black cli_tool/ tests/; \
+	elif [ -f "venv/Scripts/black.exe" ]; then \
+		venv/Scripts/isort.exe cli_tool/ tests/ && \
+		venv/Scripts/black.exe cli_tool/ tests/; \
+	else \
+		echo "Error: black/isort not found in venv. Run 'make install' first."; \
+		exit 1; \
+	fi
 
 # Clean build artifacts
 clean:

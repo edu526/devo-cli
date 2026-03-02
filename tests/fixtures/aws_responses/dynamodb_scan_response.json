@@ -1,0 +1,75 @@
+{
+  "Items": [
+    {
+      "id": {"S": "user-001"},
+      "name": {"S": "John Doe"},
+      "email": {"S": "john.doe@example.com"},
+      "role": {"S": "developer"},
+      "active": {"BOOL": true},
+      "created_at": {"N": "1704067200"},
+      "metadata": {
+        "M": {
+          "department": {"S": "Engineering"},
+          "team": {"S": "Backend"},
+          "level": {"N": "3"}
+        }
+      },
+      "tags": {
+        "L": [
+          {"S": "python"},
+          {"S": "aws"},
+          {"S": "devops"}
+        ]
+      }
+    },
+    {
+      "id": {"S": "user-002"},
+      "name": {"S": "Jane Smith"},
+      "email": {"S": "jane.smith@example.com"},
+      "role": {"S": "manager"},
+      "active": {"BOOL": true},
+      "created_at": {"N": "1701388800"},
+      "metadata": {
+        "M": {
+          "department": {"S": "Engineering"},
+          "team": {"S": "Platform"},
+          "level": {"N": "5"}
+        }
+      },
+      "tags": {
+        "L": [
+          {"S": "leadership"},
+          {"S": "architecture"}
+        ]
+      }
+    },
+    {
+      "id": {"S": "user-003"},
+      "name": {"S": "Bob Johnson"},
+      "email": {"S": "bob.johnson@example.com"},
+      "role": {"S": "developer"},
+      "active": {"BOOL": false},
+      "created_at": {"N": "1698710400"},
+      "metadata": {
+        "M": {
+          "department": {"S": "Engineering"},
+          "team": {"S": "Frontend"},
+          "level": {"N": "2"}
+        }
+      },
+      "tags": {
+        "L": [
+          {"S": "javascript"},
+          {"S": "react"}
+        ]
+      }
+    }
+  ],
+  "Count": 3,
+  "ScannedCount": 3,
+  "LastEvaluatedKey": null,
+  "ConsumedCapacity": {
+    "TableName": "users",
+    "CapacityUnits": 0.5
+  }
+}
