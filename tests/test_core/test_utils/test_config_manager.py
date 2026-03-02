@@ -7,6 +7,7 @@ to ensure test isolation.
 """
 
 import json
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, mock_open, patch
 
@@ -760,6 +761,7 @@ def test_save_config_handles_permission_error(temp_config_dir, mocker):
 
 
 @pytest.mark.unit
+@pytest.mark.skipif(sys.platform == "win32", reason="chmod permissions work differently on Windows")
 def test_save_config_handles_directory_permission_error(temp_config_dir, mocker):
     """Test that save_config handles directory permission errors."""
     # Make the directory read-only
