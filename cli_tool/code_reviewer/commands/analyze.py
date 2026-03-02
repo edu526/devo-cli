@@ -10,7 +10,7 @@ from cli_tool.code_reviewer.core.analyzer import CodeReviewAnalyzer
 from cli_tool.ui.console_ui import console_ui
 
 
-@click.command()
+@click.command(name="code-reviewer")
 @click.option(
     "--base-branch",
     "-b",
@@ -45,7 +45,7 @@ from cli_tool.ui.console_ui import console_ui
     help="Use full detailed prompt (default: optimized short prompt)",
 )
 @click.pass_context
-def analyze(
+def code_reviewer(
     ctx,
     base_branch: Optional[str],
     repo_path: Optional[str],
