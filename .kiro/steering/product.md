@@ -25,40 +25,64 @@ Devo CLI is a Python-based command-line tool that provides AI-powered developmen
 - Shell completion support (bash, zsh, fish)
 - Rich terminal UI for formatted output
 
-## Command Reference
+## Available Commands
 
-### `devo commit`
-Generates conventional commit messages from staged git changes.
-- Format: `<type>(<scope>): <summary>`
-- Extracts ticket numbers from branch names (feature/description)
-- Types: feat, fix, chore, docs, refactor, test, style, perf
-- Max 50 chars for summary line
+### AI-Powered Features
+- **commit** - AI-powered commit message generation
+  - Conventional commit format
+  - Automatic ticket extraction from branch names
+  - Multi-line descriptions
+  - Interactive confirmation
 
-### `devo code-reviewer`
-AI-powered code review analyzing git diffs.
-- Reviews staged or committed changes
-- Checks: code quality, security, best practices, performance
-- Structured output with severity levels and actionable feedback
+- **code-reviewer** - AI code review with security analysis
+  - Reviews staged or committed changes
+  - Checks: code quality, security, best practices, performance
+  - Structured output with severity levels
 
-### `devo aws-login`
-Automates AWS SSO authentication and credential management.
-- Interactive SSO profile configuration
-- Browser-based authentication flow
-- Automatic credential caching (8-12 hour expiration)
-- Profile listing and verification
-- Auto-refresh for expired/expiring credentials (--refresh-all)
-- Detects both legacy SSO format and new sso-session format
-- Groups profiles by SSO session to minimize login prompts
-- Shows real expiration time in local timezone
+### AWS Authentication
+- **aws-login** - AWS SSO authentication and credential management
+  - Interactive SSO profile configuration
+  - Browser-based authentication flow
+  - Automatic credential caching (8-12 hour expiration)
+  - Auto-refresh for expired/expiring credentials
+  - Groups profiles by SSO session to minimize login prompts
 
-### `devo codeartifact-login`
-Authenticates with AWS CodeArtifact for package management.
-- Domain: devo-ride
-- Repository: pypi
-- Region: us-east-1
+- **codeartifact-login** - CodeArtifact authentication
+  - 12-hour authentication tokens
+  - Automatic pip configuration
 
-### `devo upgrade`
-Self-updates the CLI tool to the latest version.
+### AWS Services
+- **dynamodb** - DynamoDB table management
+  - List, describe, and export tables
+  - Multiple export formats (CSV, JSON, JSONL, TSV)
+  - Filter expressions with auto-optimization
+  - Parallel scanning and compression support
+
+- **eventbridge** - EventBridge rule management
+  - List rules with status
+  - Filter by environment and state
+  - Multiple output formats (table, JSON)
+
+- **ssm** - AWS Systems Manager Session Manager
+  - Secure shell access via SSM
+  - Database connection tunnels
+  - Port forwarding
+  - /etc/hosts management
+
+### Configuration & Tools
+- **config** - Configuration management
+  - Nested key access with dot notation
+  - JSON export/import
+  - Configuration validation
+
+- **autocomplete** - Shell autocompletion setup
+  - Auto-detects current shell
+  - Supports bash, zsh, fish
+
+- **upgrade** - Self-update system
+  - Automatic version checking
+  - Platform-specific binaries
+  - Safe upgrade with backup
 
 ## Design Principles
 
@@ -68,7 +92,7 @@ Self-updates the CLI tool to the latest version.
 - Prompts for complex features organized in `prompt/` subdirectories
 
 ### AI Agent Pattern
-- All AI features extend `BaseAgent` from `cli_tool/agents/base_agent.py`
+- All AI features extend `BaseAgent` from `cli_tool/core/agents/base_agent.py`
 - System prompts defined inline or in dedicated prompt modules
 - Structured outputs using Pydantic models for type safety
 

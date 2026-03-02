@@ -1,0 +1,23 @@
+{
+  "file": "cli_tool/core/utils/config_manager.py",
+  "diff": "diff --git a/cli_tool/core/utils/config_manager.py b/cli_tool/core/utils/config_manager.py\nindex abc1234..def5678 100644\n--- a/cli_tool/core/utils/config_manager.py\n+++ b/cli_tool/core/utils/config_manager.py\n@@ -1,5 +1,6 @@\n \"\"\"Configuration management utilities.\"\"\"\n import json\n+import os\n from pathlib import Path\n \n CONFIG_DIR = Path.home() / '.devo'\n@@ -15,6 +16,9 @@ def save_config(config):\n   \"\"\"Save configuration to file.\"\"\"\n   CONFIG_DIR.mkdir(parents=True, exist_ok=True)\n   with open(CONFIG_FILE, 'w') as f:\n     json.dump(config, f, indent=2)\n+  # Set secure file permissions (owner read/write only)\n+  os.chmod(CONFIG_FILE, 0o600)\n+  \n \n def get_config_value(config, key, default=None):\n@@ -30,7 +34,10 @@ def get_config_value(config, key, default=None):\n \n def load_aws_credentials():\n   \"\"\"Load AWS credentials from config.\"\"\"\n-  # WARNING: This logs credentials - security issue!\n-  print(f\"Loading credentials: {config.get('aws', {})}\")\n+  # Fixed: Never log or print credentials\n+  config = load_config()\n+  aws_config = config.get('aws', {})\n+  # Credentials are handled securely without logging\n   return aws_config",
+  "staged": true,
+  "binary": false,
+  "security_issues": [
+    {
+      "type": "credential_exposure",
+      "severity": "high",
+      "description": "Removed logging of AWS credentials",
+      "line": 37,
+      "fixed": true
+    },
+    {
+      "type": "file_permissions",
+      "severity": "medium",
+      "description": "Added secure file permissions (0o600) for config file",
+      "line": 19,
+      "fixed": true
+    }
+  ],
+  "description": "Security fix: prevent credential logging and set secure file permissions"
+}

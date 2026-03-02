@@ -15,6 +15,7 @@ authors = [
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
 ]
 dependencies = [
@@ -34,11 +35,18 @@ dev = [
     "twine>=6.0.0",
     "pytest>=7.0.0",
     "pytest-mock>=3.0.0",
+    "pytest-cov>=4.0.0",
+    "moto>=5.0.0",
     "build>=1.0.0",
     "flake8>=6.0.0",
     "black>=24.0.0",
     "isort>=5.0.0",
     "pre-commit>=3.0.0",
+]
+
+docs = [
+    "mkdocs-material>=9.0.0",
+    "mkdocs-click>=0.8.0",
 ]
 
 [project.scripts]
@@ -107,12 +115,69 @@ ignore_token_for_push = false
 [tool.isort]
 profile = "black"
 line_length = 150
+extend_skip = ["_version.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+# Markers registration (prevents PytestUnknownMarkWarning)
+markers = [
+  "unit: Unit tests for core business logic",
+  "integration: Integration tests for CLI commands",
+  "platform: Platform-specific tests",
+  "slow: Slow tests (skipped by default)",
+]
+
+# Coverage and execution configuration
+addopts = [
+  "--cov=cli_tool",
+  "--cov-report=html",
+  "--cov-report=term-missing",
+  "-m not slow",  # Skip slow tests by default
+  # "-n=auto",  # Parallel execution with pytest-xdist (commented out for now)
+]
+
+# Note: Coverage threshold is enforced in CI
+# Current baseline: ~43% (as of 2025)
+# Target progression:
+# - Phase 1: 40% (current baseline, allows CI to pass)
+# - Phase 2: 50% (add tests for uncovered commands)
+# - Phase 3: 60% (improve core module coverage)
+# - Phase 4: 70% (comprehensive coverage)
+#
+# Priority areas for improvement:
+# - cli_tool/core/ modules (business logic)
+# - cli_tool/commands/ modules (command handlers)
+#
+# Excluded from coverage:
+# - __init__.py files (usually empty or just imports)
+# - cli.py (entry point, tested via integration)
+# - _version.py (auto-generated)
+# - Platform-specific code (if sys.platform checks)
+
+[tool.coverage.run]
+omit = [
+  "*/tests/*",
+  "*/_version.py",
+  "*/setup.py",
+  "*/__init__.py",
+  "*/cli_tool/cli.py",  # Entry point, tested via integration tests
+]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "def __repr__",
+  "raise AssertionError",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+  "if sys.platform",
+  "@abstractmethod",
+]
 
 [tool.black]
 line-length = 150

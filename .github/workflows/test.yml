@@ -11,16 +11,29 @@ on:
       - '.github/workflows/docs.yml'
 
 jobs:
+  lint:
+    name: Lint
+    uses: ./.github/workflows/lint-reusable.yml
+
   test:
-    name: Run Tests
+    name: Test
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.12', '3.13']
     uses: ./.github/workflows/test-reusable.yml
     with:
-      python-version: '3.12'
+      os: ${{ matrix.os }}
+      python-version: ${{ matrix.python-version }}
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   build-test:
     name: Test Binary Build (${{ matrix.platform }}-${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
-    needs: test
+    needs: [lint, test]
     strategy:
       matrix:
         include:
@@ -31,7 +44,7 @@ jobs:
             build_script: bash scripts/build.sh --ci --release
 
           # macOS Intel
-          - os: macos-latest
+          - os: macos-15-intel
             platform: darwin
             arch: amd64
             build_script: bash scripts/build.sh --ci --release
@@ -65,6 +78,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: 'pyproject.toml'
 
       - name: Build binary
         env:

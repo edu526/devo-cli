@@ -1,0 +1,25 @@
+{
+  "files": [
+    {
+      "file": "cli_tool/commands/commit/core/generator.py",
+      "diff": "diff --git a/cli_tool/commands/commit/core/generator.py b/cli_tool/commands/commit/core/generator.py\nindex 1234567..abcdefg 100644\n--- a/cli_tool/commands/commit/core/generator.py\n+++ b/cli_tool/commands/commit/core/generator.py\n@@ -5,6 +5,7 @@ from cli_tool.core.agents.base_agent import BaseAgent\n \n class CommitMessageGenerator:\n   \"\"\"Generate conventional commit messages using AI.\"\"\"\n+  \n   def __init__(self, model_id=None):\n     self.agent = BaseAgent(model_id=model_id)\n@@ -15,7 +16,10 @@ class CommitMessageGenerator:\n     prompt = self._build_prompt(diff, ticket)\n-    return self.agent.query(prompt)\n+    response = self.agent.query(prompt)\n+    if not response:\n+      raise ValueError(\"AI agent returned empty response\")\n+    return response",
+      "staged": true,
+      "binary": false
+    },
+    {
+      "file": "tests/test_commands/test_commit/test_commit_generation.py",
+      "diff": "diff --git a/tests/test_commands/test_commit/test_commit_generation.py b/tests/test_commands/test_commit/test_commit_generation.py\nnew file mode 100644\nindex 0000000..1234567\n--- /dev/null\n+++ b/tests/test_commands/test_commit/test_commit_generation.py\n@@ -0,0 +1,25 @@\n+\"\"\"Tests for commit message generation.\"\"\"\n+\n+import pytest\n+from cli_tool.commands.commit.core.generator import CommitMessageGenerator\n+\n+\n+@pytest.mark.unit\n+def test_generate_commit_message_with_empty_diff(mock_bedrock_client):\n+  \"\"\"Test that empty diff raises ValueError.\"\"\"\n+  generator = CommitMessageGenerator()\n+  with pytest.raises(ValueError, match=\"empty diff\"):\n+    generator.generate_commit_message(\"\")",
+      "staged": true,
+      "binary": false
+    },
+    {
+      "file": "README.md",
+      "diff": "diff --git a/README.md b/README.md\nindex 9876543..fedcba9 100644\n--- a/README.md\n+++ b/README.md\n@@ -45,6 +45,8 @@ devo commit --all\n \n ## Testing\n \n+Run the test suite with pytest:\n+\n ```bash\n pytest\n ```",
+      "staged": true,
+      "binary": false
+    }
+  ],
+  "description": "Multi-file change adding error handling and tests",
+  "total_additions": 18,
+  "total_deletions": 2
+}

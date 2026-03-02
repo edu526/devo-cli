@@ -1,0 +1,1 @@
+"""SSM command tests."""

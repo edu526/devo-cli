@@ -1,0 +1,18 @@
+{
+  "files": [
+    {
+      "file": "assets/logo.png",
+      "diff": "diff --git a/assets/logo.png b/assets/logo.png\nindex 1234567..abcdefg 100644\nBinary files a/assets/logo.png and b/assets/logo.png differ",
+      "staged": true,
+      "binary": true
+    },
+    {
+      "file": "cli_tool/commands/commit/core/generator.py",
+      "diff": "diff --git a/cli_tool/commands/commit/core/generator.py b/cli_tool/commands/commit/core/generator.py\nindex 1234567..abcdefg 100644\n--- a/cli_tool/commands/commit/core/generator.py\n+++ b/cli_tool/commands/commit/core/generator.py\n@@ -10,6 +10,7 @@ def generate_commit_message(diff):\n     \"\"\"Generate commit message from git diff.\"\"\"\n+    # Update logo reference\n     prompt = f\"Generate a conventional commit message for:\\n{diff}\"\n     return agent.query(prompt)",
+      "staged": true,
+      "binary": false
+    }
+  ],
+  "description": "Change with binary file (logo.png) and code update",
+  "has_binary": true
+}
