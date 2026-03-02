@@ -206,6 +206,37 @@ make install-dev
 make completion
 ```
 
+### Git Hooks
+
+The project uses pre-commit hooks for code quality:
+
+```bash
+# Install hooks (run once after cloning)
+pre-commit install              # Install pre-commit hooks
+pre-commit install --hook-type pre-push  # Install pre-push hooks
+```
+
+**Pre-commit hooks** (run on every commit):
+- Code formatting (black, isort)
+- Linting (flake8)
+- File checks (large files, merge conflicts, etc.)
+- Commit message validation (conventional commits)
+
+**Pre-push hooks** (run before pushing):
+- Unit tests (`pytest -m unit`)
+
+To skip hooks temporarily (not recommended):
+```bash
+git commit --no-verify    # Skip pre-commit hooks
+git push --no-verify      # Skip pre-push hooks
+```
+
+To run hooks manually:
+```bash
+pre-commit run --all-files              # Run all pre-commit hooks
+pre-commit run --hook-stage push --all-files  # Run pre-push hooks
+```
+
 ### Building Binaries
 
 ```bash
