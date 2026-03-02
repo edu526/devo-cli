@@ -6,42 +6,49 @@ All commands in Devo CLI must follow this standardized structure for consistency
 
 ## Directory Structure
 
-### Simple Commands (Single File)
+### Universal Feature Module Structure
 
-For commands with minimal logic (< 200 lines):
-
-```
-cli_tool/commands/
-└── command_name.py          # All logic in one file
-```
-
-**Examples:** `upgrade.py`, `completion.py`, `codeartifact_login.py`
-
-### Complex Commands (Feature Module)
-
-For commands with significant logic (> 200 lines) or multiple subcommands:
+**ALL commands MUST follow this structure, regardless of size or complexity:**
 
 ```
 cli_tool/feature_name/
-├── __init__.py              # Exports main classes/functions
+├── __init__.py              # Public API exports
 ├── README.md                # Feature documentation (optional)
-├── commands/                # Click command definitions
+├── commands/                # CLI command definitions
+│   ├── __init__.py          # Registers all command groups
+│   ├── resource1/           # Command group for resource1
+│   │   ├── __init__.py      # Registers resource1 commands
+│   │   ├── list.py          # List resources (~30-50 lines)
+│   │   ├── add.py           # Create resource (~30-50 lines)
+│   │   ├── remove.py        # Delete resource (~20-30 lines)
+│   │   └── update.py        # Update resource (~30-50 lines)
+│   ├── resource2/           # Command group for resource2
+│   │   ├── __init__.py
+│   │   ├── command1.py
+│   │   └── command2.py
+│   ├── standalone.py        # Standalone command (no group)
+│   └── shortcuts.py         # Shortcuts for common commands (optional)
+├── core/                    # Business logic (no Click dependencies)
 │   ├── __init__.py
-│   ├── subcommand1.py
-│   └── subcommand2.py
-├── core/                    # Business logic
-│   ├── __init__.py
-│   ├── service.py
-│   └── processor.py
-└── utils/                   # Feature-specific utilities
+│   ├── manager.py           # Main service class
+│   └── processor.py         # Data processing
+└── utils/                   # Feature-specific utilities (optional)
     ├── __init__.py
-    └── helpers.py
+    └── helpers.py           # Helper functions
 
 cli_tool/commands/
 └── feature_name.py          # Thin wrapper that imports from cli_tool/feature_name/
 ```
 
-**Examples:** `dynamodb/`, `code_reviewer/`
+**Key Principles:**
+- One file per command (~50-100 lines each)
+- Commands grouped in subdirectories by domain
+- Shortcuts/aliases in separate file
+- All feature code contained within feature directory
+
+**Examples:** `ssm/`, `dynamodb/`, `code_reviewer/`
+
+**No exceptions:** Even single-command features use this structure for consistency.
 
 ## File Naming Conventions
 
@@ -50,30 +57,9 @@ cli_tool/commands/
 - **Classes:** `PascalCase` (e.g., `SSMConfigManager`, `BaseAgent`)
 - **Functions:** `snake_case` (e.g., `load_config()`, `get_template()`)
 
-## Standard Module Organization
+## Code Examples
 
-### Feature Module Structure
-
-```
-cli_tool/feature_name/
-├── __init__.py              # Public API exports
-├── README.md                # Feature overview and usage
-├── commands/                # CLI command definitions
-│   ├── __init__.py
-│   ├── list.py             # List resources
-│   ├── create.py           # Create resources
-│   ├── delete.py           # Delete resources
-│   └── update.py           # Update resources
-├── core/                    # Business logic (no Click dependencies)
-│   ├── __init__.py
-│   ├── manager.py          # Main service class
-│   └── processor.py        # Data processing
-└── utils/                   # Feature-specific utilities
-    ├── __init__.py
-    └── helpers.py          # Helper functions
-```
-
-### Command File Structure
+### Command File Structure (Individual Command)
 
 ```python
 """Command description."""
@@ -86,20 +72,40 @@ from cli_tool.feature_name.core import FeatureManager
 console = Console()
 
 
-@click.group()
-def feature_name():
-    """Feature description."""
-    pass
-
-
-@feature_name.command("subcommand")
+@click.command()
 @click.argument("name")
 @click.option("--flag", is_flag=True, help="Flag description")
-def subcommand(name, flag):
-    """Subcommand description."""
-    manager = FeatureManager()
-    result = manager.do_something(name, flag)
-    console.print(f"[green]✓ Success: {result}[/green]")
+def command_name(name, flag):
+  """Command description."""
+  manager = FeatureManager()
+  result = manager.do_something(name, flag)
+  console.print(f"[green]✓ Success: {result}[/green]")
+```
+
+### Command Group Registration (__init__.py)
+
+```python
+"""Resource commands."""
+
+import click
+
+from cli_tool.feature_name.commands.resource.add import add_resource
+from cli_tool.feature_name.commands.resource.list import list_resources
+from cli_tool.feature_name.commands.resource.remove import remove_resource
+
+
+def register_resource_commands(parent_group):
+  """Register resource-related commands."""
+
+  @parent_group.group("resource")
+  def resource():
+    """Manage resources"""
+    pass
+
+  # Register all resource commands
+  resource.add_command(list_resources, "list")
+  resource.add_command(add_resource, "add")
+  resource.add_command(remove_resource, "remove")
 ```
 
 ## Configuration Management
@@ -162,60 +168,107 @@ def save_feature_config(feature_config: Dict):
 ## Current State vs Standard
 
 ### ✅ Follows Standard
+- `cli_tool/ssm/` - Reference implementation with commands/, core/, utils/
 - `cli_tool/dynamodb/` - Well organized with commands/, core/, utils/
 - `cli_tool/code_reviewer/` - Good separation with prompt/, tools/
-- `cli_tool/commands/upgrade.py` - Simple, single file
 
 ### ⚠️ Needs Refactoring
-- `cli_tool/aws_login/` - Should be `cli_tool/aws_login/commands/` structure
-- `cli_tool/ssm/` - Missing commands/ subdirectory
-- `cli_tool/commands/ssm.py` - Too large (600+ lines), should split into subcommands
+- `cli_tool/aws_login/` - Missing commands/ subdirectory
+- `cli_tool/commands/upgrade.py` - Should be `cli_tool/upgrade/` with commands/, core/
+- `cli_tool/commands/completion.py` - Should be `cli_tool/completion/` with commands/, core/
+- `cli_tool/commands/codeartifact_login.py` - Should be `cli_tool/codeartifact/` with commands/, core/
+- `cli_tool/commands/commit_prompt.py` - Should be `cli_tool/commit/` with commands/, core/
+- `cli_tool/commands/eventbridge.py` - Should be `cli_tool/eventbridge/` with commands/, core/
+- `cli_tool/commands/config.py` - Should be `cli_tool/config_cmd/` with commands/, core/
 
 ## Migration Plan
 
-### Phase 1: Standardize Existing Features
-1. Move `cli_tool/aws_login/*.py` → `cli_tool/aws_login/commands/`
-2. Split `cli_tool/commands/ssm.py` → `cli_tool/ssm/commands/`
-3. Create `cli_tool/ssm/core/` for business logic
+### Phase 1: Standardize Existing Features (Priority Order)
+1. ✅ **SSM** - COMPLETED
+2. **AWS Login** - Move files → `cli_tool/aws_login/commands/` and `cli_tool/aws_login/core/`
+3. **Upgrade** - Convert `cli_tool/commands/upgrade.py` → `cli_tool/upgrade/`
+4. **Completion** - Convert `cli_tool/commands/completion.py` → `cli_tool/completion/`
+5. **CodeArtifact** - Convert `cli_tool/commands/codeartifact_login.py` → `cli_tool/codeartifact/`
+6. **Commit** - Convert `cli_tool/commands/commit_prompt.py` → `cli_tool/commit/`
+7. **EventBridge** - Convert `cli_tool/commands/eventbridge.py` → `cli_tool/eventbridge/`
+8. **Config** - Convert `cli_tool/commands/config.py` → `cli_tool/config_cmd/`
 
 ### Phase 2: New Features
 All new features must follow the standard structure from day one.
 
+### Phase 3: Remove cli_tool/commands/
+Once all features are migrated, `cli_tool/commands/` should only contain thin wrappers that import from feature modules.
+
 ## Examples
 
-### Good: DynamoDB Structure
+### ✅ Good: SSM Structure (Reference Implementation)
+```
+cli_tool/ssm/
+├── __init__.py
+├── commands/
+│   ├── __init__.py
+│   ├── database/            # Database command group
+│   │   ├── __init__.py
+│   │   ├── connect.py       # ~230 lines (complex logic)
+│   │   ├── list.py          # ~30 lines
+│   │   ├── add.py           # ~25 lines
+│   │   └── remove.py        # ~20 lines
+│   ├── instance/            # Instance command group
+│   │   ├── __init__.py
+│   │   ├── shell.py         # ~30 lines
+│   │   ├── list.py          # ~30 lines
+│   │   ├── add.py           # ~25 lines
+│   │   └── remove.py        # ~20 lines
+│   ├── hosts/               # Hosts command group
+│   │   ├── __init__.py
+│   │   ├── setup.py         # ~80 lines
+│   │   ├── list.py          # ~25 lines
+│   │   ├── clear.py         # ~20 lines
+│   │   ├── add.py           # ~35 lines
+│   │   └── remove.py        # ~25 lines
+│   ├── forward.py           # Standalone command (~40 lines)
+│   └── shortcuts.py         # Shortcuts (~40 lines)
+├── core/
+│   ├── __init__.py
+│   ├── config.py            # SSMConfigManager
+│   ├── session.py           # SSMSession
+│   └── port_forwarder.py    # PortForwarder
+└── utils/
+    ├── __init__.py
+    └── hosts_manager.py     # HostsManager
+```
+
+### ✅ Good: DynamoDB Structure
 ```
 cli_tool/dynamodb/
 ├── __init__.py
 ├── commands/
+│   ├── __init__.py
 │   ├── export_table.py      # Main export command
 │   └── list_templates.py    # Template management
 ├── core/
+│   ├── __init__.py
 │   ├── exporter.py          # Export logic
 │   └── parallel_scanner.py  # Scanning logic
 └── utils/
+    ├── __init__.py
     ├── templates.py         # Template management
     └── filter_builder.py    # Query building
 ```
 
-### Bad: Large Single File
+### ❌ Bad: Large Single File
 ```
 cli_tool/commands/
 └── ssm.py                   # 600+ lines, multiple concerns
 ```
 
-### Better: Split Structure
+### ❌ Bad: Missing Subdirectories for Command Groups
 ```
-cli_tool/ssm/
-├── commands/
-│   ├── connect.py           # Connection commands
-│   ├── database.py          # Database management
-│   └── instance.py          # Instance management
-├── core/
-│   ├── session.py           # SSM session logic
-│   └── port_forwarder.py    # Port forwarding logic
-└── utils/
-    └── hosts_manager.py     # /etc/hosts management
+cli_tool/ssm/commands/
+├── database_connect.py      # Should be database/connect.py
+├── database_list.py         # Should be database/list.py
+├── instance_shell.py        # Should be instance/shell.py
+└── instance_list.py         # Should be instance/list.py
 ```
 
 ## Testing Structure
@@ -244,5 +297,8 @@ Each feature module should have:
 1. **Consistency** - Easy to find code across features
 2. **Maintainability** - Clear separation of concerns
 3. **Testability** - Business logic isolated from CLI
-4. **Scalability** - Easy to add new subcommands
+4. **Scalability** - Easy to add new subcommands (just add new file)
 5. **Onboarding** - New developers know where to look
+6. **Small Files** - Each command file is 20-100 lines (easy to understand)
+7. **Git Friendly** - Less merge conflicts with small, focused files
+8. **Discoverability** - File structure mirrors CLI structure
