@@ -44,7 +44,7 @@ def replace_binary(new_binary_path, target_path, archive_type=None):
                         zf.extractall(temp_extract)
                 elif archive_type == "tar.gz":
                     with tarfile.open(new_binary_path, "r:gz") as tf:
-                        tf.extractall(temp_extract, filter='data')
+                        tf.extractall(temp_extract, filter="data")
 
                 # Find the extracted devo directory
                 extracted_dir = None

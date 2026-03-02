@@ -57,5 +57,5 @@ repos:
             fi
         language: system
         pass_filenames: false
-        stages: [push]
+        stages: [pre-push]
 
