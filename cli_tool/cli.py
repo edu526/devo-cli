@@ -9,10 +9,10 @@ from cli_tool.commands.code_reviewer import code_reviewer
 from cli_tool.commands.completion import autocomplete
 from cli_tool.commands.config import config_command
 from cli_tool.commands.dynamodb import dynamodb
-from cli_tool.commands.eventbridge import eventbridge
 from cli_tool.commands.ssm import ssm
 from cli_tool.commands.upgrade import upgrade
 from cli_tool.commit import commit
+from cli_tool.eventbridge import register_eventbridge_commands
 
 console = Console()
 
@@ -108,7 +108,7 @@ cli.add_command(autocomplete)
 cli.add_command(code_reviewer)
 cli.add_command(config_command)
 cli.add_command(dynamodb)
-cli.add_command(eventbridge)
+cli.add_command(register_eventbridge_commands())
 cli.add_command(ssm)
 
 
