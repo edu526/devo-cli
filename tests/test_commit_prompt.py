@@ -227,7 +227,9 @@ def test_commit_no_ticket_in_branch(
     assert "TICKET-" not in result.output
 
 
-def test_commit_no_staged_changes(runner):
+@patch("cli_tool.commands.commit_prompt.select_profile")
+def test_commit_no_staged_changes(mock_select_profile, runner):
+    mock_select_profile.return_value = "default"
     with patch("cli_tool.commands.commit_prompt.get_staged_diff") as mock_get_staged_diff:
         mock_get_staged_diff.return_value = ""
 
