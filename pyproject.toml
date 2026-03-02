@@ -107,6 +107,7 @@ ignore_token_for_push = false
 [tool.isort]
 profile = "black"
 line_length = 150
+extend_skip = ["_version.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
