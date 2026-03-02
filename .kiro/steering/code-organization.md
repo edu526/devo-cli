@@ -12,7 +12,7 @@ All commands in Devo CLI must follow this standardized structure for consistency
 
 ```
 cli_tool/feature_name/
-├── __init__.py              # Public API exports
+├── __init__.py              # Public API exports (includes CLI command)
 ├── README.md                # Feature documentation (optional)
 ├── commands/                # CLI command definitions
 │   ├── __init__.py          # Registers all command groups
@@ -35,9 +35,6 @@ cli_tool/feature_name/
 └── utils/                   # Feature-specific utilities (optional)
     ├── __init__.py
     └── helpers.py           # Helper functions
-
-cli_tool/commands/
-└── feature_name.py          # Thin wrapper that imports from cli_tool/feature_name/
 ```
 
 **Key Principles:**
@@ -45,6 +42,7 @@ cli_tool/commands/
 - Commands grouped in subdirectories by domain
 - Shortcuts/aliases in separate file
 - All feature code contained within feature directory
+- CLI command exported from `__init__.py` for direct import in `cli.py`
 
 **Examples:** `ssm/`, `dynamodb/`, `code_reviewer/`
 
@@ -196,11 +194,14 @@ None - All features have been migrated!
 9. ✅ **DynamoDB** - COMPLETED (moved CLI logic to commands/cli.py)
 10. ✅ **Code Reviewer** - COMPLETED (reorganized with commands/, core/)
 
-### Phase 2: New Features
-All new features must follow the standard structure from day one.
+### Phase 2: Remove cli_tool/commands/ ✅ COMPLETED
+- Eliminated thin wrapper layer
+- Commands now imported directly from feature modules in `cli.py`
+- Follows industry standard for large Python CLI projects
+- Cleaner, more direct architecture
 
-### Phase 3: Maintenance ✅ COMPLETED
-All features now follow the standard structure with thin wrappers in `cli_tool/commands/`.
+### Phase 3: New Features
+All new features must follow the standard structure from day one.
 
 ## Examples
 

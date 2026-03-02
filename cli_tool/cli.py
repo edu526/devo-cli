@@ -3,16 +3,16 @@ import os
 import click
 from rich.console import Console
 
+from cli_tool.autocomplete import autocomplete
+from cli_tool.aws_login import aws_login
+from cli_tool.code_reviewer.commands.analyze import code_reviewer
 from cli_tool.codeartifact import codeartifact_login
-from cli_tool.commands.aws_login import aws_login
-from cli_tool.commands.code_reviewer import code_reviewer
-from cli_tool.commands.completion import autocomplete
-from cli_tool.commands.dynamodb import dynamodb
-from cli_tool.commands.ssm import ssm
-from cli_tool.commands.upgrade import upgrade
 from cli_tool.commit import commit
 from cli_tool.config_cmd import register_config_commands
+from cli_tool.dynamodb import dynamodb
 from cli_tool.eventbridge import register_eventbridge_commands
+from cli_tool.ssm import ssm
+from cli_tool.upgrade import upgrade
 
 console = Console()
 
