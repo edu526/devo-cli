@@ -4,203 +4,22 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Optional
 
 import click
 from botocore.exceptions import BotoCoreError, ClientError
 from rich.console import Console
 
-from cli_tool.dynamodb.core import DynamoDBExporter, ParallelScanner
-from cli_tool.dynamodb.utils import ExportConfigManager, FilterBuilder, create_template_from_args, estimate_export_size, validate_table_exists
+from cli_tool.dynamodb.core import DynamoDBExporter, ParallelScanner, detect_usable_index
+from cli_tool.dynamodb.utils import (
+    ExportConfigManager,
+    FilterBuilder,
+    create_template_from_args,
+    estimate_export_size,
+    validate_table_exists,
+)
 
 console = Console()
-
-
-def _detect_usable_index(
-    filter_expression: str,
-    expression_attribute_names: Optional[Dict[str, str]],
-    expression_attribute_values: Optional[Dict[str, Any]],
-    table_info: Dict[str, Any],
-) -> Optional[Dict[str, Any]]:
-    """
-    Detect if filter uses an indexed attribute with equality that could be queried.
-
-    Returns dict with:
-      - index_name: Name of GSI or None for main table
-      - key_condition: KeyConditionExpression to use
-      - remaining_filter: FilterExpression for remaining conditions (or None)
-      - key_attribute: Name of the indexed attribute
-      - has_or: True if filter contains OR (cannot auto-optimize)
-    """
-    if not filter_expression:
-        return None
-
-    # Check for OR conditions - cannot auto-optimize with Query
-    # Normalize the expression by removing parentheses and extra spaces for OR detection
-    normalized_expr = re.sub(r"[()]", " ", filter_expression)
-    normalized_expr = re.sub(r"\s+", " ", normalized_expr)
-    has_or = " OR " in normalized_expr.upper()
-    if has_or:
-        # Still detect indexed attributes for suggestions, but don't auto-optimize
-        equality_pattern = r"(#?\w+)\s*=\s*(:\w+)"
-        equality_matches = re.findall(equality_pattern, filter_expression)
-
-        if not equality_matches:
-            return None
-
-        # Find indexed attributes
-        indexed_attrs = []
-
-        # Check GSIs
-        for gsi in table_info.get("global_indexes", []):
-            # Validate GSI is active
-            gsi_status = gsi.get("IndexStatus", "ACTIVE")
-            if gsi_status != "ACTIVE":
-                continue  # Skip non-active indexes
-
-            key_schema = gsi.get("KeySchema", [])
-            for key in key_schema:
-                if key.get("KeyType") == "HASH":
-                    key_name = key.get("AttributeName")
-                    # Check if this key is in the filter
-                    for attr, value_placeholder in equality_matches:
-                        resolved_attr = attr
-                        if attr.startswith("#") and expression_attribute_names:
-                            resolved_attr = expression_attribute_names.get(attr, attr)
-                        if resolved_attr == key_name:
-                            indexed_attrs.append(
-                                {
-                                    "key_attribute": key_name,
-                                    "index_name": gsi.get("IndexName"),
-                                    "attr_ref": attr,
-                                    "value_ref": value_placeholder,
-                                }
-                            )
-
-        # Check main table key
-        for key in table_info.get("key_schema", []):
-            if key.get("KeyType") == "HASH":
-                key_name = key.get("AttributeName")
-                for attr, value_placeholder in equality_matches:
-                    resolved_attr = attr
-                    if attr.startswith("#") and expression_attribute_names:
-                        resolved_attr = expression_attribute_names.get(attr, attr)
-                    if resolved_attr == key_name:
-                        indexed_attrs.append(
-                            {
-                                "key_attribute": key_name,
-                                "index_name": None,
-                                "attr_ref": attr,
-                                "value_ref": value_placeholder,
-                            }
-                        )
-
-        if indexed_attrs:
-            # Return info but mark as having OR
-            return {
-                "has_or": True,
-                "indexed_attributes": indexed_attrs,
-                "filter_expression": filter_expression,
-            }
-
-        return None
-
-    # No OR - proceed with normal detection
-    # Extract equality conditions: "attributeName = :value" or "#attr = :value"
-    equality_pattern = r"(#?\w+)\s*=\s*(:\w+)"
-    equality_matches = re.findall(equality_pattern, filter_expression)
-
-    if not equality_matches:
-        return None
-
-    # Build map of attribute -> value placeholder
-    equality_conditions = {}
-    for attr, value_placeholder in equality_matches:
-        # Resolve attribute name if it's an alias
-        resolved_attr = attr
-        if attr.startswith("#") and expression_attribute_names:
-            resolved_attr = expression_attribute_names.get(attr, attr)
-
-        equality_conditions[resolved_attr] = {
-            "attr_ref": attr,  # Original reference (might be #attr)
-            "value_ref": value_placeholder,
-        }
-
-    # Check GSIs first (usually more specific)
-    for gsi in table_info.get("global_indexes", []):
-        # Validate GSI is active
-        gsi_status = gsi.get("IndexStatus", "ACTIVE")
-        if gsi_status != "ACTIVE":
-            continue  # Skip non-active indexes
-
-        gsi_name = gsi.get("IndexName")
-        key_schema = gsi.get("KeySchema", [])
-
-        for key in key_schema:
-            if key.get("KeyType") == "HASH":  # Partition key
-                key_name = key.get("AttributeName")
-                if key_name in equality_conditions:
-                    # Found indexed attribute with equality condition
-                    condition_info = equality_conditions[key_name]
-
-                    # Build KeyConditionExpression
-                    key_condition = f"{condition_info['attr_ref']} = {condition_info['value_ref']}"
-
-                    # Remove this condition from filter to get remaining filter
-                    remaining_filter = filter_expression
-                    # Remove the key condition from filter (handle AND/OR)
-                    condition_pattern = (
-                        rf'\s*(?:AND|OR)?\s*{re.escape(condition_info["attr_ref"])}\s*=\s*{re.escape(condition_info["value_ref"])}\s*(?:AND|OR)?'
-                    )
-                    remaining_filter = re.sub(condition_pattern, " ", remaining_filter).strip()
-
-                    # Clean up extra AND/OR at start/end
-                    remaining_filter = re.sub(r"^\s*(?:AND|OR)\s+", "", remaining_filter)
-                    remaining_filter = re.sub(r"\s+(?:AND|OR)\s*$", "", remaining_filter)
-                    remaining_filter = remaining_filter.strip()
-
-                    if not remaining_filter or remaining_filter in ("()", ""):
-                        remaining_filter = None
-
-                    return {
-                        "has_or": False,
-                        "index_name": gsi_name,
-                        "key_condition": key_condition,
-                        "remaining_filter": remaining_filter,
-                        "key_attribute": key_name,
-                    }
-
-    # Check table's main partition key
-    for key in table_info.get("key_schema", []):
-        if key.get("KeyType") == "HASH":
-            key_name = key.get("AttributeName")
-            if key_name in equality_conditions:
-                condition_info = equality_conditions[key_name]
-
-                key_condition = f"{condition_info['attr_ref']} = {condition_info['value_ref']}"
-
-                # Remove this condition from filter
-                remaining_filter = filter_expression
-                condition_pattern = (
-                    rf'\s*(?:AND|OR)?\s*{re.escape(condition_info["attr_ref"])}\s*=\s*{re.escape(condition_info["value_ref"])}\s*(?:AND|OR)?'
-                )
-                remaining_filter = re.sub(condition_pattern, " ", remaining_filter).strip()
-                remaining_filter = re.sub(r"^\s*(?:AND|OR)\s+", "", remaining_filter)
-                remaining_filter = re.sub(r"\s+(?:AND|OR)\s*$", "", remaining_filter)
-                remaining_filter = remaining_filter.strip()
-
-                if not remaining_filter or remaining_filter in ("()", ""):
-                    remaining_filter = None
-
-                return {
-                    "has_or": False,
-                    "index_name": None,  # Use main table
-                    "key_condition": key_condition,
-                    "remaining_filter": remaining_filter,
-                    "key_attribute": key_name,
-                }
-
-    return None
 
 
 def export_table_command(
@@ -338,7 +157,7 @@ def export_table_command(
             table_info = exporter.get_table_info()
 
             # Try to detect if filter uses an indexed attribute with equality
-            auto_detected_index = _detect_usable_index(filter, expression_attribute_names, expression_attribute_values, table_info)
+            auto_detected_index = detect_usable_index(filter, expression_attribute_names, expression_attribute_values, table_info)
 
             if auto_detected_index:
                 if auto_detected_index.get("has_or"):
