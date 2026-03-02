@@ -4,89 +4,86 @@ Manage Devo CLI configuration settings.
 
 ## Overview
 
-The `config` command allows you to view, modify, and manage your Devo CLI configuration. Configuration is stored in `~/.devo/config.json` and includes AWS settings, Bedrock model preferences, and other options.
+The `config` command allows you to view, modify, and manage your Devo CLI configuration. Configuration is stored in `~/.devo/config.json` and includes settings for Bedrock, GitHub, CodeArtifact, SSM, DynamoDB, and version checking.
 
 ## Subcommands
 
 ### show
-Display all configuration settings.
+
+Display configuration settings.
 
 ```bash
+# Show all configuration
 devo config show
+
+# Show specific section
+devo config show --section ssm
+devo config show -s dynamodb
+
+# Show as JSON
+devo config show --json
 ```
 
-### get
-Get a specific configuration value.
+### sections
+
+List all available configuration sections.
 
 ```bash
-devo config get <key>
-```
-
-Examples:
-```bash
-devo config get aws.region
-devo config get bedrock.model_id
-devo config get version_check.enabled
+devo config sections
 ```
 
 ### set
-Set a configuration value.
+
+Set a configuration value using dot notation.
 
 ```bash
 devo config set <key> <value>
 ```
 
 Examples:
+
 ```bash
-devo config set aws.region us-west-2
 devo config set bedrock.model_id us.anthropic.claude-sonnet-4-20250514-v1:0
 devo config set version_check.enabled false
 ```
 
-### edit
-Open configuration file in your default editor.
-
-```bash
-devo config edit
-```
-
 ### path
+
 Show the path to the configuration file.
 
 ```bash
 devo config path
 ```
 
-### validate
-Validate configuration file syntax and values.
-
-```bash
-devo config validate
-```
-
 ### reset
+
 Reset configuration to default values.
 
 ```bash
 devo config reset
 ```
 
-**Warning:** This will delete your current configuration.
+**Warning:** This will delete your current configuration and restore defaults.
 
 ### export
-Export configuration to a file.
+
+Export configuration to a file or stdout.
 
 ```bash
-devo config export <filename>
-```
+# Export to stdout
+devo config export
 
-Examples:
-```bash
-devo config export backup.json
-devo config export ~/backups/devo-config-$(date +%Y%m%d).json
+# Export to file
+devo config export -o backup.json
+devo config export --output ~/backups/config.json
+
+# Export specific sections
+devo config export -s ssm
+devo config export --section ssm --section dynamodb -o partial.json
 ```
 
 ### import
+
 Import configuration from a file.
 
 ```bash
@@ -94,56 +91,38 @@ devo config import <filename> [--merge]
 ```
 
 Options:
+
 - `--merge` - Merge with existing configuration instead of replacing
 
 Examples:
+
 ```bash
+# Replace current config
 devo config import backup.json
+
+# Merge with existing
 devo config import team-config.json --merge
 ```
 
-### registry list
-List all configured CodeArtifact registries.
+### migrate
+
+Migrate legacy configuration files to consolidated format.
 
 ```bash
-devo config registry list
+devo config migrate
 ```
 
-### registry add
-Add a new CodeArtifact registry.
+This migrates:
 
-```bash
-devo config registry add --domain <domain> --repository <repo> --namespace <namespace>
-```
+- `~/.devo/ssm-config.json` → `ssm` section
+- `~/.devo/dynamodb/export_templates.json` → `dynamodb` section
 
-Example:
-```bash
-devo config registry add --domain my-domain --repository npm --namespace @myorg
-```
-
-### registry remove
-Remove a CodeArtifact registry by index.
-
-```bash
-devo config registry remove <index>
-```
-
-Example:
-```bash
-# List registries to see indices
-devo config registry list
-
-# Remove registry at index 2
-devo config registry remove 2
-```
-
-## Configuration Keys
+## Configuration Sections
 
 ### Bedrock Settings
 
 - `bedrock.model_id` - Primary Bedrock model ID
 - `bedrock.fallback_model_id` - Fallback model ID
-- `bedrock.region` - AWS region for Bedrock
 
 ### GitHub Settings
 
@@ -156,7 +135,16 @@ devo config registry remove 2
 - `codeartifact.account_id` - Account ID
 - `codeartifact.sso_url` - SSO URL
 - `codeartifact.required_role` - Required role
-- `codeartifact.domains` - List of domain configurations (managed via `registry` subcommands)
+- `codeartifact.domains` - List of domain configurations
+
+### SSM Settings
+
+- `ssm.databases` - Database connection configurations
+- `ssm.instances` - EC2 instance configurations
+
+### DynamoDB Settings
+
+- `dynamodb.export_templates` - Saved export filter templates
 
 ### Version Check Settings
 
@@ -170,16 +158,19 @@ devo config registry remove 2
 # Show all settings
 devo config show
 
-# Get specific value
-devo config get bedrock.model_id
+# Show specific section
+devo config show --section ssm
+
+# List available sections
+devo config sections
+
+# Show config file location
+devo config path
 ```
 
 ### Modify Settings
 
 ```bash
-# Change Bedrock region
-devo config set bedrock.region us-west-2
-
 # Use different Bedrock model
 devo config set bedrock.model_id us.anthropic.claude-sonnet-4-20250514-v1:0
 
@@ -191,63 +182,64 @@ devo config set github.repo_owner myorg
 devo config set github.repo_name my-cli
 ```
 
-### Manage CodeArtifact Registries
+### Export and Import
 
 ```bash
-# List all registries
-devo config registry list
+# Export full config to file
+devo config export -o backup.json
 
-# Add a new registry
-devo config registry add --domain my-domain --repository npm --namespace @myorg
+# Export specific sections
+devo config export -s ssm -s dynamodb -o partial.json
 
-# Remove a registry
-devo config registry remove 2
+# Import and replace
+devo config import backup.json
+
+# Import and merge
+devo config import team-config.json --merge
 ```
 
 ### Backup and Restore
 
 ```bash
-# Export current configuration
-devo config export backup.json
+# Backup current configuration
+devo config export -o ~/backups/devo-config-$(date +%Y%m%d).json
 
 # Make changes
-devo config set aws.region us-west-2
+devo config set bedrock.model_id us.anthropic.claude-sonnet-4-20250514-v1:0
 
 # Restore from backup
-devo config import backup.json
+devo config import ~/backups/devo-config-20260301.json
 ```
 
-### Team Configuration
+### Share Team Configuration
 
 ```bash
-# Export team configuration template
-devo config export team-template.json
+# Export SSM configs to share with team
+devo config export -s ssm -o ssm-team-config.json
 
-# Share with team members
-# They can import it:
-devo config import team-template.json --merge
+# Team members can import and merge
+devo config import ssm-team-config.json --merge
 ```
 
-### Edit Manually
+### Migrate Legacy Configs
 
 ```bash
-# Open in editor
-devo config edit
+# Migrate old config files
+devo config migrate
 
-# Or edit directly
-nano ~/.devo/config.json
+# Verify migration
+devo config show
 ```
 
 ## Configuration File Format
 
-The configuration file is JSON format:
+The configuration file is JSON format located at `~/.devo/config.json`:
 
 ```json
 {
   "bedrock": {
     "model_id": "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
-    "fallback_model_id": "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
-    "region": "us-east-1"
+    "fallback_model_id": "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
   },
   "github": {
     "repo_owner": "edu526",
@@ -265,6 +257,37 @@ The configuration file is JSON format:
         "namespace": "@myorg"
       }
     ]
+  },
+  "ssm": {
+    "databases": {
+      "my-db": {
+        "host": "localhost",
+        "port": 5432,
+        "instance_id": "i-1234567890abcdef0",
+        "remote_port": 5432,
+        "profile": "production"
+      }
+    },
+    "instances": {
+      "my-instance": {
+        "instance_id": "i-1234567890abcdef0",
+        "profile": "production"
+      }
+    }
+  },
+  "dynamodb": {
+    "export_templates": {
+      "users-active": {
+        "table_name": "users",
+        "filter_expression": "attribute_exists(#status) AND #status = :active",
+        "expression_attribute_names": {
+          "#status": "status"
+        },
+        "expression_attribute_values": {
+          ":active": "active"
+        }
+      }
+    }
   },
   "version_check": {
     "enabled": true
@@ -293,21 +316,34 @@ Environment variables override configuration file values:
 # Check file exists
 devo config path
 
-# Validate syntax
-devo config validate
+# View current config
+devo config show
 
 # Reset if corrupted
 devo config reset
 ```
 
+### Migrating from Old Config Files
+
+If you have legacy configuration files:
+
+```bash
+# Migrate automatically
+devo config migrate
+
+# Verify migration
+devo config show -s ssm
+devo config show -s dynamodb
+```
+
 ### Invalid Values
 
 ```bash
-# Validate configuration
-devo config validate
+# View specific section
+devo config show --section bedrock
 
-# Check specific value
-devo config get aws.region
+# Reset to defaults
+devo config reset
 ```
 
 ## See Also
