@@ -2,6 +2,136 @@
 
 <!-- version list -->
 
+## v3.1.0 (2026-03-02)
+
+### Bug Fixes
+
+- **installer**: Add filter parameter to tarfile extraction for security
+  ([`5668de9`](https://github.com/edu526/devo-cli/commit/5668de923e3093bced4910172e64ebb0cb479d4e))
+
+### Chores
+
+- **ci**: Move unit tests to pre-push hook and add Python 3.13 support
+  ([`d6d1ce4`](https://github.com/edu526/devo-cli/commit/d6d1ce47f113112772d49bca909111bd1db337d5))
+
+- **deps**: Add pytest-cov and moto to dev dependencies
+  ([`2ca6f89`](https://github.com/edu526/devo-cli/commit/2ca6f89b3a8ee18086586ca6d7fffbb514a1beda))
+
+- **isort**: Exclude _version.py from import sorting
+  ([`c7ae150`](https://github.com/edu526/devo-cli/commit/c7ae15087df49fb6750589db6fd951cae6ca0ba6))
+
+- **makefile**: Consolidate install targets and simplify dependency management
+  ([`92d0f10`](https://github.com/edu526/devo-cli/commit/92d0f10ac115c31521c22632b6671904382aedf3))
+
+### Code Style
+
+- Normalize code formatting and pre-commit hook stages
+  ([`eac95bb`](https://github.com/edu526/devo-cli/commit/eac95bbc81518fd315fa9ecd604bd9b83d96fd40))
+
+### Continuous Integration
+
+- Add Codecov token secret passing to workflows
+  ([`02be0b0`](https://github.com/edu526/devo-cli/commit/02be0b00807a469789783e7eba73511ee0cad356))
+
+- Add lint job dependency to test workflows
+  ([`9b5d637`](https://github.com/edu526/devo-cli/commit/9b5d637ec4f73d84d2edf718088acc482e43d95b))
+
+- Adjust CI/CD configuration and test coverage thresholds
+  ([`c2baad8`](https://github.com/edu526/devo-cli/commit/c2baad8ce54f2a43bf52d60626f7a7a8e88dcd55))
+
+- Adjust coverage threshold and improve coverage configuration
+  ([`18f9dce`](https://github.com/edu526/devo-cli/commit/18f9dceba1d6fc59bd778f40ca53f1783de8a945))
+
+- Expand test matrix and refactor workflows for multi-platform coverage
+  ([`e2c889d`](https://github.com/edu526/devo-cli/commit/e2c889db9d72fc7afdb3f6acd33a2a350e6f3d16))
+
+- Install package in editable mode for development workflows
+  ([`fa7ef9e`](https://github.com/edu526/devo-cli/commit/fa7ef9efd5ad850fbff0d97a125a79e63bccc28c))
+
+- Optimize CI/CD workflows with pip caching and dependency groups
+  ([`4752f8c`](https://github.com/edu526/devo-cli/commit/4752f8cd5cdb5b8de70ecca4b102609e8ae71f05))
+
+- Refactor workflows with reusable lint job and matrix strategy
+  ([`ba11537`](https://github.com/edu526/devo-cli/commit/ba115378cf2f4f72821ab8cc08343ae9d68c9e8b))
+
+- Update macOS runner from macos-14-large to macos-15-intel
+  ([`a4513bb`](https://github.com/edu526/devo-cli/commit/a4513bb34b08d570d926d34c5cbe79fb3627173a))
+
+- **test-reusable**: Enhance test workflow with improved coverage reporting
+  ([`272d019`](https://github.com/edu526/devo-cli/commit/272d0199232f83c5023d2f2ec841e6022d246181))
+
+### Documentation
+
+- Add architecture documentation and command READMEs
+  ([`9a20541`](https://github.com/edu526/devo-cli/commit/9a205416c6768f6bee1e8e0ddb7df2085f7ef48a))
+
+- **commands**: Update module paths to reflect unified commands directory
+  ([`31b466a`](https://github.com/edu526/devo-cli/commit/31b466a1613bb44ff28ffadf583e02c938a872cf))
+
+### Features
+
+- **ssm**: Enhance database connection display with rich table formatting
+  ([`a2f5ab0`](https://github.com/edu526/devo-cli/commit/a2f5ab0529f00c038afdc6a7aed025e9de91f1af))
+
+### Refactoring
+
+- **autocomplete**: Restructure into modular command and core architecture
+  ([`4560759`](https://github.com/edu526/devo-cli/commit/4560759f9f0e592bc3a074df6e202fcf8c36e314))
+
+- **aws-login**: Restructure into modular command and core architecture
+  ([`5594a9b`](https://github.com/edu526/devo-cli/commit/5594a9b913f9d22fe89ebf61b381d7eec1339285))
+
+- **cli**: Consolidate command modules under unified commands directory
+  ([`4f7d479`](https://github.com/edu526/devo-cli/commit/4f7d47903a876ed9b99e2acbaf4ed076b1ebc46e))
+
+- **cli**: Eliminate thin wrapper layer in cli_tool/commands/
+  ([`cf35933`](https://github.com/edu526/devo-cli/commit/cf35933e6c271feddffd6f09bec86b0c87c3ed57))
+
+- **code_reviewer**: Restructure into modular command and core architecture
+  ([`4c61124`](https://github.com/edu526/devo-cli/commit/4c6112468c1b047904b7dddc13e3034c0300db69))
+
+- **code_reviewer, dynamodb**: Restructure into modular command and core architecture
+  ([`4628df4`](https://github.com/edu526/devo-cli/commit/4628df4f96daae84140c007257fc56a623caf75f))
+
+- **codeartifact**: Restructure into modular command and core architecture
+  ([`2a41211`](https://github.com/edu526/devo-cli/commit/2a41211c6c7cbf4acd2417906b0d509f71fa6904))
+
+- **commit**: Restructure into modular command and core architecture
+  ([`584a21d`](https://github.com/edu526/devo-cli/commit/584a21de801bd7910c08370eac5f44a80d017cae))
+
+- **config**: Restructure into modular command and core architecture
+  ([`432b24e`](https://github.com/edu526/devo-cli/commit/432b24ef274be8903dcb4455bbb16fa8c061a02b))
+
+- **core**: Add explicit exports to agent and utils modules
+  ([`73774d5`](https://github.com/edu526/devo-cli/commit/73774d5b4cfbc541e28a655822f9cbc6a5132c6b))
+
+- **dynamodb**: Restructure into modular command and core architecture
+  ([`cf58ba1`](https://github.com/edu526/devo-cli/commit/cf58ba1708a425919f0168cdd1e279e4022d5a5d))
+
+- **eventbridge**: Restructure into modular command and core architecture
+  ([`0e34093`](https://github.com/edu526/devo-cli/commit/0e34093f10d4360119d4bea44765c7b1bf31ec6b))
+
+- **ssm**: Restructure into modular command architecture
+  ([`0264ceb`](https://github.com/edu526/devo-cli/commit/0264cebb39de89d731ea0fb6e63836168e14143a))
+
+- **upgrade**: Restructure into modular command and core architecture
+  ([`2bbb19b`](https://github.com/edu526/devo-cli/commit/2bbb19bbc73653689a7971928d90604dddd2a7b8))
+
+### Testing
+
+- Add comprehensive test suite with fixtures and CI/CD improvements
+  ([`c5d8f05`](https://github.com/edu526/devo-cli/commit/c5d8f0520a94a097385e2c4596abcd9191c49972))
+
+- Expand test suite with error handling, integration, and regression tests
+  ([`a28344e`](https://github.com/edu526/devo-cli/commit/a28344e4b0fd48d7c65aac46c3d355f71794eec3))
+
+- Improve cross-platform test reliability and Windows mocking
+  ([`a245849`](https://github.com/edu526/devo-cli/commit/a245849a68cb30db998d96134b1f929f582fd0e1))
+
+- **aws_login**: Add comprehensive test suite for list profiles command
+  ([`f5f4697`](https://github.com/edu526/devo-cli/commit/f5f469749e8bde2ce3114711077fb051a62bfda1))
+
+
 ## v3.0.0 (2026-03-02)
 
 ### Bug Fixes
