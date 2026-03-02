@@ -86,23 +86,23 @@ def describe_table(ctx, table_name: str, region: str):
 )
 @click.option(
     "--filter",
-    help="Filter expression for scan/query",
+    help="Filter expression for scan/query (auto-detects indexes for optimization)",
 )
 @click.option(
     "--filter-values",
-    help='Expression attribute values as JSON (e.g., \'{":val": "active"}\')',
+    help='[Advanced] Expression attribute values as JSON (e.g., \'{":val": "active"}\')',
 )
 @click.option(
     "--filter-names",
-    help='Expression attribute names as JSON (e.g., \'{"#status": "status"}\')',
+    help='[Advanced] Expression attribute names as JSON (e.g., \'{"#status": "status"}\')',
 )
 @click.option(
     "--key-condition",
-    help="Key condition expression for query (requires partition key)",
+    help="[Advanced] Manual key condition expression (auto-detected from --filter in most cases)",
 )
 @click.option(
     "--index",
-    help="Global or Local Secondary Index name to use",
+    help="[Advanced] Force specific GSI/LSI (auto-selected from --filter in most cases)",
 )
 @click.option(
     "--mode",
@@ -214,14 +214,17 @@ def export_table(
       # Export entire table to CSV
       devo dynamodb export my-table
 
+      # Export with filter (auto-detects indexes and optimizes query)
+      devo dynamodb export my-table --filter "userId = user123"
+
       # Export with specific attributes
-      devo dynamodb export my-table -a "id,name,email"
+      devo dynamodb export my-table -a "id,name,email" --filter "status = active"
 
       # Export to JSON with compression
       devo dynamodb export my-table -f json --compress gzip
 
-      # Query with key condition
-      devo dynamodb export my-table --key-condition "userId = :uid"
+      # Advanced: Manual key condition (rarely needed, auto-detected from --filter)
+      devo dynamodb export my-table --key-condition "userId = :uid" --filter-values '{":uid": "user123"}'
     """
     from cli_tool.utils.aws import select_profile
 
