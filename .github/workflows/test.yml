@@ -36,53 +36,45 @@ jobs:
       - name: Run isort check
         run: isort --check-only cli_tool tests
 
-  test:
-    name: Test on ${{ matrix.os }} with Python ${{ matrix.python-version }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ['3.12', '3.13']
-        exclude:
-          # macos-latest is arm64, skip one combination to save minutes
-          - os: macos-latest
-            python-version: '3.13'
+  test-ubuntu-312:
+    name: Test on ubuntu-latest with Python 3.12
+    uses: ./.github/workflows/test-reusable.yml
+    with:
+      os: ubuntu-latest
+      python-version: '3.12'
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+  test-ubuntu-313:
+    name: Test on ubuntu-latest with Python 3.13
+    uses: ./.github/workflows/test-reusable.yml
+    with:
+      os: ubuntu-latest
+      python-version: '3.13'
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: 'pip'
-          cache-dependency-path: 'pyproject.toml'
+  test-windows-312:
+    name: Test on windows-latest with Python 3.12
+    uses: ./.github/workflows/test-reusable.yml
+    with:
+      os: windows-latest
+      python-version: '3.12'
 
-      - name: Install dependencies
-        run: |
-          pip install -e ".[dev]"
+  test-windows-313:
+    name: Test on windows-latest with Python 3.13
+    uses: ./.github/workflows/test-reusable.yml
+    with:
+      os: windows-latest
+      python-version: '3.13'
 
-      - name: Run pre-commit checks
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        run: pre-commit run --all-files
-
-      - name: Run tests with coverage
-        run: pytest --cov=cli_tool --cov-report=xml --cov-report=term-missing --cov-fail-under=40 -v
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          file: ./coverage.xml
-          flags: ${{ matrix.os }}-python${{ matrix.python-version }}
-          fail_ci_if_error: false
+  test-macos-312:
+    name: Test on macos-latest with Python 3.12
+    uses: ./.github/workflows/test-reusable.yml
+    with:
+      os: macos-latest
+      python-version: '3.12'
 
   build-test:
     name: Test Binary Build (${{ matrix.platform }}-${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
-    needs: test
+    needs: [test-ubuntu-312, test-ubuntu-313, test-windows-312, test-windows-313, test-macos-312]
     strategy:
       matrix:
         include:
