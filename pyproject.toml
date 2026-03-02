@@ -44,6 +44,11 @@ dev = [
     "pre-commit>=3.0.0",
 ]
 
+docs = [
+    "mkdocs-material>=9.0.0",
+    "mkdocs-click>=0.8.0",
+]
+
 [project.scripts]
 devo = "cli_tool.cli:main"
 

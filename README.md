@@ -206,6 +206,21 @@ make install-dev
 make completion
 ```
 
+### Optional Dependencies
+
+The project has different dependency groups for different purposes:
+
+```bash
+# Development (testing, linting, formatting)
+pip install -e ".[dev]"
+
+# Documentation (building docs)
+pip install -e ".[docs]"
+
+# All optional dependencies
+pip install -e ".[dev,docs]"
+```
+
 ### Git Hooks
 
 The project uses pre-commit hooks for code quality:
