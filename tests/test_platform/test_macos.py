@@ -94,18 +94,24 @@ class TestMacOSShellCompletion:
         # Mock zsh config file path
         zsh_rc = temp_config_dir / ".zshrc"
 
-        # Mock the installer to use our temp path
-        mock_installer = mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller")
-        mock_installer.is_supported_shell.return_value = True
-        mock_installer.is_already_configured.return_value = False
-        mock_installer.install.return_value = (True, f"Shell completion configured in {zsh_rc}")
+        # Mock the installer methods directly
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_supported_shell", return_value=True)
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_already_configured", return_value=False)
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.get_config_file", return_value=zsh_rc)
+        mocker.patch(
+            "cli_tool.commands.autocomplete.core.installer.CompletionInstaller.install",
+            return_value=(True, f"Shell completion configured in {zsh_rc}"),
+        )
+
+        # Mock SHELL environment variable
+        mocker.patch.dict("os.environ", {"SHELL": "/bin/zsh"})
 
         # Run installation
-        result = cli_runner.invoke(autocomplete, ["--install", "zsh", "--yes"])
+        result = cli_runner.invoke(autocomplete, ["--install", "--yes"])
 
         # Verify success
         assert result.exit_code == 0
-        assert "configured" in result.output.lower() or "success" in result.output.lower()
+        assert "configured" in result.output.lower() or "success" in result.output.lower() or "✅" in result.output
 
     def test_bash_completion_installation(self, cli_runner, temp_config_dir, mocker):
         """Test bash completion installation on macOS.
@@ -117,18 +123,24 @@ class TestMacOSShellCompletion:
         # Mock bash config file path
         bash_rc = temp_config_dir / ".bashrc"
 
-        # Mock the installer to use our temp path
-        mock_installer = mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller")
-        mock_installer.is_supported_shell.return_value = True
-        mock_installer.is_already_configured.return_value = False
-        mock_installer.install.return_value = (True, f"Shell completion configured in {bash_rc}")
+        # Mock the installer methods directly
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_supported_shell", return_value=True)
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_already_configured", return_value=False)
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.get_config_file", return_value=bash_rc)
+        mocker.patch(
+            "cli_tool.commands.autocomplete.core.installer.CompletionInstaller.install",
+            return_value=(True, f"Shell completion configured in {bash_rc}"),
+        )
+
+        # Mock SHELL environment variable
+        mocker.patch.dict("os.environ", {"SHELL": "/bin/bash"})
 
         # Run installation
-        result = cli_runner.invoke(autocomplete, ["--install", "bash", "--yes"])
+        result = cli_runner.invoke(autocomplete, ["--install", "--yes"])
 
         # Verify success
         assert result.exit_code == 0
-        assert "configured" in result.output.lower() or "success" in result.output.lower()
+        assert "configured" in result.output.lower() or "success" in result.output.lower() or "✅" in result.output
 
     def test_zsh_completion_already_configured(self, cli_runner, temp_config_dir, mocker):
         """Test zsh completion when already configured.
@@ -137,14 +149,19 @@ class TestMacOSShellCompletion:
         """
         from cli_tool.commands.autocomplete.commands.autocomplete import autocomplete
 
+        # Mock zsh config file path
+        zsh_rc = temp_config_dir / ".zshrc"
+
         # Mock that completion is already configured
-        mock_installer = mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller")
-        mock_installer.is_supported_shell.return_value = True
-        mock_installer.is_already_configured.return_value = True
-        mock_installer.install.return_value = (True, "Shell completion already configured")
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_supported_shell", return_value=True)
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_already_configured", return_value=True)
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.get_config_file", return_value=zsh_rc)
+
+        # Mock SHELL environment variable
+        mocker.patch.dict("os.environ", {"SHELL": "/bin/zsh"})
 
         # Run installation
-        result = cli_runner.invoke(autocomplete, ["--install", "zsh", "--yes"])
+        result = cli_runner.invoke(autocomplete, ["--install", "--yes"])
 
         # Should indicate already configured
         assert result.exit_code == 0
@@ -157,14 +174,19 @@ class TestMacOSShellCompletion:
         """
         from cli_tool.commands.autocomplete.commands.autocomplete import autocomplete
 
+        # Mock bash config file path
+        bash_rc = temp_config_dir / ".bashrc"
+
         # Mock that completion is already configured
-        mock_installer = mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller")
-        mock_installer.is_supported_shell.return_value = True
-        mock_installer.is_already_configured.return_value = True
-        mock_installer.install.return_value = (True, "Shell completion already configured")
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_supported_shell", return_value=True)
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_already_configured", return_value=True)
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.get_config_file", return_value=bash_rc)
+
+        # Mock SHELL environment variable
+        mocker.patch.dict("os.environ", {"SHELL": "/bin/bash"})
 
         # Run installation
-        result = cli_runner.invoke(autocomplete, ["--install", "bash", "--yes"])
+        result = cli_runner.invoke(autocomplete, ["--install", "--yes"])
 
         # Should indicate already configured
         assert result.exit_code == 0

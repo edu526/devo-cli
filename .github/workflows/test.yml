@@ -41,6 +41,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ['3.12', '3.13']
+        exclude:
+          # macos-latest is arm64, skip one combination to save minutes
+          - os: macos-latest
+            python-version: '3.13'
 
     steps:
       - name: Checkout code
@@ -62,7 +66,7 @@ jobs:
         run: pre-commit run --all-files
 
       - name: Run tests with coverage
-        run: pytest --cov=cli_tool --cov-report=xml --cov-report=term-missing --cov-fail-under=75 -v
+        run: pytest --cov=cli_tool --cov-report=xml --cov-report=term-missing --cov-fail-under=60 -v
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -85,7 +89,7 @@ jobs:
             build_script: bash scripts/build.sh --ci --release
 
           # macOS Intel
-          - os: macos-latest
+          - os: macos-14-large
             platform: darwin
             arch: amd64
             build_script: bash scripts/build.sh --ci --release

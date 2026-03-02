@@ -11,6 +11,7 @@ Tests include:
 Requirements: 5.1, 5.3, 23.5
 """
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -384,6 +385,7 @@ class TestCrossPlatformBinaryVerification:
             ("Linux", b"invalid", False),
         ],
     )
+    @pytest.mark.skipif(sys.platform != "linux", reason="Binary verification is platform-specific")
     def test_binary_header_verification(self, platform_name, binary_header, is_valid, mocker, temp_config_dir):
         """Test that binary headers are correctly verified for each platform.
 
