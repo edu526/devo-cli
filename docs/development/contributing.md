@@ -64,8 +64,9 @@ Branch naming:
 
 Edit files in:
 - `cli_tool/commands/` - CLI commands
-- `cli_tool/agents/` - AI logic
-- `cli_tool/utils/` - Utilities
+- `cli_tool/core/agents/` - AI logic
+- `cli_tool/core/utils/` - Utilities
+- `cli_tool/core/ui/` - UI components
 - `tests/` - Tests
 
 ### 3. Test Changes

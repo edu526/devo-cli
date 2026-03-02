@@ -68,7 +68,7 @@ Self-updates the CLI tool to the latest version.
 - Prompts for complex features organized in `prompt/` subdirectories
 
 ### AI Agent Pattern
-- All AI features extend `BaseAgent` from `cli_tool/agents/base_agent.py`
+- All AI features extend `BaseAgent` from `cli_tool/core/agents/base_agent.py`
 - System prompts defined inline or in dedicated prompt modules
 - Structured outputs using Pydantic models for type safety
 
