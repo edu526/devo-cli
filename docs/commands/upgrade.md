@@ -15,7 +15,7 @@ Automatically downloads and installs the latest version of Devo CLI from the con
 ## Usage
 
 ::: mkdocs-click
-    :module: cli_tool.commands.upgrade
+    :module: cli_tool.upgrade.commands.upgrade
     :command: upgrade
     :prog_name: devo
     :depth: 1
