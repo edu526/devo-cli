@@ -15,7 +15,7 @@ Performs comprehensive analysis of code changes using AWS Bedrock AI. Analyzes s
 ## Usage
 
 ::: mkdocs-click
-    :module: cli_tool.code_reviewer.commands.analyze
+    :module: cli_tool.commands.code_reviewer.commands.analyze
     :command: code_reviewer
     :prog_name: devo
     :depth: 1
