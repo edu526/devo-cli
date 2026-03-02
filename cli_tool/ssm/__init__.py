@@ -1,11 +1,10 @@
 """AWS Systems Manager Session Manager integration"""
 
-from cli_tool.ssm.config import SSMConfigManager
-from cli_tool.ssm.hosts_manager import HostsManager
-from cli_tool.ssm.port_forwarder import PortForwarder
-from cli_tool.ssm.session import SSMSession
+# Backward compatibility imports
+from cli_tool.ssm.core import PortForwarder, SSMConfigManager, SSMSession
+from cli_tool.ssm.utils import HostsManager
 
-# Backward compatibility
+# Backward compatibility alias
 SocatManager = PortForwarder
 
 __all__ = ["SSMConfigManager", "SSMSession", "HostsManager", "PortForwarder", "SocatManager"]
