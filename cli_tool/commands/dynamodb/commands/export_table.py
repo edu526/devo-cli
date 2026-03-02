@@ -113,14 +113,67 @@ def export_table_command(
         if not yes and not dry_run:
             estimate_export_size(exporter)
 
-        # Prepare projection expression
+        # Initialize expression attribute names and values
+        expression_attribute_names = None
+        expression_attribute_values = None
+
+        # Prepare projection expression with reserved keyword handling
         projection_expression = None
         if attributes:
-            projection_expression = attributes.replace(",", ", ")
+            # DynamoDB reserved keywords that need to be escaped
+            RESERVED_KEYWORDS = {
+                "name",
+                "status",
+                "type",
+                "value",
+                "data",
+                "timestamp",
+                "date",
+                "time",
+                "year",
+                "month",
+                "day",
+                "hour",
+                "minute",
+                "second",
+                "order",
+                "group",
+                "size",
+                "key",
+                "index",
+                "count",
+                "range",
+                "hash",
+                "table",
+                "column",
+                "attribute",
+                "attributes",
+                "connection",
+                "percent",
+                "values",
+                "format",
+            }
 
-        # Parse filter values and names
-        expression_attribute_values = None
-        expression_attribute_names = None
+            attr_list = [attr.strip() for attr in attributes.split(",")]
+            needs_escaping = any(attr.lower() in RESERVED_KEYWORDS for attr in attr_list)
+
+            if needs_escaping:
+                # Use ExpressionAttributeNames for reserved keywords
+                if not expression_attribute_names:
+                    expression_attribute_names = {}
+
+                escaped_attrs = []
+                for attr in attr_list:
+                    if attr.lower() in RESERVED_KEYWORDS:
+                        placeholder = f"#{attr}"
+                        expression_attribute_names[placeholder] = attr
+                        escaped_attrs.append(placeholder)
+                    else:
+                        escaped_attrs.append(attr)
+
+                projection_expression = ", ".join(escaped_attrs)
+            else:
+                projection_expression = attributes.replace(",", ", ")
 
         # Use FilterBuilder if simple filter syntax is provided
         if filter and not filter_values:
@@ -174,12 +227,27 @@ def export_table_command(
                         console.print(f"[green]✓ Detected OR condition with {len(indexed_attrs)} indexed attributes[/green]")
                         console.print("[cyan]  Using multiple queries for optimal performance[/cyan]")
 
+                        # Extract remaining filter from the already-parsed filter expression
+                        # The filter variable now contains the parsed expression like:
+                        # ((#attr0 = :val0 OR #attr1 = :val1) AND #attr2 >= :val2)
+                        # We need to extract "#attr2 >= :val2" as the remaining filter
+                        remaining_filter = None
+
+                        # Check if there's an AND in the parsed filter expression
+                        if filter and expression_attribute_values and expression_attribute_names:
+                            # Look for AND in the parsed expression
+                            and_match = re.search(r"\)\s+AND\s+(.+)\)$", filter, re.IGNORECASE)
+                            if and_match:
+                                remaining_filter = and_match.group(1).strip()
+                                console.print(f"[cyan]  Additional filter: {remaining_filter}[/cyan]")
+
                         # Build query configs for each indexed attribute
                         for attr_info in indexed_attrs:
                             query_config = {
                                 "key_condition": f"{attr_info['attr_ref']} = {attr_info['value_ref']}",
                                 "index_name": attr_info.get("index_name"),
                                 "key_attribute": attr_info["key_attribute"],
+                                "filter_expression": remaining_filter,
                             }
                             query_configs.append(query_config)
                             index_display = f"GSI: {query_config['index_name']}" if query_config["index_name"] else "main table"
@@ -261,23 +329,54 @@ def export_table_command(
             for idx, query_config in enumerate(query_configs, 1):
                 console.print(f"\n[cyan]Executing query {idx}/{len(query_configs)}...[/cyan]")
 
-                # Extract only the values needed for this specific query
+                # Extract only the values and names needed for this specific query
+                # Extract values and names needed for this specific query
                 query_values = {}
+                query_names = {}
+
+                # Add the key condition value
                 if expression_attribute_values:
-                    # Find which value placeholder is used in this key condition
                     value_placeholder = query_config["key_condition"].split("=")[1].strip()
                     if value_placeholder in expression_attribute_values:
                         query_values[value_placeholder] = expression_attribute_values[value_placeholder]
 
+                # Add the key condition name
+                if expression_attribute_names:
+                    name_placeholder = query_config["key_condition"].split("=")[0].strip()
+                    if name_placeholder in expression_attribute_names:
+                        query_names[name_placeholder] = expression_attribute_names[name_placeholder]
+
+                # If there's a filter expression, include all values and names used in it
+                if query_config.get("filter_expression"):
+                    filter_expr = query_config["filter_expression"]
+
+                    # Find all value placeholders in the filter (:val0, :val1, etc.)
+                    if expression_attribute_values:
+                        for val_key in expression_attribute_values:
+                            if val_key in filter_expr:
+                                query_values[val_key] = expression_attribute_values[val_key]
+
+                    # Find all name placeholders in the filter (#attr0, #attr1, etc.)
+                    if expression_attribute_names:
+                        for name_key in expression_attribute_names:
+                            if name_key in filter_expr:
+                                query_names[name_key] = expression_attribute_names[name_key]
+
+                # Include names used in projection_expression
+                if projection_expression and expression_attribute_names:
+                    for name_key, name_value in expression_attribute_names.items():
+                        if name_key in projection_expression:
+                            query_names[name_key] = name_value
+
                 try:
                     query_items = exporter.query_table(
                         key_condition_expression=query_config["key_condition"],
-                        filter_expression=None,  # OR conditions don't have additional filters
+                        filter_expression=query_config.get("filter_expression"),
                         projection_expression=projection_expression,
                         index_name=query_config.get("index_name"),
                         limit=limit_per_query,  # Apply per-query limit
-                        expression_attribute_values=query_values,
-                        expression_attribute_names=expression_attribute_names,
+                        expression_attribute_values=query_values if query_values else None,
+                        expression_attribute_names=query_names if query_names else None,
                     )
 
                     # Deduplicate items using primary key attributes
@@ -312,12 +411,12 @@ def export_table_command(
                         # Retry this query
                         query_items = exporter.query_table(
                             key_condition_expression=query_config["key_condition"],
-                            filter_expression=None,
+                            filter_expression=query_config.get("filter_expression"),
                             projection_expression=projection_expression,
                             index_name=query_config.get("index_name"),
                             limit=limit_per_query,
                             expression_attribute_values=query_values,
-                            expression_attribute_names=expression_attribute_names,
+                            expression_attribute_names=query_names if query_names else None,
                         )
                         # Process items (same deduplication logic)
                         for item in query_items:
@@ -430,8 +529,10 @@ def export_table_command(
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             extension = "csv" if format == "csv" else "tsv" if format == "tsv" else "jsonl" if format == "jsonl" else "json"
             output = f"{table_name}_{timestamp}.{extension}"
-
-        output_path = Path(output)
+            # Use current working directory for default filename
+            output_path = Path.cwd() / output
+        else:
+            output_path = Path(output)
 
         # Validate write permissions before starting export
         try:
@@ -460,7 +561,7 @@ def export_table_command(
         if format in ["csv", "tsv"]:
             csv_delimiter = "\t" if format == "tsv" else delimiter
 
-            exporter.export_to_csv(
+            actual_output_path = exporter.export_to_csv(
                 items=items,
                 output_file=output_path,
                 mode=mode,
@@ -473,7 +574,7 @@ def export_table_command(
             )
         else:
             # JSON or JSONL
-            exporter.export_to_json(
+            actual_output_path = exporter.export_to_json(
                 items=items,
                 output_file=output_path,
                 jsonl=(format == "jsonl"),
@@ -483,7 +584,7 @@ def export_table_command(
             )
 
         # Print statistics
-        exporter.print_stats(output_path)
+        exporter.print_stats(actual_output_path)
 
         # Save template if requested
         if save_template:
