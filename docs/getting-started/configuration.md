@@ -16,41 +16,49 @@ The configuration file is automatically created with default values on first run
 # Show all configuration
 devo config show
 
-# Get specific value
-devo config get aws.region
-devo config get bedrock.model_id
+# Show specific section
+devo config show --section ssm
+devo config show -s dynamodb
+
+# Show as JSON
+devo config show --json
+
+# List available sections
+devo config sections
+
+# Show config file path
+devo config path
 ```
 
 ### Modify Configuration
 
 ```bash
-# Set a value
-devo config set aws.region us-west-2
+# Set a value (dot notation)
 devo config set bedrock.model_id us.anthropic.claude-sonnet-4-20250514-v1:0
 devo config set version_check.enabled false
 
-# Edit in your default editor
-devo config edit
-
-# Show config file path
-devo config path
-
-# Validate configuration
-devo config validate
-
 # Reset to defaults
 devo config reset
+
+# Migrate legacy config files
+devo config migrate
 ```
 
 ### Export/Import Configuration
 
 ```bash
-# Export configuration to a file
-devo config export my-config.json
-devo config export ~/backup/devo-config-$(date +%Y%m%d).json
+# Export full configuration to stdout
+devo config export
+
+# Export to file
+devo config export -o backup.json
+
+# Export specific sections
+devo config export -s ssm -s dynamodb
+devo config export --section ssm --output ssm-config.json
 
 # Import configuration (replaces current)
-devo config import my-config.json
+devo config import backup.json
 
 # Import and merge with existing configuration
 devo config import team-config.json --merge
@@ -62,10 +70,13 @@ devo config import team-config.json --merge
 - Share configuration templates with your team
 - Sync configuration across multiple machines
 - Restore configuration after reset
+- Export specific sections for sharing (e.g., SSM configs)
 
 ## Configuration Structure
 
-### AWS Configuration
+The configuration file is located at `~/.devo/config.json` and contains the following sections:
+
+### CodeArtifact Configuration
 
 ```json
 {
@@ -85,10 +96,11 @@ devo config import team-config.json --merge
 }
 ```
 
-- **region**: AWS region for all AWS operations
+- **region**: AWS region for CodeArtifact operations
 - **account_id**: Required AWS account ID for authentication
 - **sso_url**: AWS SSO URL for obtaining credentials
 - **required_role**: Required IAM role name for operations
+- **domains**: List of CodeArtifact registry configurations
 
 ### Bedrock Configuration
 
@@ -123,34 +135,55 @@ Available models:
 - **repo_owner**: GitHub repository owner/organization
 - **repo_name**: GitHub repository name
 
-### CodeArtifact Configuration
+### SSM Configuration
 
 ```json
 {
-  "codeartifact": {
-    "region": "us-east-1",
-    "account_id": "123456789012",
-    "sso_url": "https://my-org.awsapps.com/start",
-    "required_role": "Developer",
-    "domains": [
-      {
-        "domain": "my-domain",
-        "repository": "npm",
-        "namespace": "@myorg"
+  "ssm": {
+    "databases": {
+      "my-db": {
+        "host": "localhost",
+        "port": 5432,
+        "instance_id": "i-1234567890abcdef0",
+        "remote_port": 5432,
+        "profile": "production"
       }
-    ]
+    },
+    "instances": {
+      "my-instance": {
+        "instance_id": "i-1234567890abcdef0",
+        "profile": "production"
+      }
+    }
   }
 }
 ```
 
-- **region**: AWS region for CodeArtifact operations
-- **account_id**: AWS account ID
-- **sso_url**: AWS SSO URL for authentication
-- **required_role**: Required IAM role name
-- **domains**: List of CodeArtifact registry configurations
-  - **domain**: Domain name
-  - **repository**: Repository name
-  - **namespace**: NPM namespace
+- **databases**: Database connection configurations for port forwarding
+- **instances**: EC2 instance configurations for SSM connections
+
+### DynamoDB Configuration
+
+```json
+{
+  "dynamodb": {
+    "export_templates": {
+      "users-active": {
+        "table_name": "users",
+        "filter_expression": "attribute_exists(#status) AND #status = :active",
+        "expression_attribute_names": {
+          "#status": "status"
+        },
+        "expression_attribute_values": {
+          ":active": "active"
+        }
+      }
+    }
+  }
+}
+```
+
+- **export_templates**: Saved filter templates for DynamoDB exports
 
 ### Version Check Configuration
 
@@ -187,16 +220,26 @@ Configuration is loaded in the following order (later sources override earlier o
 3. Environment variables
 4. Command-line arguments (where applicable)
 
-## Examples
+## Migration from Legacy Configs
 
-### Custom AWS Configuration
+If you have existing configuration files in the old format, use the migrate command:
 
 ```bash
-devo config set aws.region eu-west-1
-devo config set aws.account_id 123456789012
-devo config set aws.sso_url https://mycompany.awsapps.com/start
-devo config set aws.required_role Developer
+# Migrate from legacy files
+devo config migrate
+
+# This will migrate:
+# - ~/.devo/ssm-config.json → ~/.devo/config.json (ssm section)
+# - ~/.devo/dynamodb/export_templates.json → ~/.devo/config.json (dynamodb section)
 ```
+
+The migrate command:
+
+- Preserves existing data in the consolidated config
+- Backs up legacy files before migration
+- Only migrates if legacy files exist
+
+## Examples
 
 ### Using Different Bedrock Model
 
@@ -216,40 +259,30 @@ Or temporarily:
 DEVO_SKIP_VERSION_CHECK=1 devo commit
 ```
 
-### Custom GitHub Repository
+### View Specific Configuration Section
 
 ```bash
-devo config set github.repo_owner myorg
-devo config set github.repo_name my-custom-cli
+# View SSM configuration
+devo config show --section ssm
+
+# View DynamoDB templates
+devo config show -s dynamodb
+
+# Export SSM config to share with team
+devo config export -s ssm -o ssm-config.json
 ```
 
-### Add CodeArtifact Registry
+### Backup and Restore Configuration
 
 ```bash
-# List current registries
-devo config registry list
+# Backup current configuration
+devo config export -o ~/backups/devo-config-$(date +%Y%m%d).json
 
-# Add a new registry
-devo config registry add --domain my-domain --repository my-repo --namespace @myorg
+# Restore from backup
+devo config import ~/backups/devo-config-20260301.json
 
-# Remove a registry by index
-devo config registry remove 2
-```
-
-Or edit the configuration file directly:
-
-```bash
-devo config edit
-```
-
-Then add a new registry to the `codeartifact.domains` array:
-
-```json
-{
-  "domain": "my-domain",
-  "repository": "my-repo",
-  "namespace": "@myorg"
-}
+# Merge team configuration
+devo config import team-config.json --merge
 ```
 
 ## Troubleshooting
@@ -257,12 +290,15 @@ Then add a new registry to the `codeartifact.domains` array:
 ### Configuration Not Loading
 
 1. Check file exists: `devo config path`
-2. Validate configuration: `devo config validate`
+2. View current config: `devo config show`
 3. Reset to defaults: `devo config reset`
 
 ### Configuration File Corrupted
 
 ```bash
+# Backup current config (if possible)
+devo config export -o backup.json
+
 # Reset to defaults
 devo config reset
 
@@ -271,15 +307,30 @@ rm ~/.devo/config.json
 devo config show  # Will create new default config
 ```
 
-### AWS Credentials Issues
+### Migrating from Old Config Files
 
-1. Verify account ID: `devo config get aws.account_id`
-2. Check SSO URL: `devo config get aws.sso_url`
-3. Verify with AWS CLI: `aws sts get-caller-identity`
+If you have legacy config files (`~/.devo/ssm-config.json` or `~/.devo/dynamodb/export_templates.json`):
+
+```bash
+# Migrate automatically
+devo config migrate
+
+# Verify migration
+devo config show
+```
+
+### AWS Profile Issues
+
+For AWS profile selection and credentials:
+
+1. List available profiles: `devo aws-login --list`
+2. Check profile status: `devo aws-login --status`
+3. Login to profile: `devo aws-login --profile production`
+4. Verify credentials: `aws sts get-caller-identity --profile production`
 
 ### Bedrock Model Issues
 
-1. Check model ID: `devo config get bedrock.model_id`
+1. Check model ID: `devo config show -s bedrock`
 2. Verify model is available in your region
 3. Try fallback model: `devo config set bedrock.model_id us.anthropic.claude-3-7-sonnet-20250219-v1:0`
 
