@@ -17,45 +17,26 @@ permissions:
   pull-requests: write
 
 jobs:
-  test-ubuntu-312:
-    name: Test on ubuntu-latest with Python 3.12
-    uses: ./.github/workflows/test-reusable.yml
-    with:
-      os: ubuntu-latest
-      python-version: '3.12'
+  lint:
+    name: Lint
+    uses: ./.github/workflows/lint-reusable.yml
 
-  test-ubuntu-313:
-    name: Test on ubuntu-latest with Python 3.13
+  test:
+    name: Test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.12', '3.13']
     uses: ./.github/workflows/test-reusable.yml
     with:
-      os: ubuntu-latest
-      python-version: '3.13'
-
-  test-windows-312:
-    name: Test on windows-latest with Python 3.12
-    uses: ./.github/workflows/test-reusable.yml
-    with:
-      os: windows-latest
-      python-version: '3.12'
-
-  test-windows-313:
-    name: Test on windows-latest with Python 3.13
-    uses: ./.github/workflows/test-reusable.yml
-    with:
-      os: windows-latest
-      python-version: '3.13'
-
-  test-macos-312:
-    name: Test on macos-latest with Python 3.12
-    uses: ./.github/workflows/test-reusable.yml
-    with:
-      os: macos-latest
-      python-version: '3.12'
+      os: ${{ matrix.os }}
+      python-version: ${{ matrix.python-version }}
 
   check-version:
     name: Check next version (dry-run)
     runs-on: ubuntu-latest
-    needs: [test-ubuntu-312, test-ubuntu-313, test-windows-312, test-windows-313, test-macos-312]
+    needs: [lint, test]
     outputs:
       should-release: ${{ steps.check.outputs.should-release }}
       next-version: ${{ steps.check.outputs.next-version }}
@@ -381,7 +362,7 @@ jobs:
   notify-telegram:
     name: Notify Telegram
     runs-on: ubuntu-latest
-    needs: [test-ubuntu-312, test-ubuntu-313, test-windows-312, test-windows-313, test-macos-312, check-version, build-binaries, create-release, upload-assets]
+    needs: [lint, test, check-version, build-binaries, create-release, upload-assets]
     if: always()
 
     steps:
@@ -389,20 +370,14 @@ jobs:
         id: status
         run: |
           # Check if any job failed or was cancelled
-          if [ "${{ needs.test-ubuntu-312.result }}" == "failure" ] || \
-             [ "${{ needs.test-ubuntu-313.result }}" == "failure" ] || \
-             [ "${{ needs.test-windows-312.result }}" == "failure" ] || \
-             [ "${{ needs.test-windows-313.result }}" == "failure" ] || \
-             [ "${{ needs.test-macos-312.result }}" == "failure" ] || \
+          if [ "${{ needs.lint.result }}" == "failure" ] || \
+             [ "${{ needs.test.result }}" == "failure" ] || \
              [ "${{ needs.check-version.result }}" == "failure" ] || \
              [ "${{ needs.build-binaries.result }}" == "failure" ] || \
              [ "${{ needs.create-release.result }}" == "failure" ] || \
              [ "${{ needs.upload-assets.result }}" == "failure" ] || \
-             [ "${{ needs.test-ubuntu-312.result }}" == "cancelled" ] || \
-             [ "${{ needs.test-ubuntu-313.result }}" == "cancelled" ] || \
-             [ "${{ needs.test-windows-312.result }}" == "cancelled" ] || \
-             [ "${{ needs.test-windows-313.result }}" == "cancelled" ] || \
-             [ "${{ needs.test-macos-312.result }}" == "cancelled" ] || \
+             [ "${{ needs.lint.result }}" == "cancelled" ] || \
+             [ "${{ needs.test.result }}" == "cancelled" ] || \
              [ "${{ needs.check-version.result }}" == "cancelled" ] || \
              [ "${{ needs.build-binaries.result }}" == "cancelled" ] || \
              [ "${{ needs.create-release.result }}" == "cancelled" ] || \
@@ -452,11 +427,8 @@ jobs:
             Commit: `${{ github.sha }}`
 
             Step Results:
-            • Test Ubuntu 3.12: ${{ needs.test-ubuntu-312.result }}
-            • Test Ubuntu 3.13: ${{ needs.test-ubuntu-313.result }}
-            • Test Windows 3.12: ${{ needs.test-windows-312.result }}
-            • Test Windows 3.13: ${{ needs.test-windows-313.result }}
-            • Test macOS 3.12: ${{ needs.test-macos-312.result }}
+            • Lint: ${{ needs.lint.result }}
+            • Tests: ${{ needs.test.result }}
             • Check Version: ${{ needs.check-version.result }}
             • Build Binaries: ${{ needs.build-binaries.result }}
             • Create Release: ${{ needs.create-release.result }}
