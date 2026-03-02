@@ -15,7 +15,7 @@ Analyzes staged git changes and generates a properly formatted conventional comm
 ## Usage
 
 ::: mkdocs-click
-    :module: cli_tool.commit.commands.generate
+    :module: cli_tool.commands.commit.commands.generate
     :command: commit
     :prog_name: devo
     :depth: 1

@@ -15,7 +15,7 @@ Configures pip to authenticate with AWS CodeArtifact repository. Obtains an auth
 ## Usage
 
 ::: mkdocs-click
-    :module: cli_tool.codeartifact
+    :module: cli_tool.commands.codeartifact.commands.login
     :command: codeartifact_login
     :prog_name: devo
     :depth: 1
