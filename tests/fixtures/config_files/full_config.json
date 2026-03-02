@@ -1,0 +1,112 @@
+{
+  "aws": {
+    "region": "us-east-1",
+    "sso_profiles": [
+      {
+        "name": "dev",
+        "start_url": "https://dev.awsapps.com/start",
+        "region": "us-east-1",
+        "account_id": "123456789012",
+        "role_name": "Developer",
+        "session_name": "dev-session"
+      },
+      {
+        "name": "prod",
+        "start_url": "https://prod.awsapps.com/start",
+        "region": "us-east-1",
+        "account_id": "987654321098",
+        "role_name": "ReadOnly",
+        "session_name": "prod-session"
+      }
+    ],
+    "default_profile": "dev"
+  },
+  "bedrock": {
+    "model_id": "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+    "max_tokens": 4096,
+    "temperature": 0.7
+  },
+  "codeartifact": {
+    "domain": "my-company",
+    "domain_owner": "123456789012",
+    "repository": "python-packages",
+    "region": "us-east-1"
+  },
+  "dynamodb": {
+    "default_region": "us-east-1",
+    "export_format": "json",
+    "parallel_scan_segments": 4,
+    "compression": true
+  },
+  "eventbridge": {
+    "default_region": "us-east-1",
+    "output_format": "table"
+  },
+  "ssm": {
+    "default_region": "us-east-1",
+    "instances": [
+      {
+        "name": "web-server-01",
+        "instance_id": "i-0123456789abcdef0",
+        "environment": "dev"
+      },
+      {
+        "name": "api-server-01",
+        "instance_id": "i-0fedcba9876543210",
+        "environment": "prod"
+      }
+    ],
+    "databases": [
+      {
+        "name": "dev-postgres",
+        "instance_id": "i-0123456789abcdef0",
+        "local_port": 5432,
+        "remote_port": 5432,
+        "host": "localhost"
+      },
+      {
+        "name": "prod-mysql",
+        "instance_id": "i-0fedcba9876543210",
+        "local_port": 3306,
+        "remote_port": 3306,
+        "host": "localhost"
+      }
+    ],
+    "hosts_entries": [
+      {
+        "hostname": "dev-db.local",
+        "ip": "127.0.0.1"
+      }
+    ]
+  },
+  "commit": {
+    "auto_push": false,
+    "ticket_pattern": "^(DEVO|FEAT|BUG)-\\d+",
+    "conventional_types": [
+      "feat",
+      "fix",
+      "docs",
+      "style",
+      "refactor",
+      "perf",
+      "test",
+      "chore"
+    ]
+  },
+  "code_reviewer": {
+    "check_security": true,
+    "check_performance": true,
+    "check_best_practices": true,
+    "severity_threshold": "low"
+  },
+  "upgrade": {
+    "check_on_startup": true,
+    "auto_upgrade": false,
+    "github_repo": "owner/devo-cli"
+  },
+  "ui": {
+    "color_scheme": "auto",
+    "verbose": false,
+    "show_progress": true
+  }
+}

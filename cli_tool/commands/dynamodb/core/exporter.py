@@ -297,17 +297,20 @@ class DynamoDBExporter:
         compress: Optional[str] = None,
         bool_format: str = "lowercase",
         streaming: bool = False,
-    ) -> None:
+    ) -> Path:
         """Export items to CSV format.
 
         Args:
           mode: 'strings' (serialize as JSON), 'flatten' (flatten nested), 'normalize' (expand lists to rows)
           bool_format: 'lowercase' (true/false), 'uppercase' (True/False), 'numeric' (1/0), 'letter' (t/f)
           streaming: If True, write items as they're processed (memory efficient)
+
+        Returns:
+            Path: The actual output file path (may differ from input if compressed)
         """
         if not items:
             console.print("[yellow]⚠ No items to export[/yellow]")
-            return
+            return output_file
 
         self.stats["start_time"] = datetime.now()
 
@@ -332,8 +335,7 @@ class DynamoDBExporter:
             streaming = True
 
         if streaming:
-            self._export_to_csv_streaming(items, output_file, mode, null_value, delimiter, encoding, include_metadata, compress, bool_format)
-            return
+            return self._export_to_csv_streaming(items, output_file, mode, null_value, delimiter, encoding, include_metadata, compress, bool_format)
 
         # Non-streaming mode (original implementation)
         # Convert items based on export mode
@@ -362,18 +364,21 @@ class DynamoDBExporter:
         fieldnames = sorted(all_keys)
 
         # Determine output file with compression
+        actual_output_file = output_file
+        zip_file = None
+
         if compress == "gzip":
-            output_file = output_file.with_suffix(output_file.suffix + ".gz")
-            file_handle = gzip.open(output_file, "wt", encoding=encoding, newline="")
+            actual_output_file = output_file.with_suffix(output_file.suffix + ".gz")
+            file_handle = gzip.open(actual_output_file, "wt", encoding=encoding, newline="")
         elif compress == "zip":
-            zip_path = output_file.with_suffix(".zip")
-            zip_file = zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED)
+            actual_output_file = output_file.with_suffix(".zip")
+            zip_file = zipfile.ZipFile(actual_output_file, "w", zipfile.ZIP_DEFLATED)
             file_handle = zip_file.open(output_file.name, "w")
             import io
 
             file_handle = io.TextIOWrapper(file_handle, encoding=encoding, newline="")
         else:
-            file_handle = open(output_file, "w", encoding=encoding, newline="")
+            file_handle = open(actual_output_file, "w", encoding=encoding, newline="")
 
         try:
             writer = csv.DictWriter(
@@ -388,7 +393,7 @@ class DynamoDBExporter:
             # Write metadata
             if include_metadata:
                 if compress:
-                    meta_file = output_file.with_suffix(".meta")
+                    meta_file = actual_output_file.with_suffix(".meta")
                     with open(meta_file, "w", encoding="utf-8") as mf:
                         mf.write(f"Export Date: {datetime.now().isoformat()}\n")
                         mf.write(f"Table: {self.table_name}\n")
@@ -429,12 +434,14 @@ class DynamoDBExporter:
 
         finally:
             file_handle.close()
-            if compress == "zip":
+            if zip_file:
                 zip_file.close()
 
         self.stats["end_time"] = datetime.now()
         self.stats["total_items"] = len(converted_items)
-        self.stats["file_size"] = output_file.stat().st_size if compress != "zip" else zip_path.stat().st_size
+        self.stats["file_size"] = actual_output_file.stat().st_size
+
+        return actual_output_file
 
     def _export_to_csv_streaming(
         self,
@@ -447,8 +454,12 @@ class DynamoDBExporter:
         include_metadata: bool,
         compress: Optional[str],
         bool_format: str,
-    ) -> None:
-        """Stream items to CSV without loading all in memory."""
+    ) -> Path:
+        """Stream items to CSV without loading all in memory.
+
+        Returns:
+            Path: The actual output file path (may differ from input if compressed)
+        """
         # First pass: collect all possible fieldnames
         all_keys = set()
         sample_size = min(1000, len(items))
@@ -468,18 +479,21 @@ class DynamoDBExporter:
         fieldnames = sorted(all_keys)
 
         # Open file for writing
+        actual_output_file = output_file
+        zip_file = None
+
         if compress == "gzip":
-            output_file = output_file.with_suffix(output_file.suffix + ".gz")
-            file_handle = gzip.open(output_file, "wt", encoding=encoding, newline="")
+            actual_output_file = output_file.with_suffix(output_file.suffix + ".gz")
+            file_handle = gzip.open(actual_output_file, "wt", encoding=encoding, newline="")
         elif compress == "zip":
-            zip_path = output_file.with_suffix(".zip")
-            zip_file = zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED)
+            actual_output_file = output_file.with_suffix(".zip")
+            zip_file = zipfile.ZipFile(actual_output_file, "w", zipfile.ZIP_DEFLATED)
             file_handle = zip_file.open(output_file.name, "w")
             import io
 
             file_handle = io.TextIOWrapper(file_handle, encoding=encoding, newline="")
         else:
-            file_handle = open(output_file, "w", encoding=encoding, newline="")
+            file_handle = open(actual_output_file, "w", encoding=encoding, newline="")
 
         try:
             writer = csv.DictWriter(
@@ -494,7 +508,7 @@ class DynamoDBExporter:
             # Write metadata
             if include_metadata:
                 if compress:
-                    meta_file = output_file.with_suffix(".meta")
+                    meta_file = actual_output_file.with_suffix(".meta")
                     with open(meta_file, "w", encoding="utf-8") as mf:
                         mf.write(f"Export Date: {datetime.now().isoformat()}\n")
                         mf.write(f"Table: {self.table_name}\n")
@@ -558,12 +572,14 @@ class DynamoDBExporter:
 
         finally:
             file_handle.close()
-            if compress == "zip":
+            if zip_file:
                 zip_file.close()
 
         self.stats["end_time"] = datetime.now()
         self.stats["total_items"] = items_written
-        self.stats["file_size"] = output_file.stat().st_size if compress != "zip" else zip_path.stat().st_size
+        self.stats["file_size"] = actual_output_file.stat().st_size
+
+        return actual_output_file
 
     def export_to_json(
         self,
@@ -573,11 +589,15 @@ class DynamoDBExporter:
         pretty: bool = True,
         encoding: str = "utf-8",
         compress: Optional[str] = None,
-    ) -> None:
-        """Export items to JSON or JSONL format."""
+    ) -> Path:
+        """Export items to JSON or JSONL format.
+
+        Returns:
+            Path: The actual output file path (may differ from input if compressed)
+        """
         if not items:
             console.print("[yellow]⚠ No items to export[/yellow]")
-            return
+            return output_file
 
         self.stats["start_time"] = datetime.now()
 
@@ -585,18 +605,31 @@ class DynamoDBExporter:
         converted_items = [self._convert_dynamodb_item(item) for item in items]
 
         # Determine output file with compression
+        actual_output_file = output_file
+        zip_file = None
+
         if compress == "gzip":
-            output_file = output_file.with_suffix(output_file.suffix + ".gz")
-            file_handle = gzip.open(output_file, "wt", encoding=encoding)
+            # Only add .gz if not already present
+            if not str(output_file).endswith(".gz"):
+                actual_output_file = output_file.with_suffix(output_file.suffix + ".gz")
+            else:
+                actual_output_file = output_file
+            file_handle = gzip.open(actual_output_file, "wt", encoding=encoding)
         elif compress == "zip":
-            zip_path = output_file.with_suffix(".zip")
-            zip_file = zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED)
-            file_handle = zip_file.open(output_file.name, "w")
+            # Only add .zip if not already present
+            if not str(output_file).endswith(".zip"):
+                actual_output_file = output_file.with_suffix(".zip")
+            else:
+                actual_output_file = output_file
+            zip_file = zipfile.ZipFile(actual_output_file, "w", zipfile.ZIP_DEFLATED)
+            # Use original filename without .zip for the entry inside the zip
+            entry_name = output_file.stem + output_file.suffix if not str(output_file).endswith(".zip") else output_file.stem
+            file_handle = zip_file.open(entry_name, "w")
             import io
 
             file_handle = io.TextIOWrapper(file_handle, encoding=encoding)
         else:
-            file_handle = open(output_file, "w", encoding=encoding)
+            file_handle = open(actual_output_file, "w", encoding=encoding)
 
         try:
             if jsonl:
@@ -613,29 +646,36 @@ class DynamoDBExporter:
 
         finally:
             file_handle.close()
-            if compress == "zip":
+            if zip_file:
                 zip_file.close()
 
         self.stats["end_time"] = datetime.now()
         self.stats["total_items"] = len(converted_items)
-        self.stats["file_size"] = output_file.stat().st_size if compress != "zip" else zip_path.stat().st_size
+        self.stats["file_size"] = actual_output_file.stat().st_size
+
+        return actual_output_file
 
     def get_table_info(self) -> Dict[str, Any]:
         """Get table metadata."""
         response = self.dynamodb.describe_table(TableName=self.table_name)
         table = response["Table"]
 
-        return {
+        info = {
             "name": table["TableName"],
-            "status": table["TableStatus"],
+            "status": table.get("TableStatus", "ACTIVE"),
             "item_count": table.get("ItemCount", 0),
             "size_bytes": table.get("TableSizeBytes", 0),
-            "creation_date": table["CreationDateTime"].isoformat(),
-            "key_schema": table["KeySchema"],
-            "attributes": table["AttributeDefinitions"],
+            "key_schema": table.get("KeySchema", []),
+            "attributes": table.get("AttributeDefinitions", []),
             "global_indexes": table.get("GlobalSecondaryIndexes", []),
             "local_indexes": table.get("LocalSecondaryIndexes", []),
         }
+
+        # Add creation date if available
+        if "CreationDateTime" in table:
+            info["creation_date"] = table["CreationDateTime"].isoformat()
+
+        return info
 
     def print_stats(self, output_file: Path) -> None:
         """Print export statistics."""

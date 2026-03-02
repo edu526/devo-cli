@@ -103,17 +103,40 @@ refresh:
 # Run tests
 test:
 	@echo "Running tests..."
-	pytest tests/ -v
+	@if [ -f "venv/bin/pytest" ]; then \
+		venv/bin/pytest tests/ -v; \
+	elif [ -f "venv/Scripts/pytest.exe" ]; then \
+		venv/Scripts/pytest.exe tests/ -v; \
+	else \
+		echo "Error: pytest not found in venv. Run 'make install-dev' first."; \
+		exit 1; \
+	fi
 
 # Run linting
 lint:
 	@echo "Running flake8..."
-	flake8 cli_tool/ tests/
+	@if [ -f "venv/bin/flake8" ]; then \
+		venv/bin/flake8 cli_tool/ tests/; \
+	elif [ -f "venv/Scripts/flake8.exe" ]; then \
+		venv/Scripts/flake8.exe cli_tool/ tests/; \
+	else \
+		echo "Error: flake8 not found in venv. Run 'make install-dev' first."; \
+		exit 1; \
+	fi
 
 # Format code
 format:
-	@echo "Formatting imports with isort..."
-	isort cli_tool/ tests/
+	@echo "Formatting code with black and isort..."
+	@if [ -f "venv/bin/black" ]; then \
+		venv/bin/isort cli_tool/ tests/ && \
+		venv/bin/black cli_tool/ tests/; \
+	elif [ -f "venv/Scripts/black.exe" ]; then \
+		venv/Scripts/isort.exe cli_tool/ tests/ && \
+		venv/Scripts/black.exe cli_tool/ tests/; \
+	else \
+		echo "Error: black/isort not found in venv. Run 'make install-dev' first."; \
+		exit 1; \
+	fi
 
 # Clean build artifacts
 clean:

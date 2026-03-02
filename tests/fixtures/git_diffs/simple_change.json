@@ -1,0 +1,7 @@
+{
+  "file": "cli_tool/commands/commit/core/generator.py",
+  "diff": "diff --git a/cli_tool/commands/commit/core/generator.py b/cli_tool/commands/commit/core/generator.py\nindex 1234567..abcdefg 100644\n--- a/cli_tool/commands/commit/core/generator.py\n+++ b/cli_tool/commands/commit/core/generator.py\n@@ -10,6 +10,7 @@ def generate_commit_message(diff):\n     \"\"\"Generate commit message from git diff.\"\"\"\n     prompt = f\"Generate a conventional commit message for:\\n{diff}\"\n+    # Add validation for empty diffs\n+    if not diff.strip():\n+        raise ValueError(\"Cannot generate commit message for empty diff\")\n     return agent.query(prompt)",
+  "staged": true,
+  "binary": false,
+  "description": "Simple single-file change adding validation logic"
+}

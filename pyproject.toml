@@ -114,6 +114,46 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 
+# Markers registration (prevents PytestUnknownMarkWarning)
+markers = [
+  "unit: Unit tests for core business logic",
+  "integration: Integration tests for CLI commands",
+  "platform: Platform-specific tests",
+  "slow: Slow tests (skipped by default)",
+]
+
+# Coverage and execution configuration
+addopts = [
+  "--cov=cli_tool",
+  "--cov-report=html",
+  "--cov-report=term-missing",
+  "-m not slow",  # Skip slow tests by default
+  # "-n=auto",  # Parallel execution with pytest-xdist (commented out for now)
+]
+
+# Note: Coverage threshold (--cov-fail-under=75) is enforced in CI only
+# to allow developers to run subsets of tests locally without coverage failures
+# CI should enforce:
+# - 80% for cli_tool/core/ modules
+# - 70% for cli_tool/commands/ modules
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "def __repr__",
+  "raise AssertionError",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
+
+[tool.coverage.run]
+omit = [
+  "*/tests/*",
+  "*/_version.py",
+  "*/setup.py",
+]
+
 [tool.black]
 line-length = 150
 target-version = ['py312']

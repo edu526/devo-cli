@@ -601,8 +601,27 @@ class FilterBuilder:
 
     def _get_name_placeholder(self, attr_name: str) -> str:
         """Generate name placeholder for reserved keywords or special chars."""
+        # Handle nested attributes (e.g., metadata.status -> #attr0.#attr1)
+        if "." in attr_name:
+            parts = attr_name.split(".")
+            placeholders = []
+            for part in parts:
+                # Check if this part needs escaping
+                if part.lower() in self.RESERVED_KEYWORDS or "-" in part:
+                    placeholder = f"#attr{self.name_counter}"
+                    self.name_counter += 1
+                    self.expression_attribute_names[placeholder] = part
+                    placeholders.append(placeholder)
+                else:
+                    # Still create a placeholder for consistency in nested paths
+                    placeholder = f"#attr{self.name_counter}"
+                    self.name_counter += 1
+                    self.expression_attribute_names[placeholder] = part
+                    placeholders.append(placeholder)
+            return ".".join(placeholders)
+
         # Check if attribute name needs escaping
-        if attr_name.lower() in self.RESERVED_KEYWORDS or "." in attr_name or "-" in attr_name:
+        if attr_name.lower() in self.RESERVED_KEYWORDS or "-" in attr_name:
             placeholder = f"#attr{self.name_counter}"
             self.name_counter += 1
             self.expression_attribute_names[placeholder] = attr_name
