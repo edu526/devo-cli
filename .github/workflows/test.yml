@@ -89,7 +89,7 @@ jobs:
             build_script: bash scripts/build.sh --ci --release
 
           # macOS Intel
-          - os: macos-14-large
+          - os: macos-15-intel
             platform: darwin
             arch: amd64
             build_script: bash scripts/build.sh --ci --release
