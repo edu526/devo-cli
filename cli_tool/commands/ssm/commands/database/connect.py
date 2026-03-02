@@ -5,6 +5,7 @@ import time
 
 import click
 from rich.console import Console
+from rich.table import Table
 
 from cli_tool.commands.ssm.core import PortForwarder, SSMConfigManager, SSMSession
 from cli_tool.commands.ssm.utils import HostsManager
@@ -25,6 +26,15 @@ def _connect_all_databases(config_manager, databases, no_hosts):
 
     used_local_ports = set()
     next_available_port = 15432
+
+    # Create table for displaying connections
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("Database", style="green")
+    table.add_column("Connect To", style="cyan")
+    table.add_column("Local Port", style="yellow", justify="right")
+    table.add_column("Remote", style="dim")
+    table.add_column("Profile", style="dim")
+    table.add_column("Status", style="white")
 
     def get_unique_local_port(preferred_port):
         nonlocal next_available_port
@@ -56,7 +66,14 @@ def _connect_all_databases(config_manager, databases, no_hosts):
         use_hostname_forwarding = (local_address != "127.0.0.1") and not no_hosts
 
         if use_hostname_forwarding and db_config["host"] not in managed_hosts:
-            console.print(f"[yellow]⚠[/yellow] {name}: Not in /etc/hosts (run 'devo ssm hosts setup')")
+            table.add_row(
+                name,
+                f"{local_address}:{db_config['port']}",
+                "-",
+                f"{db_config['host']}:{db_config['port']}",
+                db_config.get("profile", "default"),
+                "[yellow]⚠ Not in /etc/hosts[/yellow]"
+            )
             continue
 
         if use_hostname_forwarding:
@@ -64,11 +81,18 @@ def _connect_all_databases(config_manager, databases, no_hosts):
             actual_local_port = get_unique_local_port(preferred_local_port)
 
             profile_text = db_config.get("profile", "default")
-            port_info = f"{local_address}:{db_config['port']}"
+            status = "[green]✓ Connected[/green]"
             if actual_local_port != preferred_local_port:
-                port_info += f" [dim](local: {actual_local_port})[/dim]"
+                status = f"[yellow]✓ Port {actual_local_port}[/yellow]"
 
-            console.print(f"[green]✓[/green] {name}: {db_config['host']} ({port_info}) [dim](profile: {profile_text})[/dim]")
+            table.add_row(
+                name,
+                f"{local_address}:{db_config['port']}",
+                str(actual_local_port),
+                f"{db_config['host']}:{db_config['port']}",
+                profile_text,
+                status
+            )
 
             try:
                 port_forwarder.start_forward(local_address=local_address, local_port=db_config["port"], target_port=actual_local_port)
@@ -79,14 +103,24 @@ def _connect_all_databases(config_manager, databases, no_hosts):
             except Exception as e:
                 console.print(f"[red]✗[/red] {name}: {e}")
         else:
-            console.print(f"[yellow]⚠[/yellow] {name}: Hostname forwarding not configured (skipping)")
+            table.add_row(
+                name,
+                f"{local_address}:{db_config['port']}",
+                "-",
+                f"{db_config['host']}:{db_config['port']}",
+                db_config.get("profile", "default"),
+                "[yellow]⚠ No hostname forwarding[/yellow]"
+            )
+
+    console.print(table)
+    console.print()
 
     if not threads:
-        console.print("\n[yellow]No databases to connect[/yellow]")
+        console.print("[yellow]No databases to connect[/yellow]")
         console.print("Run: devo ssm hosts setup")
         return
 
-    console.print("\n[green]All connections started![/green]")
+    console.print("[green]All connections started![/green]")
     console.print("[yellow]Press Ctrl+C to stop all connections[/yellow]\n")
 
     try:
@@ -96,6 +130,7 @@ def _connect_all_databases(config_manager, databases, no_hosts):
         console.print("\n[cyan]Stopping all connections...[/cyan]")
         port_forwarder.stop_all()
         console.print("[green]All connections closed[/green]")
+
 
 
 @click.command()
@@ -170,9 +205,7 @@ def connect_database(name, no_hosts):
     if use_hostname_forwarding:
         profile_text = db_config.get("profile", "default")
         console.print(f"[cyan]Connecting to {name}...[/cyan]")
-        console.print(f"[dim]Hostname: {db_config['host']}[/dim]")
-        console.print(f"[dim]Profile: {profile_text}[/dim]")
-        console.print(f"[dim]Forwarding: {local_address}:{db_config['port']} -> 127.0.0.1:{db_config['local_port']}[/dim]")
+        console.print(f"[dim]{local_address}:{db_config['port']} -> 127.0.0.1:{db_config['local_port']} -> {db_config['host']}:{db_config['port']} ({profile_text})[/dim]")
         console.print("[yellow]Press Ctrl+C to stop[/yellow]\n")
 
         port_forwarder = PortForwarder()
@@ -210,8 +243,7 @@ def connect_database(name, no_hosts):
             console.print("[dim]Run 'devo ssm hosts setup' to enable hostname forwarding[/dim]\n")
 
         console.print(f"[cyan]Connecting to {name}...[/cyan]")
-        console.print(f"[dim]{db_config['host']}:{db_config['port']} -> localhost:{db_config['local_port']}[/dim]")
-        console.print(f"[dim]Profile: {profile_text}[/dim]")
+        console.print(f"[dim]localhost:{db_config['local_port']} -> {db_config['host']}:{db_config['port']} ({profile_text})[/dim]")
         console.print("[yellow]Press Ctrl+C to stop[/yellow]\n")
 
         try:
