@@ -23,7 +23,7 @@ def get_aws_profiles():
         - 'both': Profile in both config and credentials
         - 'config': Profile in config without SSO
     """
-    from cli_tool.aws_login.config import list_aws_profiles
+    from cli_tool.aws_login.core.config import list_aws_profiles
 
     # Get profiles with source information
     profiles = list_aws_profiles()

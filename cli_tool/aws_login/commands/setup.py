@@ -6,12 +6,12 @@ import subprocess
 import click
 from rich.console import Console
 
-from cli_tool.aws_login.config import (
+from cli_tool.aws_login.core.config import (
     get_aws_config_path,
     get_existing_sso_sessions,
     get_profile_config,
 )
-from cli_tool.aws_login.credentials import get_sso_cache_token
+from cli_tool.aws_login.core.credentials import get_sso_cache_token
 
 console = Console()
 

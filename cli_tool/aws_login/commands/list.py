@@ -1,4 +1,4 @@
-"""Status display for AWS profiles."""
+"""List AWS profiles with detailed status."""
 
 import sys
 from datetime import datetime, timezone
@@ -6,20 +6,20 @@ from datetime import datetime, timezone
 from rich.console import Console
 from rich.table import Table
 
-from cli_tool.aws_login.config import get_profile_config, list_aws_profiles
-from cli_tool.aws_login.credentials import get_profile_credentials_expiration
+from cli_tool.aws_login.core.config import get_profile_config, list_aws_profiles
+from cli_tool.aws_login.core.credentials import get_profile_credentials_expiration
 
 console = Console()
 
 
-def show_status():
-    """Show detailed expiration status for all profiles."""
+def list_profiles():
+    """List all available AWS profiles with detailed status."""
     profiles = list_aws_profiles()
     if not profiles:
         console.print("[yellow]No AWS profiles found[/yellow]")
         sys.exit(0)
 
-    console.print("[blue]═══ AWS Profile Expiration Status ═══[/blue]\n")
+    console.print("[blue]═══ AWS Profiles ═══[/blue]\n")
 
     table = Table(show_header=True, header_style="bold cyan")
     table.add_column("Profile", style="cyan", width=20)
@@ -79,5 +79,3 @@ def show_status():
         table.add_row(prof, source, status_str, expires_str, time_str)
 
     console.print(table)
-    console.print(f"\n[dim]Current time (UTC): {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}[/dim]")
-    console.print(f"\n[dim]Current time (Local): {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}[/dim]")

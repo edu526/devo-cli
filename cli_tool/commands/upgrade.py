@@ -383,8 +383,7 @@ def upgrade(force, check):
 
         # If only checking, stop here
         if check:
-            click.echo("\n✨ New version available!")
-            click.echo("Run 'devo upgrade' to update")
+            click.echo(click.style("\n→ Update available - Run 'devo upgrade' to update", dim=True))
             return
 
         # Detect platform

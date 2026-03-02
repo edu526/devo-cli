@@ -7,12 +7,12 @@ from datetime import datetime, timezone
 import click
 from rich.console import Console
 
-from cli_tool.aws_login.config import list_aws_profiles, parse_sso_config
-from cli_tool.aws_login.credentials import (
+from cli_tool.aws_login.commands.setup import configure_sso_profile
+from cli_tool.aws_login.core.config import list_aws_profiles, parse_sso_config
+from cli_tool.aws_login.core.credentials import (
     get_profile_credentials_expiration,
     verify_credentials,
 )
-from cli_tool.aws_login.setup import configure_sso_profile
 
 console = Console()
 
@@ -33,7 +33,7 @@ def perform_login(profile_name=None):
                 console.print("\n[blue]Profile configured! Now logging in...[/blue]\n")
             else:
                 console.print("\nTo configure SSO, run:")
-                console.print("  devo aws-login --configure")
+                console.print("  devo aws-login configure")
                 console.print("\nOr manually:")
                 console.print("  aws configure sso")
                 sys.exit(1)
@@ -66,7 +66,7 @@ def perform_login(profile_name=None):
     if not sso_config:
         console.print(f"[yellow]Profile '{profile_name}' is not configured for SSO[/yellow]")
         console.print("\nTo configure SSO, run:")
-        console.print("  devo aws-login --configure")
+        console.print("  devo aws-login configure")
         console.print("\nOr manually:")
         console.print(f"  aws configure sso --profile {profile_name}")
         sys.exit(1)

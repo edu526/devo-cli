@@ -8,7 +8,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 
-from cli_tool.aws_login.config import list_aws_profiles
+from cli_tool.aws_login.core.config import list_aws_profiles
 
 console = Console()
 

@@ -148,8 +148,7 @@ def show_update_notification():
 
         if has_update and latest_version:
             print()
-            print(f"✨ New version available: v{latest_version} (current: v{current_version})")
-            print("   Run 'devo upgrade' to update")
+            print(f"\033[2m→ Update available: v{latest_version} (current: v{current_version}) - Run 'devo upgrade'\033[0m")
     except Exception:
         # Silently fail - don't interrupt user's workflow
         pass
