@@ -81,18 +81,24 @@ class TestWindowsShellCompletion:
         ps_profile = temp_config_dir / "Microsoft.PowerShell_profile.ps1"
         ps_profile.parent.mkdir(parents=True, exist_ok=True)
 
-        # Mock the config file getter to return our temp path
-        mock_installer = mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller")
-        mock_installer.is_supported_shell.return_value = True
-        mock_installer.is_already_configured.return_value = False
-        mock_installer.install.return_value = (True, f"Shell completion configured in {ps_profile}")
+        # Mock the installer methods directly
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_supported_shell", return_value=True)
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_already_configured", return_value=False)
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.get_config_file", return_value=ps_profile)
+        mocker.patch(
+            "cli_tool.commands.autocomplete.core.installer.CompletionInstaller.install",
+            return_value=(True, f"Shell completion configured in {ps_profile}"),
+        )
+
+        # Mock SHELL environment variable (PowerShell on Windows)
+        mocker.patch.dict("os.environ", {"SHELL": "powershell"})
 
         # Run installation
-        result = cli_runner.invoke(autocomplete, ["--install", "powershell", "--yes"])
+        result = cli_runner.invoke(autocomplete, ["--install", "--yes"])
 
         # Verify success
         assert result.exit_code == 0
-        assert "configured" in result.output.lower() or "success" in result.output.lower()
+        assert "configured" in result.output.lower() or "success" in result.output.lower() or "✅" in result.output
 
     def test_cmd_completion_not_supported(self, cli_runner):
         """Test that CMD completion shows appropriate message.
@@ -116,14 +122,19 @@ class TestWindowsShellCompletion:
         """
         from cli_tool.commands.autocomplete.commands.autocomplete import autocomplete
 
+        # Mock PowerShell profile path
+        ps_profile = temp_config_dir / "Microsoft.PowerShell_profile.ps1"
+
         # Mock that completion is already configured
-        mock_installer = mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller")
-        mock_installer.is_supported_shell.return_value = True
-        mock_installer.is_already_configured.return_value = True
-        mock_installer.install.return_value = (True, "Shell completion already configured")
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_supported_shell", return_value=True)
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_already_configured", return_value=True)
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.get_config_file", return_value=ps_profile)
+
+        # Mock SHELL environment variable
+        mocker.patch.dict("os.environ", {"SHELL": "powershell"})
 
         # Run installation
-        result = cli_runner.invoke(autocomplete, ["--install", "powershell", "--yes"])
+        result = cli_runner.invoke(autocomplete, ["--install", "--yes"])
 
         # Should indicate already configured
         assert result.exit_code == 0
