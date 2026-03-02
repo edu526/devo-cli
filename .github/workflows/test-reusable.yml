@@ -34,7 +34,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install ".[dev]"
+          pip install -e ".[dev]"
 
       - name: Run pre-commit checks
         run: pre-commit run --all-files
