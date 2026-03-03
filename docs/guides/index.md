@@ -5,6 +5,7 @@ Step-by-step guides for common workflows and use cases with Devo CLI.
 ## Getting Started
 
 ### [AWS Setup](aws-setup.md)
+
 Configure AWS credentials and permissions for Devo CLI.
 
 **Topics covered:**

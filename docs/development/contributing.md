@@ -15,6 +15,7 @@ chmod +x setup-dev.sh
 ```
 
 That's it! The script does everything:
+
 - ✅ Creates virtual environment
 - ✅ Installs CLI in development mode
 - ✅ Installs dependencies
@@ -56,6 +57,7 @@ git checkout -b feature/TICKET-123-description
 ```
 
 Branch naming:
+
 - `feature/<ticket>-description` - New features
 - `fix/<ticket>-description` - Bug fixes
 - `chore/<ticket>-description` - Maintenance
@@ -63,6 +65,7 @@ Branch naming:
 ### 2. Make Changes
 
 Edit files in:
+
 - `cli_tool/commands/` - CLI commands
 - `cli_tool/core/agents/` - AI logic
 - `cli_tool/core/utils/` - Utilities

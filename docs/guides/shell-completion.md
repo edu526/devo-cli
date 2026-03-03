@@ -151,12 +151,15 @@ _DEVO_COMPLETE=fish_source devo | source
 ### Completion Not Working
 
 1. **Verify Devo is in PATH**:
+
    ```bash
-   which devo
+
    devo --version
+
    ```
 
 2. **Reload shell configuration**:
+
    ```bash
    # Zsh
    source ~/.zshrc
@@ -169,6 +172,7 @@ _DEVO_COMPLETE=fish_source devo | source
    ```
 
 3. **Check completion is loaded**:
+
    ```bash
    # Zsh
    echo $_comps[devo]

@@ -60,7 +60,28 @@ devo config path
 Reset configuration to default values.
 
 ```bash
+devo config reset [OPTIONS]
+```
+
+**Options:**
+
+- `-s, --section TEXT` - Reset only specific section
+- `--yes` - Confirm the action without prompting
+
+**Examples:**
+
+```bash
+# Reset all configuration (with confirmation)
 devo config reset
+
+# Reset without confirmation
+devo config reset --yes
+
+# Reset only SSM section
+devo config reset -s ssm
+
+# Reset SSM section without confirmation
+devo config reset -s ssm --yes
 ```
 
 **Warning:** This will delete your current configuration and restore defaults.
@@ -70,38 +91,57 @@ devo config reset
 Export configuration to a file or stdout.
 
 ```bash
-# Export to stdout
+# Export to default timestamped file
 devo config export
 
-# Export to file
+# Export to stdout
+devo config export --stdout
+
+# Export to custom file
 devo config export -o backup.json
 devo config export --output ~/backups/config.json
 
 # Export specific sections
 devo config export -s ssm
 devo config export --section ssm --section dynamodb -o partial.json
+
+# Export specific sections to stdout
+devo config export -s ssm -s dynamodb --stdout
 ```
+
+**Options:**
+
+- `-o, --output FILE` - Output file path (default: timestamped file)
+- `-s, --section TEXT` - Export only specific section(s) (can be used multiple times)
+- `--stdout` - Output to stdout instead of file
 
 ### import
 
 Import configuration from a file.
 
 ```bash
-devo config import <filename> [--merge]
+devo config import <filename> [OPTIONS]
 ```
 
-Options:
+**Options:**
 
-- `--merge` - Merge with existing configuration instead of replacing
+- `-s, --section TEXT` - Import only specific section(s)
+- `--replace` - Replace section completely instead of merging
 
-Examples:
+**Examples:**
 
 ```bash
-# Replace current config
+# Import full config (merge with existing)
 devo config import backup.json
 
-# Merge with existing
-devo config import team-config.json --merge
+# Import only SSM section
+devo config import backup.json -s ssm
+
+# Replace SSM section completely
+devo config import backup.json -s ssm --replace
+
+# Import multiple sections
+devo config import backup.json -s ssm -s dynamodb
 ```
 
 ### migrate
@@ -109,13 +149,27 @@ devo config import team-config.json --merge
 Migrate legacy configuration files to consolidated format.
 
 ```bash
-devo config migrate
+devo config migrate [OPTIONS]
 ```
+
+**Options:**
+
+- `--no-backup` - Don't backup legacy files
 
 This migrates:
 
 - `~/.devo/ssm-config.json` → `ssm` section
 - `~/.devo/dynamodb/export_templates.json` → `dynamodb` section
+
+**Examples:**
+
+```bash
+# Migrate with backup (default)
+devo config migrate
+
+# Migrate without backup
+devo config migrate --no-backup
+```
 
 ## Configuration Sections
 
@@ -149,87 +203,6 @@ This migrates:
 ### Version Check Settings
 
 - `version_check.enabled` - Enable automatic version checks (default: true)
-
-## Examples
-
-### View Configuration
-
-```bash
-# Show all settings
-devo config show
-
-# Show specific section
-devo config show --section ssm
-
-# List available sections
-devo config sections
-
-# Show config file location
-devo config path
-```
-
-### Modify Settings
-
-```bash
-# Use different Bedrock model
-devo config set bedrock.model_id us.anthropic.claude-sonnet-4-20250514-v1:0
-
-# Disable version checks
-devo config set version_check.enabled false
-
-# Update GitHub repository
-devo config set github.repo_owner myorg
-devo config set github.repo_name my-cli
-```
-
-### Export and Import
-
-```bash
-# Export full config to file
-devo config export -o backup.json
-
-# Export specific sections
-devo config export -s ssm -s dynamodb -o partial.json
-
-# Import and replace
-devo config import backup.json
-
-# Import and merge
-devo config import team-config.json --merge
-```
-
-### Backup and Restore
-
-```bash
-# Backup current configuration
-devo config export -o ~/backups/devo-config-$(date +%Y%m%d).json
-
-# Make changes
-devo config set bedrock.model_id us.anthropic.claude-sonnet-4-20250514-v1:0
-
-# Restore from backup
-devo config import ~/backups/devo-config-20260301.json
-```
-
-### Share Team Configuration
-
-```bash
-# Export SSM configs to share with team
-devo config export -s ssm -o ssm-team-config.json
-
-# Team members can import and merge
-devo config import ssm-team-config.json --merge
-```
-
-### Migrate Legacy Configs
-
-```bash
-# Migrate old config files
-devo config migrate
-
-# Verify migration
-devo config show
-```
 
 ## Configuration File Format
 

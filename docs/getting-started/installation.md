@@ -35,6 +35,7 @@ The installer will:
 4. Verify installation
 
 **Note:** If you get an execution policy error, run:
+
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```

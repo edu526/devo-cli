@@ -1,36 +1,70 @@
-# devo completion
+# devo autocomplete
 
-Generate shell completion scripts for Devo CLI.
+Setup shell autocomplete for Devo CLI.
 
-## Overview
+## Synopsis
 
-The `completion` command generates shell completion scripts that enable tab completion for Devo CLI commands, options, and arguments.
+```bash
+devo autocomplete [OPTIONS]
+```
+
+## Description
+
+Detects your shell and shows/installs shell autocomplete. By default, shows instructions for manual setup. Use `--install` to automatically add autocomplete to your shell config.
+
+## Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--install` | `-i` | Automatically install autocomplete to shell config |
+| `--yes` | `-y` | Skip confirmation prompt when installing |
+| `--help` | | Show help message and exit |
+
+## Supported Shells
+
+- **bash** - Bourne Again Shell
+- **zsh** - Z Shell
+- **fish** - Friendly Interactive Shell
+
+The command automatically detects your current shell.
 
 ## Usage
 
+### Show Instructions (Default)
+
 ```bash
-devo completion [SHELL]
+devo autocomplete
 ```
 
-**Supported Shells:**
+Shows manual installation instructions for your shell.
 
-- `bash`
-- `zsh`
-- `fish`
+### Automatic Installation
 
-If no shell is specified, the command detects your current shell automatically.
+```bash
+# Install with confirmation
+devo autocomplete --install
 
-## Installation
+# Install without confirmation
+devo autocomplete --install --yes
+```
+
+The command will:
+
+1. Detect your shell
+2. Add autocomplete configuration to your shell config file
+3. Show instructions to reload your shell
+
+## Installation Details
 
 ### Bash
 
-Add to `~/.bashrc`:
+Adds to `~/.bashrc`:
 
 ```bash
 eval "$(_DEVO_COMPLETE=bash_source devo)"
 ```
 
-Then reload:
+**Reload:**
 
 ```bash
 source ~/.bashrc
@@ -38,13 +72,13 @@ source ~/.bashrc
 
 ### Zsh
 
-Add to `~/.zshrc`:
+Adds to `~/.zshrc`:
 
 ```bash
 eval "$(_DEVO_COMPLETE=zsh_source devo)"
 ```
 
-Then reload:
+**Reload:**
 
 ```bash
 source ~/.zshrc
@@ -52,213 +86,135 @@ source ~/.zshrc
 
 ### Fish
 
-Add to `~/.config/fish/config.fish`:
+Adds to `~/.config/fish/completions/devo.fish`:
 
 ```fish
-_DEVO_COMPLETE=fish_source devo | source
+eval (env _DEVO_COMPLETE=fish_source devo)
 ```
 
-Then reload:
+**Reload:**
 
-```fish
+```bash
 source ~/.config/fish/config.fish
 ```
 
-## Quick Setup
-
-Run the completion command to get shell-specific instructions:
-
-```bash
-devo completion
-```
-
-This will:
-
-1. Detect your current shell
-2. Show installation instructions
-3. Optionally install automatically (if supported)
-
 ## Examples
 
-### Generate Completion Script
+### Basic Usage
 
 ```bash
-# For current shell
-devo completion
+# Show instructions
+devo autocomplete
 
-# For specific shell
-devo completion bash
-devo completion zsh
-devo completion fish
+# Install automatically
+devo autocomplete --install
 ```
 
-### Save to File
+### After Installation
 
 ```bash
-# Bash
-devo completion bash > ~/.bash_completions/devo
+# Type 'devo ' and press TAB
+devo <TAB>
 
-# Zsh
-devo completion zsh > ~/.zsh/completions/_devo
+# Shows available commands:
+autocomplete  aws-login  code-reviewer  commit  config  ...
 
-# Fish
-devo completion fish > ~/.config/fish/completions/devo.fish
+# Type 'devo aws-login ' and press TAB
+devo aws-login <TAB>
+
+# Shows subcommands:
+configure  list  login  refresh  set-default
 ```
 
 ## Features
 
-Once installed, tab completion provides:
-
-### Command Completion
-
-```bash
-devo <TAB>
-# Shows: code-reviewer  codeartifact-login  commit  completion  config  dynamodb  eventbridge  upgrade
-```
-
-### Option Completion
-
-```bash
-devo commit --<TAB>
-# Shows: --add  --all  --help  --profile  --pull-request  --push
-```
-
-### Subcommand Completion
-
-```bash
-devo config <TAB>
-# Shows: edit  export  get  import  path  reset  set  show  validate
-```
-
-### Profile Completion
-
-```bash
-devo --profile <TAB>
-# Shows available AWS profiles from ~/.aws/config
-```
-
-## Verification
-
-Test completion is working:
-
-```bash
-# Type and press TAB
-devo c<TAB>
-
-# Should complete or show:
-# code-reviewer  codeartifact-login  commit  completion  config
-```
+- **Auto-detection**: Automatically detects your shell
+- **Safe Installation**: Checks if already installed before adding
+- **Multiple Shells**: Supports bash, zsh, and fish
+- **Command Completion**: Complete command names
+- **Option Completion**: Complete option flags
+- **Argument Completion**: Complete file paths and values
 
 ## Troubleshooting
 
-### Completion Not Working
+### Completion not working after installation
 
-1. **Reload shell configuration:**
-   ```bash
-   source ~/.bashrc  # or ~/.zshrc
-   ```
-
-2. **Verify devo is in PATH:**
-   ```bash
-   which devo
-   ```
-
-3. **Check completion is loaded:**
-   ```bash
-   # Bash
-   complete -p devo
-
-   # Zsh
-   echo $_comps[devo]
-   ```
-
-### Slow Completion
-
-Generate static completion file:
+**Solution:** Reload your shell configuration:
 
 ```bash
 # Bash
-_DEVO_COMPLETE=bash_source devo > ~/.bash_completions/devo
-source ~/.bash_completions/devo
+source ~/.bashrc
 
 # Zsh
-_DEVO_COMPLETE=zsh_source devo > ~/.zsh/completions/_devo
-# Add to fpath in ~/.zshrc:
-fpath=(~/.zsh/completions $fpath)
+source ~/.zshrc
+
+# Fish
+source ~/.config/fish/config.fish
+
+# Or restart your terminal
 ```
 
-### Wrong Shell Detected
+### "Command not found: _DEVO_COMPLETE"
 
-Specify shell explicitly:
+**Solution:** Ensure Devo CLI is in your PATH:
 
 ```bash
-devo completion bash
-devo completion zsh
-devo completion fish
+which devo
+# Should show the path to devo binary
 ```
 
-## Uninstalling
+### Completion shows old commands
 
-Remove completion configuration from your shell profile:
+**Solution:** Reinstall autocomplete:
+
+```bash
+devo autocomplete --install --yes
+source ~/.bashrc  # or ~/.zshrc
+```
+
+## Manual Installation
+
+If automatic installation doesn't work, you can manually add the completion code:
 
 ### Bash
 
-Remove from `~/.bashrc`:
+Edit `~/.bashrc`:
+
 ```bash
-# Remove this line:
 eval "$(_DEVO_COMPLETE=bash_source devo)"
 ```
 
 ### Zsh
 
-Remove from `~/.zshrc`:
+Edit `~/.zshrc`:
+
 ```bash
-# Remove this line:
 eval "$(_DEVO_COMPLETE=zsh_source devo)"
 ```
 
 ### Fish
 
-Remove from `~/.config/fish/config.fish`:
+Create `~/.config/fish/completions/devo.fish`:
+
 ```fish
-# Remove this line:
-_DEVO_COMPLETE=fish_source devo | source
+eval (env _DEVO_COMPLETE=fish_source devo)
 ```
 
-Then reload your shell.
+## Exit Codes
 
-## Advanced Usage
-
-### Custom Completion Location
-
-```bash
-# Create completion directory
-mkdir -p ~/.local/share/bash-completion/completions
-
-# Generate completion
-_DEVO_COMPLETE=bash_source devo > ~/.local/share/bash-completion/completions/devo
-
-# Add to ~/.bashrc
-source ~/.local/share/bash-completion/completions/devo
-```
-
-### Multiple Shells
-
-If you use multiple shells, install completion for each:
-
-```bash
-# Bash
-eval "$(_DEVO_COMPLETE=bash_source devo)" >> ~/.bashrc
-
-# Zsh
-eval "$(_DEVO_COMPLETE=zsh_source devo)" >> ~/.zshrc
-
-# Fish
-echo "_DEVO_COMPLETE=fish_source devo | source" >> ~/.config/fish/config.fish
-```
+| Code | Description |
+|------|-------------|
+| 0 | Success |
+| 1 | Error (unsupported shell, installation failed, etc.) |
 
 ## See Also
 
-- [Shell Completion Guide](../guides/shell-completion.md) - Detailed completion setup
-- [Installation](../getting-started/installation.md) - Installation guide
-- [Commands Overview](index.md) - All available commands
+- [Shell Completion Guide](../guides/shell-completion.md) - Detailed setup guide
+- [Installation](../getting-started/installation.md) - Install Devo CLI
+
+## Notes
+
+- Requires Devo CLI to be installed and in PATH
+- Completion is powered by Click framework
+- Works with all Devo CLI commands and options
+- Updates automatically when new commands are added

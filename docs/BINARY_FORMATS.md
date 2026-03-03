@@ -15,6 +15,7 @@ Devo CLI uses PyInstaller to create standalone binaries. Different platforms use
 **Size:** ~50-80 MB
 
 **Why onefile?**
+
 - Easy distribution (single file to download)
 - Simple installation (just copy to PATH)
 - Acceptable startup time on Linux systems
@@ -30,6 +31,7 @@ Devo CLI uses PyInstaller to create standalone binaries. Different platforms use
 **Extracted size:** ~60-90 MB
 
 **Why onedir?**
+
 - **Fast startup:** ~0.1-0.3s (no extraction needed)
 - Avoids 2-5s startup delay from onefile mode
 - Better user experience for frequent CLI usage
@@ -45,6 +47,7 @@ Devo CLI uses PyInstaller to create standalone binaries. Different platforms use
 **Extracted size:** ~60-90 MB
 
 **Why onedir?**
+
 - **Fast startup:** ~0.1-0.3s (no extraction needed)
 - Avoids extraction overhead
 - Better antivirus compatibility
@@ -63,12 +66,14 @@ Devo CLI uses PyInstaller to create standalone binaries. Different platforms use
 ## Why Different Modes?
 
 ### onefile Mode (Linux)
+
 - Extracts to temporary directory on each run
 - Adds 2-5s startup overhead on macOS/Windows
 - Acceptable on Linux due to faster I/O
 - Simpler distribution (single file)
 
 ### onedir Mode (macOS/Windows)
+
 - No extraction needed (files already on disk)
 - Near-instant startup
 - Better for frequent CLI usage
@@ -77,6 +82,7 @@ Devo CLI uses PyInstaller to create standalone binaries. Different platforms use
 ## Installation
 
 ### Linux
+
 ```bash
 # Download single binary
 curl -L https://github.com/edu526/devo-cli/releases/latest/download/devo-linux-amd64 -o devo
@@ -85,6 +91,7 @@ sudo mv devo /usr/local/bin/
 ```
 
 ### macOS
+
 ```bash
 # Download and extract tarball
 curl -L https://github.com/edu526/devo-cli/releases/latest/download/devo-darwin-arm64.tar.gz -o devo.tar.gz
@@ -94,6 +101,7 @@ sudo ln -s /usr/local/bin/devo-app/devo /usr/local/bin/devo
 ```
 
 ### Windows
+
 ```powershell
 # Download and extract zip
 Invoke-WebRequest -Uri "https://github.com/edu526/devo-cli/releases/latest/download/devo-windows-amd64.zip" -OutFile "devo.zip"
@@ -112,21 +120,25 @@ The `devo upgrade` command handles each format automatically:
 ## Building
 
 ### Build for Current Platform
+
 ```bash
 ./scripts/build.sh
 ```
 
 Output:
+
 - Linux: `dist/devo` (single file)
 - macOS: `dist/devo/` (directory)
 - Windows: `dist/devo/` (directory)
 
 ### Build Release
+
 ```bash
 ./scripts/build.sh --release
 ```
 
 Output:
+
 - Linux: `release/vX.Y.Z/devo-linux-amd64`
 - macOS: `release/vX.Y.Z/devo-darwin-arm64.tar.gz`
 - Windows: `release/vX.Y.Z/devo-windows-amd64.zip`

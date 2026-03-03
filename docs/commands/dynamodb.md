@@ -2,24 +2,32 @@
 
 DynamoDB table management and data export utilities.
 
-## Overview
+## Synopsis
 
-The `dynamodb` command provides utilities for working with AWS DynamoDB tables, including listing tables, describing table schemas, and exporting table data to various formats.
+```bash
+devo dynamodb <command> [OPTIONS]
+```
 
-## Subcommands
+## Description
+
+Provides utilities for working with AWS DynamoDB tables, including listing tables, describing table schemas, and exporting table data to various formats (CSV, JSON, JSONL, TSV) with advanced filtering and optimization.
+
+## Commands
 
 ### list
 
-List all DynamoDB tables in the current AWS account and region.
+List all DynamoDB tables in the region.
 
 ```bash
 devo dynamodb list [OPTIONS]
 ```
 
 **Options:**
+
 - `-r, --region TEXT` - AWS region (default: us-east-1)
 
 **Examples:**
+
 ```bash
 # List tables in default region
 devo dynamodb list
@@ -33,111 +41,248 @@ devo --profile production dynamodb list
 
 ### describe
 
-Show detailed information about a DynamoDB table including schema, indexes, and capacity settings.
+Show detailed information about a table.
 
 ```bash
 devo dynamodb describe TABLE_NAME [OPTIONS]
 ```
 
 **Options:**
+
 - `-r, --region TEXT` - AWS region (default: us-east-1)
 
 **Examples:**
+
 ```bash
+# Describe table
 devo dynamodb describe users-table
+
+# Describe in specific region
 devo dynamodb describe orders-prod --region us-east-1
 ```
 
+**Output includes:**
+
+- Table name and ARN
+- Primary key schema
+- Global and Local Secondary Indexes
+- Item count and table size
+- Provisioned/On-Demand capacity
+- Stream settings
+- Encryption settings
+
 ### export
 
-Export DynamoDB table data to CSV, JSON, JSONL, or TSV format with advanced filtering and formatting options.
+Export DynamoDB table to CSV, JSON, or JSONL format.
 
 ```bash
 devo dynamodb export TABLE_NAME [OPTIONS]
 ```
 
-**Options:**
+#### Basic Options
 
-#### Output Options
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--output PATH` | `-o` | Output file path (default: `<table_name>_<timestamp>.csv`) |
+| `--format [csv\|json\|jsonl\|tsv]` | `-f` | Output format (default: csv) |
+| `--region TEXT` | `-r` | AWS region (default: us-east-1) |
+| `--limit INTEGER` | `-l` | Maximum number of items to export |
+| `--attributes TEXT` | `-a` | Comma-separated list of attributes to export |
+
+#### Filtering Options
 
 | Option | Description |
 |--------|-------------|
-| `-o, --output PATH` | Output file path (default: `<table_name>_<timestamp>.csv`) |
-| `-f, --format [csv\|json\|jsonl\|tsv]` | Output format (default: csv) |
-| `--compress [gzip\|zip]` | Compress output file |
-
-#### Data Selection
-
-| Option | Description |
-|--------|-------------|
-| `-l, --limit INTEGER` | Maximum number of items to export |
-| `-a, --attributes TEXT` | Comma-separated list of attributes to export |
-| `--filter TEXT` | Filter expression for scan/query |
+| `--filter TEXT` | Filter expression (auto-detects indexes for optimization) |
 | `--filter-values TEXT` | Expression attribute values as JSON |
 | `--filter-names TEXT` | Expression attribute names as JSON |
-| `--key-condition TEXT` | Key condition expression for query |
-| `--index TEXT` | Global or Local Secondary Index name to use |
+| `--key-condition TEXT` | Manual key condition expression (rarely needed) |
+| `--index TEXT` | Force specific GSI/LSI (auto-selected from filter) |
 
-#### Formatting Options
+#### Export Modes
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--mode [strings\|flatten\|normalize]` | `-m` | Export mode (see below) |
+
+**Export Modes:**
+
+- `strings` - Serialize complex types as JSON strings
+- `flatten` - Flatten nested objects (e.g., `address.city`)
+- `normalize` - Expand lists to multiple rows
+
+#### CSV Options
 
 | Option | Description |
 |--------|-------------|
-| `-m, --mode [strings\|flatten\|normalize]` | Export mode (default: strings)<br>• `strings` - Serialize nested objects as JSON strings<br>• `flatten` - Flatten nested objects<br>• `normalize` - Expand lists to multiple rows |
-| `--null-value TEXT` | Value for NULL fields in CSV (default: empty string) |
+| `--null-value TEXT` | Value for NULL fields (default: empty string) |
 | `--delimiter TEXT` | CSV delimiter (default: comma) |
 | `--encoding TEXT` | File encoding (default: utf-8) |
-| `--bool-format [lowercase\|uppercase\|numeric\|letter]` | Boolean format (default: lowercase)<br>• `lowercase` - true/false<br>• `uppercase` - True/False<br>• `numeric` - 1/0<br>• `letter` - t/f |
-| `--metadata` | Include metadata header in CSV output |
+| `--bool-format [lowercase\|uppercase\|numeric\|letter]` | Boolean format (default: lowercase) |
+| `--metadata` | Include metadata header in CSV |
+
+**Boolean Formats:**
+
+- `lowercase` - true/false
+- `uppercase` - True/False
+- `numeric` - 1/0
+- `letter` - t/f
+
+#### JSON Options
+
+| Option | Description |
+|--------|-------------|
 | `--pretty` | Pretty print JSON output (ignored for JSONL) |
 
 #### Performance Options
 
 | Option | Description |
 |--------|-------------|
+| `--compress [gzip\|zip]` | Compress output file |
 | `--parallel-scan` | Use parallel scan for faster export (experimental) |
 | `--segments INTEGER` | Number of parallel scan segments (default: 4) |
 
-#### Other Options
+#### Template Options
 
 | Option | Description |
 |--------|-------------|
-| `--dry-run` | Show what would be exported without actually exporting |
-| `-y, --yes` | Skip confirmation prompts |
 | `--save-template TEXT` | Save current configuration as a template |
 | `--use-template TEXT` | Use saved template configuration |
 
-**Examples:**
+#### Other Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--dry-run` | | Show what would be exported without exporting |
+| `--yes` | `-y` | Skip confirmation prompts |
+
+## Examples
+
+### Basic Export
 
 ```bash
-# Export entire table to CSV (default)
+# Export entire table to CSV
 devo dynamodb export my-table
 
-# Export to JSON with compression
-devo dynamodb export my-table -f json --compress gzip
+# Export to JSON
+devo dynamodb export my-table -f json
 
-# Export to JSONL (JSON Lines - one object per line)
-devo dynamodb export my-table -f jsonl
+# Export to specific file
+devo dynamodb export my-table -o data/users.csv
+
+# Export with limit
+devo dynamodb export my-table -l 1000
+```
+
+### Export with Filtering
+
+```bash
+# Simple filter (auto-detects indexes)
+devo dynamodb export my-table --filter "userId = user123"
+
+# Filter with status
+devo dynamodb export my-table --filter "status = 'active'"
+
+# Multiple conditions
+devo dynamodb export my-table --filter "status = 'active' AND createdAt > '2024-01-01'"
 
 # Export specific attributes
-devo dynamodb export my-table -a "id,name,email,status"
+devo dynamodb export my-table -a "id,name,email" --filter "status = 'active'"
+```
 
-# Export with filter
-devo dynamodb export my-table --filter "status = :status" --filter-values '{"status": "active"}'
+### Advanced Filtering
 
-# Query with key condition
-devo dynamodb export my-table --key-condition "userId = :uid" --filter-values '{"uid": "user123"}'
+```bash
+# Manual filter values (when auto-detection doesn't work)
+devo dynamodb export my-table \
+  --filter "userId = :uid AND #status = :st" \
+  --filter-values '{":uid": "user123", ":st": "active"}' \
+  --filter-names '{"#status": "status"}'
 
-# Export to TSV with custom delimiter
-devo dynamodb export my-table -f tsv --delimiter "|"
+# Force specific index
+devo dynamodb export my-table \
+  --filter "userId = user123" \
+  --index "userId-index"
 
-# Parallel scan for large tables
-devo dynamodb export large-table --parallel-scan --segments 8
+# Manual key condition (rarely needed)
+devo dynamodb export my-table \
+  --key-condition "userId = :uid" \
+  --filter-values '{":uid": "user123"}'
+```
 
+### Export Modes
+
+```bash
+# Strings mode (default) - serialize complex types as JSON
+devo dynamodb export my-table -m strings
+
+# Flatten mode - flatten nested objects
+devo dynamodb export my-table -m flatten
+# address.city, address.state, etc.
+
+# Normalize mode - expand lists to multiple rows
+devo dynamodb export my-table -m normalize
+# One row per list item
+```
+
+### CSV Formatting
+
+```bash
+# Custom delimiter
+devo dynamodb export my-table --delimiter ";"
+
+# Custom null value
+devo dynamodb export my-table --null-value "N/A"
+
+# Boolean as 1/0
+devo dynamodb export my-table --bool-format numeric
+
+# Include metadata header
+devo dynamodb export my-table --metadata
+```
+
+### Compression
+
+```bash
+# Gzip compression
+devo dynamodb export my-table --compress gzip
+
+# ZIP compression
+devo dynamodb export my-table --compress zip -o data.csv
+# Creates data.csv.zip
+```
+
+### Parallel Scan
+
+```bash
+# Use parallel scan (faster for large tables)
+devo dynamodb export my-table --parallel-scan
+
+# Custom segment count
+devo dynamodb export my-table --parallel-scan --segments 8
+```
+
+### Templates
+
+```bash
 # Save export configuration as template
-devo dynamodb export my-table -a "id,name" --save-template my-export
+devo dynamodb export my-table \
+  --filter "status = 'active'" \
+  -a "id,name,email" \
+  --save-template active-users
 
 # Use saved template
-devo dynamodb export my-table --use-template my-export
+devo dynamodb export my-table --use-template active-users
+
+# List templates
+devo dynamodb list-templates
+```
+
+### Dry Run
+
+```bash
+# Preview what would be exported
+devo dynamodb export my-table --filter "userId = user123" --dry-run
 ```
 
 ### list-templates
@@ -148,148 +293,106 @@ List all saved export templates.
 devo dynamodb list-templates
 ```
 
-**Example:**
+Shows all templates saved with `--save-template`.
+
+## Query Optimization
+
+The export command automatically optimizes queries:
+
+1. **Index Detection**: Analyzes filter expression and selects best index
+2. **Query vs Scan**: Uses Query when possible (faster and cheaper)
+3. **Projection**: Only fetches requested attributes
+4. **Parallel Scan**: Optionally splits scan across multiple segments
+
+### Example: Automatic Optimization
+
 ```bash
-devo dynamodb list-templates
+# This filter expression:
+devo dynamodb export users --filter "userId = 'user123'"
+
+# Automatically:
+# 1. Detects userId is a key in GSI "userId-index"
+# 2. Uses Query instead of Scan
+# 3. Much faster and cheaper
 ```
 
-## Export Formats
+## Configuration
 
-### CSV (default)
-Comma-separated values format, compatible with Excel and most data tools.
-
-```csv
-id,name,email
-1,John,john@example.com
-2,Jane,jane@example.com
-```
-
-### JSON
-Single JSON array containing all records. Good for programmatic processing.
-
-```json
-[
-  {"id": 1, "name": "John", "email": "john@example.com"},
-  {"id": 2, "name": "Jane", "email": "jane@example.com"}
-]
-```
-
-### JSONL (JSON Lines)
-One JSON object per line. Efficient for streaming and large datasets.
-
-```jsonl
-{"id": 1, "name": "John", "email": "john@example.com"}
-{"id": 2, "name": "Jane", "email": "jane@example.com"}
-```
-
-### TSV
-Tab-separated values format. Similar to CSV but uses tabs as delimiter.
-
-```tsv
-id	name	email
-1	John	john@example.com
-2	Jane	jane@example.com
-```
-
-## Export Modes
-
-The `--mode` option controls how nested data is handled (applies to CSV/TSV):
-
-### strings (default)
-Serializes nested objects and lists as JSON strings in CSV.
-
-```csv
-id,name,metadata
-1,John,"{\"age\": 30, \"city\": \"NYC\"}"
-```
-
-### flatten
-Flattens nested objects into separate columns.
-
-```csv
-id,name,metadata.age,metadata.city
-1,John,30,NYC
-```
-
-### normalize
-Expands lists into multiple rows.
-
-```csv
-id,name,tag
-1,John,developer
-1,John,python
-```
-
-## Required Permissions
-
-Your AWS user/role needs these DynamoDB permissions:
+Export templates are stored in `~/.devo/config.json`:
 
 ```json
 {
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "dynamodb:ListTables",
-        "dynamodb:DescribeTable",
-        "dynamodb:Scan",
-        "dynamodb:Query"
-      ],
-      "Resource": "*"
+  "dynamodb": {
+    "export_templates": {
+      "active-users": {
+        "table_name": "users",
+        "filter_expression": "status = :status",
+        "expression_attribute_values": {
+          ":status": "active"
+        },
+        "attributes": ["id", "name", "email"]
+      }
     }
-  ]
+  }
 }
 ```
 
-## Use Cases
+## Performance Tips
 
-### Backup Tables
-
-```bash
-# Export table for backup
-devo dynamodb export production-users --output backup-$(date +%Y%m%d).json -f json --compress gzip
-```
-
-### Data Analysis
-
-```bash
-# Export to CSV for analysis in Excel/Pandas
-devo dynamodb export analytics-data -f csv --mode flatten
-```
-
-### Filtered Export
-
-```bash
-# Export only active users
-devo dynamodb export users --filter "status = :s" --filter-values '{"s": "active"}'
-```
+1. **Use filters**: Export only needed data
+2. **Use projections**: Specify attributes with `-a`
+3. **Use parallel scan**: For large tables (>1GB)
+4. **Use compression**: For large exports
+5. **Use Query**: Let auto-optimization detect indexes
 
 ## Troubleshooting
 
-### Access Denied
+### Export is slow
 
-Verify IAM permissions:
 ```bash
-aws dynamodb list-tables --profile your-profile
+# Use parallel scan
+devo dynamodb export my-table --parallel-scan --segments 8
 ```
 
-### Table Not Found
+### Filter not working
 
-Check region and table name:
 ```bash
-devo dynamodb list --region us-east-1
+# Check filter syntax
+devo dynamodb export my-table --filter "status = 'active'" --dry-run
+
+# Use manual filter values if needed
+devo dynamodb export my-table \
+  --filter "status = :st" \
+  --filter-values '{":st": "active"}'
 ```
 
-### Export Timeout
+### Reserved keywords
 
-For large tables, use parallel scan:
 ```bash
-devo dynamodb export large-table --parallel-scan --segments 8
+# Use expression attribute names
+devo dynamodb export my-table \
+  --filter "#status = :st" \
+  --filter-names '{"#status": "status"}' \
+  --filter-values '{":st": "active"}'
 ```
+
+## Exit Codes
+
+| Code | Description |
+|------|-------------|
+| 0 | Success |
+| 1 | Error (table not found, access denied, invalid filter, etc.) |
 
 ## See Also
 
-- [Configuration](../getting-started/configuration.md) - AWS configuration
-- [AWS Setup](../guides/aws-setup.md) - AWS credentials setup
-- [Troubleshooting](../reference/troubleshooting.md) - Common issues
+- [DynamoDB Export Guide](../guides/dynamodb-export.md) - Detailed export guide
+- [AWS Setup](../guides/aws-setup.md) - Configure AWS credentials
+- [devo config](config.md) - Manage templates
+
+## Notes
+
+- Requires AWS credentials with DynamoDB read permissions
+- Large exports may take time and consume read capacity
+- Use `--limit` for testing filters
+- Templates are stored in `~/.devo/config.json`
+- Parallel scan is experimental and may not work with all filters

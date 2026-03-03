@@ -58,18 +58,21 @@ Release Workflow
 ### Examples
 
 **Feature (minor bump):**
+
 ```bash
 git commit -m "feat: add code generation command"
 git commit -m "feat(cli): add --verbose flag to all commands"
 ```
 
 **Bug fix (patch bump):**
+
 ```bash
 git commit -m "fix: resolve template rendering issue"
 git commit -m "fix(parser): handle empty input correctly"
 ```
 
 **Breaking change (major bump):**
+
 ```bash
 git commit -m "feat!: redesign CLI interface
 
@@ -77,11 +80,13 @@ BREAKING CHANGE: Command structure has changed"
 ```
 
 **Documentation (patch bump):**
+
 ```bash
 git commit -m "docs: update installation instructions"
 ```
 
 **No release:**
+
 ```bash
 git commit -m "chore: update dependencies"
 git commit -m "ci: fix workflow syntax"
@@ -149,6 +154,7 @@ Or use `chore:` type (doesn't trigger release).
 ### No release created
 
 **Check:**
+
 - Commits follow conventional format
 - Commits are on `main` branch
 - Commit types trigger releases (not `chore:`)
@@ -157,6 +163,7 @@ Or use `chore:` type (doesn't trigger release).
 ### Wrong version bump
 
 **Check:**
+
 - Commit type is correct
 - Breaking changes use `!` or `BREAKING CHANGE:`
 - Multiple commits are analyzed together
@@ -164,6 +171,7 @@ Or use `chore:` type (doesn't trigger release).
 ### CHANGELOG not updated
 
 **Check:**
+
 - Workflow completed successfully
 - Git push succeeded
 - File is committed to repository
