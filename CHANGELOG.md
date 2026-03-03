@@ -2,6 +2,32 @@
 
 <!-- version list -->
 
+## v3.1.1 (2026-03-03)
+
+### Bug Fixes
+
+- Trigger binary build
+  ([`b2c9718`](https://github.com/edu526/devo-cli/commit/b2c971817c9b48f11e62d002eba579b34072c152))
+
+### Chores
+
+- **install**: Rename downloaded binary to 'devo' for consistency
+  ([`a0b0bde`](https://github.com/edu526/devo-cli/commit/a0b0bdef321e66c1c2a675564258dce16e07d773))
+
+### Continuous Integration
+
+- Update Ubuntu runner to 20.04 for GLIBC compatibility
+  ([`8833a2d`](https://github.com/edu526/devo-cli/commit/8833a2daa09f37ff4bf763152d3a0f4183d964a5))
+
+- Upgrade Ubuntu runner from 20.04 to 22.04 across workflows
+  ([`60265aa`](https://github.com/edu526/devo-cli/commit/60265aa7566da4d88b70a8e04fdbffbd9cdd345c))
+
+### Documentation
+
+- Improve formatting and readability across documentation
+  ([`3375dd7`](https://github.com/edu526/devo-cli/commit/3375dd73e802bcd74a3fcade31b5777a684069f3))
+
+
 ## v3.1.0 (2026-03-02)
 
 ### Bug Fixes
