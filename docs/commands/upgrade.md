@@ -252,7 +252,7 @@ Error: Binary verification failed
 
 - [Installation Guide](../getting-started/installation.md) - Initial installation
 - [GitHub Releases](https://github.com/edu526/devo-cli/releases) - View all releases
-- [Changelog](../../CHANGELOG.md) - Version history
+- [Changelog](https://github.com/edu526/devo-cli/blob/main/CHANGELOG.md) - Version history
 
 ## Notes
 

@@ -48,7 +48,7 @@ devo config migrate
 
 ```bash
 # Export full configuration to stdout
-devo config export
+devo config export --stdout
 
 # Export to file
 devo config export -o backup.json
@@ -57,11 +57,11 @@ devo config export -o backup.json
 devo config export -s ssm -s dynamodb
 devo config export --section ssm --output ssm-config.json
 
-# Import configuration (replaces current)
+# Import configuration (merges with existing by default)
 devo config import backup.json
 
-# Import and merge with existing configuration
-devo config import team-config.json --merge
+# Import and replace sections completely (instead of merging)
+devo config import team-config.json -s ssm --replace
 ```
 
 **Use cases:**
@@ -278,11 +278,11 @@ devo config export -s ssm -o ssm-config.json
 # Backup current configuration
 devo config export -o ~/backups/devo-config-$(date +%Y%m%d).json
 
-# Restore from backup
+# Restore from backup (merges with existing by default)
 devo config import ~/backups/devo-config-20260301.json
 
-# Merge team configuration
-devo config import team-config.json --merge
+# Import team configuration (merges with existing)
+devo config import team-config.json
 ```
 
 ## Troubleshooting
@@ -323,9 +323,9 @@ devo config show
 
 For AWS profile selection and credentials:
 
-1. List available profiles: `devo aws-login --list`
-2. Check profile status: `devo aws-login --status`
-3. Login to profile: `devo aws-login --profile production`
+1. List available profiles: `devo aws-login list`
+2. Check profile status: `devo aws-login list`
+3. Login to profile: `devo aws-login login production`
 4. Verify credentials: `aws sts get-caller-identity --profile production`
 
 ### Bedrock Model Issues

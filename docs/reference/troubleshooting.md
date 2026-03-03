@@ -154,13 +154,7 @@ export AWS_PROFILE=production
    devo config show
    ```
 
-2. **Validate configuration:**
-
-   ```bash
-   devo config validate
-   ```
-
-3. **Reset if corrupted:**
+2. **Reset if corrupted:**
 
    ```bash
    devo config reset
@@ -168,19 +162,16 @@ export AWS_PROFILE=production
 
 ### Invalid Configuration Values
 
-**Problem:** Configuration validation fails
+**Problem:** Configuration value needs to be updated
 
 **Solutions:**
 
 ```bash
-# Check specific value
-devo config get aws.region
+# Show current value
+devo config show
 
 # Fix invalid value
 devo config set aws.region us-east-1
-
-# Or edit manually
-devo config edit
 ```
 
 ## Command-Specific Issues
@@ -227,18 +218,20 @@ devo commit
 
 **Solutions:**
 
-1. **Check diff size:**
+1. **Make sure you have commits on your branch that differ from the base branch:**
 
    ```bash
-   # Large diffs may timeout
-   git diff --staged --stat
-
-   # Review smaller chunks
-   git add file1.py
-   devo code-reviewer
+   # Check your branch has new commits vs main/master
+   git log main..HEAD --oneline
    ```
 
-2. **Verify AWS credentials:**
+2. **Use a closer base branch for large features:**
+
+   ```bash
+   devo code-reviewer --base-branch your-parent-branch
+   ```
+
+3. **Verify AWS credentials:**
 
    ```bash
    aws sts get-caller-identity
@@ -433,8 +426,7 @@ If you can't resolve your issue:
 2. **Enable debug output:**
 
    ```bash
-   # Set verbose logging (if supported)
-   devo --verbose commit
+   devo --help  # Check available options
    ```
 
 3. **Report issue:**
@@ -467,9 +459,9 @@ If you can't resolve your issue:
 
 ### `ValidationException`
 
-**Cause:** Invalid configuration or parameters
+**Cause:** Invalid parameters passed to AWS API
 
-**Fix:** Validate configuration with `devo config validate`
+**Fix:** Check the parameters in your command (e.g., filter expressions, table names)
 
 ### `ConnectionError`
 

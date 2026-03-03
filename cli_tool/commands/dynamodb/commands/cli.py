@@ -90,7 +90,7 @@ def describe_table(ctx, table_name: str, region: str):
 )
 @click.option(
     "--filter-values",
-    help='[Advanced] Expression attribute values as JSON (e.g., \'{":val": "active"}\')',
+    help='[Advanced] Expression attribute values as JSON in DynamoDB typed format (e.g., \'{":val": {"S": "active"}}\')',
 )
 @click.option(
     "--filter-names",
@@ -224,7 +224,7 @@ def export_table(
       devo dynamodb export my-table -f json --compress gzip
 
       # Advanced: Manual key condition (rarely needed, auto-detected from --filter)
-      devo dynamodb export my-table --key-condition "userId = :uid" --filter-values '{":uid": "user123"}'
+      devo dynamodb export my-table --key-condition "userId = :uid" --filter-values '{":uid": {"S": "user123"}}'
     """
     from cli_tool.core.utils.aws import select_profile
 

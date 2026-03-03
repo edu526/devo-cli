@@ -8,58 +8,25 @@ Environment variables override configuration file values and provide temporary c
 
 ## AWS Configuration
 
-### AWS_REGION
-
-- **Description:** AWS region for all AWS operations
-- **Default:** `us-east-1`
-- **Example:**
-
-  ```bash
-  export AWS_REGION=us-west-2
-  devo commit
-  ```
-
-### AWS_ACCOUNT_ID
-
-- **Description:** AWS account ID for authentication
-- **Default:** `123456789012`
-- **Example:**
-
-  ```bash
-  export AWS_ACCOUNT_ID=123456789012
-  devo commit
-  ```
-
-### AWS_SSO_URL
-
-- **Description:** AWS SSO start URL for authentication
-- **Default:** `https://my-org.awsapps.com/start`
-- **Example:**
-
-  ```bash
-  export AWS_SSO_URL=https://your-org.awsapps.com/start
-  devo commit
-  ```
-
-### AWS_REQUIRED_ROLE
-
-- **Description:** Required IAM role name for operations
-- **Default:** `DeveloperTools`
-- **Example:**
-
-  ```bash
-  export AWS_REQUIRED_ROLE=Developer
-  devo commit
-  ```
-
 ### AWS_PROFILE
 
-- **Description:** AWS CLI profile to use
+- **Description:** AWS CLI profile to use (standard AWS SDK variable)
 - **Default:** `default`
 - **Example:**
 
   ```bash
   export AWS_PROFILE=production
+  devo commit
+  ```
+
+### AWS_REGION
+
+- **Description:** AWS region for all AWS SDK operations (standard AWS SDK variable)
+- **Default:** `us-east-1`
+- **Example:**
+
+  ```bash
+  export AWS_REGION=us-west-2
   devo commit
   ```
 
@@ -76,6 +43,17 @@ Environment variables override configuration file values and provide temporary c
 
   ```bash
   export BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-20250514-v1:0
+  devo commit
+  ```
+
+### BEDROCK_REGION
+
+- **Description:** AWS region for Bedrock API calls (overrides `AWS_REGION` for Bedrock only)
+- **Default:** `us-east-1`
+- **Example:**
+
+  ```bash
+  export BEDROCK_REGION=us-west-2
   devo commit
   ```
 
@@ -113,6 +91,39 @@ Environment variables override configuration file values and provide temporary c
 
   ```bash
   export CODEARTIFACT_REGION=us-east-1
+  devo codeartifact-login
+  ```
+
+### CODEARTIFACT_ACCOUNT_ID
+
+- **Description:** AWS account ID for CodeArtifact authentication
+- **Default:** Value from `codeartifact.account_id` in config
+- **Example:**
+
+  ```bash
+  export CODEARTIFACT_ACCOUNT_ID=123456789012
+  devo codeartifact-login
+  ```
+
+### CODEARTIFACT_SSO_URL
+
+- **Description:** AWS SSO start URL for CodeArtifact authentication
+- **Default:** Value from `codeartifact.sso_url` in config
+- **Example:**
+
+  ```bash
+  export CODEARTIFACT_SSO_URL=https://your-org.awsapps.com/start
+  devo codeartifact-login
+  ```
+
+### CODEARTIFACT_REQUIRED_ROLE
+
+- **Description:** Required IAM role name for CodeArtifact operations
+- **Default:** `Developer`
+- **Example:**
+
+  ```bash
+  export CODEARTIFACT_REQUIRED_ROLE=Developer
   devo codeartifact-login
   ```
 

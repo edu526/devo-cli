@@ -32,7 +32,7 @@ devo ssm connect [NAME] [OPTIONS]
 Shortcut for `devo ssm instance shell`.
 
 ```bash
-devo ssm shell [NAME] [OPTIONS]
+devo ssm shell NAME
 ```
 
 ### database
@@ -54,9 +54,7 @@ devo ssm database connect [NAME] [OPTIONS]
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
 | `NAME` | No | - | Database name (shows menu if omitted) |
-| `--profile` | No | Config profile | Override AWS profile for this connection |
 | `--no-hosts` | No | `false` | Disable hostname forwarding, use localhost |
-| `--config-path` | No | `~/.devo/ssm-config.json` | Custom config file path |
 
 **Example:**
 
@@ -79,12 +77,8 @@ devo ssm connect mydb
 List all configured databases.
 
 ```bash
-devo ssm database list [OPTIONS]
+devo ssm database list
 ```
-
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `--config-path` | No | `~/.devo/ssm-config.json` | Custom config file path |
 
 **Example:**
 
@@ -97,27 +91,22 @@ devo ssm database list
 Add a database configuration.
 
 ```bash
-devo ssm database add [OPTIONS]
+devo ssm database add --name NAME --bastion BASTION --host HOST --port PORT [OPTIONS]
 ```
 
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
-| `--name` | No | Interactive | Configuration name |
-| `--bastion` | No | Interactive | Bastion instance ID |
-| `--host` | No | Interactive | Database hostname |
-| `--port` | No | Interactive | Remote port |
+| `--name` | **Yes** | - | Configuration name |
+| `--bastion` | **Yes** | - | Bastion instance ID |
+| `--host` | **Yes** | - | Database hostname |
+| `--port` | **Yes** | - | Remote port |
 | `--local-port` | No | Same as `--port` | Local port for forwarding |
 | `--region` | No | `us-east-1` | AWS region |
 | `--profile` | No | - | AWS profile |
-| `--config-path` | No | `~/.devo/ssm-config.json` | Custom config file path |
 
 **Example:**
 
 ```bash
-# Interactive mode
-devo ssm database add
-
-# With options
 devo ssm database add --name mydb --bastion i-xxx --host db.rds.amazonaws.com --port 5432
 ```
 
@@ -126,21 +115,16 @@ devo ssm database add --name mydb --bastion i-xxx --host db.rds.amazonaws.com --
 Remove a database configuration.
 
 ```bash
-devo ssm database remove [NAME] [OPTIONS]
+devo ssm database remove NAME
 ```
 
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `NAME` | No | Interactive | Database name to remove |
-| `--config-path` | No | `~/.devo/ssm-config.json` | Custom config file path |
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `NAME` | **Yes** | Database name to remove |
 
 **Example:**
 
 ```bash
-# Interactive mode
-devo ssm database remove
-
-# Direct removal
 devo ssm database remove mydb
 ```
 
@@ -157,21 +141,16 @@ devo ssm instance <subcommand> [OPTIONS]
 Connect to a configured instance via interactive shell.
 
 ```bash
-devo ssm instance shell [NAME] [OPTIONS]
+devo ssm instance shell NAME
 ```
 
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `NAME` | No | Interactive | Instance name (shows menu if omitted) |
-| `--profile` | No | Config profile | Override AWS profile for this connection |
-| `--config-path` | No | `~/.devo/ssm-config.json` | Custom config file path |
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `NAME` | **Yes** | Instance name |
 
 **Example:**
 
 ```bash
-# Interactive mode
-devo ssm instance shell
-
 # Connect to specific instance
 devo ssm instance shell bastion-dev
 
@@ -184,12 +163,8 @@ devo ssm shell bastion-dev
 List all configured instances.
 
 ```bash
-devo ssm instance list [OPTIONS]
+devo ssm instance list
 ```
-
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `--config-path` | No | `~/.devo/ssm-config.json` | Custom config file path |
 
 **Example:**
 
@@ -202,24 +177,19 @@ devo ssm instance list
 Add an EC2 instance configuration.
 
 ```bash
-devo ssm instance add [OPTIONS]
+devo ssm instance add --name NAME --instance-id INSTANCE_ID [OPTIONS]
 ```
 
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
-| `--name` | No | Interactive | Instance configuration name |
-| `--instance-id` | No | Interactive | EC2 instance ID |
+| `--name` | **Yes** | - | Instance configuration name |
+| `--instance-id` | **Yes** | - | EC2 instance ID |
 | `--region` | No | `us-east-1` | AWS region |
 | `--profile` | No | - | AWS profile |
-| `--config-path` | No | `~/.devo/ssm-config.json` | Custom config file path |
 
 **Example:**
 
 ```bash
-# Interactive mode
-devo ssm instance add
-
-# With options
 devo ssm instance add --name bastion-dev --instance-id i-xxx --region us-east-1
 ```
 
@@ -228,21 +198,16 @@ devo ssm instance add --name bastion-dev --instance-id i-xxx --region us-east-1
 Remove an instance configuration.
 
 ```bash
-devo ssm instance remove [NAME] [OPTIONS]
+devo ssm instance remove NAME
 ```
 
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `NAME` | No | Interactive | Instance name to remove |
-| `--config-path` | No | `~/.devo/ssm-config.json` | Custom config file path |
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `NAME` | **Yes** | Instance name to remove |
 
 **Example:**
 
 ```bash
-# Interactive mode
-devo ssm instance remove
-
-# Direct removal
 devo ssm instance remove bastion-dev
 ```
 
@@ -259,12 +224,8 @@ devo ssm hosts <subcommand> [OPTIONS]
 Setup /etc/hosts entries for all configured databases.
 
 ```bash
-devo ssm hosts setup [OPTIONS]
+devo ssm hosts setup
 ```
-
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `--config-path` | No | `~/.devo/ssm-config.json` | Custom config file path |
 
 Automatically assigns unique loopback IPs, updates /etc/hosts, and saves configuration.
 
@@ -279,12 +240,8 @@ devo ssm hosts setup
 List all /etc/hosts entries managed by Devo CLI.
 
 ```bash
-devo ssm hosts list [OPTIONS]
+devo ssm hosts list
 ```
-
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `--config-path` | No | `~/.devo/ssm-config.json` | Custom config file path |
 
 **Example:**
 
@@ -297,21 +254,16 @@ devo ssm hosts list
 Add a single database hostname to /etc/hosts.
 
 ```bash
-devo ssm hosts add [NAME] [OPTIONS]
+devo ssm hosts add NAME
 ```
 
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `NAME` | No | Interactive | Database name |
-| `--config-path` | No | `~/.devo/ssm-config.json` | Custom config file path |
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `NAME` | **Yes** | Database name |
 
 **Example:**
 
 ```bash
-# Interactive mode
-devo ssm hosts add
-
-# Direct addition
 devo ssm hosts add mydb
 ```
 
@@ -320,21 +272,16 @@ devo ssm hosts add mydb
 Remove a database hostname from /etc/hosts.
 
 ```bash
-devo ssm hosts remove [NAME] [OPTIONS]
+devo ssm hosts remove NAME
 ```
 
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `NAME` | No | Interactive | Database name |
-| `--config-path` | No | `~/.devo/ssm-config.json` | Custom config file path |
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `NAME` | **Yes** | Database name |
 
 **Example:**
 
 ```bash
-# Interactive mode
-devo ssm hosts remove
-
-# Direct removal
 devo ssm hosts remove mydb
 ```
 
@@ -343,12 +290,10 @@ devo ssm hosts remove mydb
 Remove all Devo CLI managed entries from /etc/hosts.
 
 ```bash
-devo ssm hosts clear [OPTIONS]
+devo ssm hosts clear
 ```
 
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `--config-path` | No | `~/.devo/ssm-config.json` | Custom config file path |
+Prompts for confirmation before removing all entries.
 
 **Example:**
 
@@ -407,26 +352,28 @@ devo ssm forward --bastion i-xxx --host db.rds.amazonaws.com --port 5432
 
 ## Configuration File Format
 
-Location: `~/.devo/ssm-config.json`
+SSM configuration is stored under the `ssm` key in `~/.devo/config.json`:
 
 ```json
 {
-  "databases": {
-    "mydb": {
-      "bastion": "i-0123456789abcdef0",
-      "host": "mydb.cluster-xyz.us-east-1.rds.amazonaws.com",
-      "port": 5432,
-      "local_port": 5432,
-      "local_address": "127.0.0.2",
-      "region": "us-east-1",
-      "profile": "dev"
-    }
-  },
-  "instances": {
-    "bastion-dev": {
-      "instance_id": "i-0123456789abcdef0",
-      "region": "us-east-1",
-      "profile": "dev"
+  "ssm": {
+    "databases": {
+      "mydb": {
+        "bastion": "i-0123456789abcdef0",
+        "host": "mydb.cluster-xyz.us-east-1.rds.amazonaws.com",
+        "port": 5432,
+        "local_port": 5432,
+        "local_address": "127.0.0.2",
+        "region": "us-east-1",
+        "profile": "dev"
+      }
+    },
+    "instances": {
+      "bastion-dev": {
+        "instance_id": "i-0123456789abcdef0",
+        "region": "us-east-1",
+        "profile": "dev"
+      }
     }
   }
 }
@@ -480,13 +427,13 @@ devo ssm instance list
 ### Team Configuration Sharing
 
 ```bash
-# Export configuration
-devo ssm export team-config.json
+# Export SSM configuration
+devo config export -s ssm -o team-ssm-config.json
 
-# Share team-config.json with team
+# Share team-ssm-config.json with team
 
 # Import on another machine
-devo ssm import team-config.json --merge
+devo config import team-ssm-config.json -s ssm
 ```
 
 ### Troubleshooting

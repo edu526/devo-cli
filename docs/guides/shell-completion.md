@@ -70,7 +70,7 @@ devo <TAB>
 devo commit --<TAB>
 
 # Should show:
-# --add  --all  --help  --profile  --pull-request  --push
+# --add  --all  --help  --pull-request  --push
 ```
 
 ## Usage Examples
@@ -90,11 +90,11 @@ devo co<TAB>
 ```bash
 devo commit --<TAB>
 # Shows all available options:
-# --add  --all  --help  --profile  --pull-request  --push
+# --add  --all  --help  --pull-request  --push
 
 devo config <TAB>
 # Shows subcommands:
-# edit  export  get  import  path  reset  set  show  validate
+# export  import  migrate  path  reset  sections  set  show
 ```
 
 ### Profile Completion

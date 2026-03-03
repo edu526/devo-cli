@@ -24,7 +24,7 @@ If not installed, see [AWS Setup Guide](aws-setup.md).
 ### Step 2: Configure Your First Profile
 
 ```bash
-devo aws-login --configure --profile production
+devo aws-login configure production
 ```
 
 The wizard will:
@@ -66,7 +66,7 @@ Default output format: json
 ### Step 3: Login
 
 ```bash
-devo aws-login --profile production
+devo aws-login login production
 ```
 
 Your browser opens, you authenticate, and credentials are cached automatically.
@@ -75,7 +75,7 @@ Your browser opens, you authenticate, and credentials are cached automatically.
 
 ```bash
 # Check status
-devo aws-login --status
+devo aws-login list
 
 # Use credentials
 aws s3 ls --profile production
@@ -89,7 +89,7 @@ Start your day by checking credential status:
 
 ```bash
 # Check all profiles
-devo aws-login --status
+devo aws-login list
 ```
 
 Output shows which profiles need refresh:
@@ -109,7 +109,7 @@ Output shows which profiles need refresh:
 Refresh expired/expiring profiles:
 
 ```bash
-devo aws-login --refresh-all
+devo aws-login refresh
 ```
 
 ### Working with Multiple Environments
@@ -118,17 +118,17 @@ Switch between environments easily:
 
 ```bash
 # Work on development
-devo aws-login --profile dev
+devo aws-login login dev
 export AWS_PROFILE=dev
 aws s3 ls
 
 # Switch to production
-devo aws-login --profile production
+devo aws-login login production
 export AWS_PROFILE=production
 aws dynamodb list-tables
 
 # Switch to staging
-devo aws-login --profile staging
+devo aws-login login staging
 export AWS_PROFILE=staging
 ```
 
@@ -138,10 +138,10 @@ If credentials expire during work:
 
 ```bash
 # Quick refresh for current profile
-devo aws-login --profile production
+devo aws-login login production
 
 # Or refresh all at once
-devo aws-login --refresh-all
+devo aws-login refresh
 ```
 
 ## Multi-Environment Setup Workflow
@@ -152,13 +152,13 @@ Configure all environments:
 
 ```bash
 # Development
-devo aws-login --configure --profile dev
+devo aws-login configure dev
 
 # Staging
-devo aws-login --configure --profile staging
+devo aws-login configure staging
 
 # Production
-devo aws-login --configure --profile production
+devo aws-login configure production
 ```
 
 **Pro tip:** If all environments use the same SSO session, the command will detect it and let you reuse it:
@@ -177,21 +177,21 @@ This minimizes the number of browser logins needed!
 
 ```bash
 # Login to each profile
-devo aws-login --profile dev
-devo aws-login --profile staging
-devo aws-login --profile production
+devo aws-login login dev
+devo aws-login login staging
+devo aws-login login production
 ```
 
-Or use `--refresh-all` to refresh all at once:
+Or use `refresh` to refresh all at once:
 
 ```bash
-devo aws-login --refresh-all
+devo aws-login refresh
 ```
 
 ### Check Status Across Environments
 
 ```bash
-devo aws-login --status
+devo aws-login list
 ```
 
 See all profiles at a glance.
@@ -206,10 +206,10 @@ See all profiles at a glance.
 
 ```bash
 # Quick fix
-devo aws-login --profile production
+devo aws-login login production
 
 # Or refresh all
-devo aws-login --refresh-all
+devo aws-login refresh
 ```
 
 ### Multiple SSO Sessions
@@ -220,16 +220,16 @@ devo aws-login --refresh-all
 
 ```bash
 # Configure first org
-devo aws-login --configure --profile org1-prod
+devo aws-login configure org1-prod
 
 # Configure second org (different SSO URL)
-devo aws-login --configure --profile org2-prod
+devo aws-login configure org2-prod
 
 # List all profiles
-devo aws-login --list
+devo aws-login list
 
 # Check status
-devo aws-login --status
+devo aws-login list
 ```
 
 ### Profile Conflicts
@@ -240,11 +240,11 @@ devo aws-login --status
 
 ```bash
 # Option 1: Overwrite
-devo aws-login --configure --profile production
+devo aws-login configure production
 # Choose "Yes" when asked to overwrite
 
 # Option 2: Use different name
-devo aws-login --configure --profile production-new
+devo aws-login configure production-new
 ```
 
 ### Browser Not Opening
@@ -258,7 +258,7 @@ devo aws-login --configure --profile production-new
 aws sso login --profile production
 
 # If that works, try devo again
-devo aws-login --profile production
+devo aws-login login production
 
 # If browser still doesn't open, manually copy URL from terminal
 ```
@@ -271,15 +271,15 @@ Switch between roles in the same account:
 
 ```bash
 # Configure different roles
-devo aws-login --configure --profile prod-admin
+devo aws-login configure prod-admin
 # Select AdministratorAccess role
 
-devo aws-login --configure --profile prod-readonly
+devo aws-login configure prod-readonly
 # Select ReadOnly role
 
 # Use appropriate role for task
-devo aws-login --profile prod-admin  # For admin tasks
-devo aws-login --profile prod-readonly  # For read-only tasks
+devo aws-login login prod-admin  # For admin tasks
+devo aws-login login prod-readonly  # For read-only tasks
 ```
 
 ### Cross-Account Access
@@ -288,8 +288,8 @@ Access resources across multiple accounts:
 
 ```bash
 # Configure each account
-devo aws-login --configure --profile account-a
-devo aws-login --configure --profile account-b
+devo aws-login configure account-a
+devo aws-login configure account-b
 
 # Copy data between accounts
 aws s3 cp s3://bucket-a/file.txt /tmp/ --profile account-a
@@ -302,10 +302,10 @@ Create a temporary profile for testing:
 
 ```bash
 # Configure test profile
-devo aws-login --configure --profile test-temp
+devo aws-login configure test-temp
 
 # Use it
-devo aws-login --profile test-temp
+devo aws-login login test-temp
 export AWS_PROFILE=test-temp
 
 # When done, remove from ~/.aws/config
@@ -319,7 +319,7 @@ vim ~/.aws/config
 
 ```bash
 # Add to your shell profile (.bashrc, .zshrc)
-alias aws-status='devo aws-login --status'
+alias aws-status='devo aws-login list'
 ```
 
 ### 2. Use Descriptive Profile Names
@@ -342,10 +342,10 @@ Don't wait for credentials to expire:
 
 ```bash
 # Before starting work
-devo aws-login --refresh-all
+devo aws-login refresh
 
 # Before long-running tasks
-devo aws-login --profile production
+devo aws-login login production
 ./long-running-script.sh
 ```
 
@@ -361,9 +361,9 @@ Keep a README in your project:
 - `company-prod`: Production environment (Account: 555666777888)
 
 To setup:
-\`\`\`bash
-devo aws-login --configure --profile company-dev
-\`\`\`
+```bash
+devo aws-login configure company-dev
+```
 ```
 
 ### 5. Use Environment Variables
@@ -383,42 +383,42 @@ devo codeartifact-login
 
 ```bash
 # Login to AWS first
-devo aws-login --profile production
+devo aws-login login production
 
 # Then login to CodeArtifact
-devo codeartifact-login --profile production
+devo --profile production codeartifact-login
 ```
 
 ### Commit with Bedrock
 
 ```bash
 # Ensure AWS credentials are valid
-devo aws-login --profile dev
+devo aws-login login dev
 
 # Generate commit message (uses Bedrock)
 git add .
-devo commit --profile dev
+devo --profile dev commit
 ```
 
 ### Code Review with Bedrock
 
 ```bash
 # Login to AWS
-devo aws-login --profile dev
+devo aws-login login dev
 
 # Review code (uses Bedrock)
-devo code-reviewer --profile dev
+devo --profile dev code-reviewer
 ```
 
 ## Summary
 
 Key workflows to remember:
 
-1. **First time:** `devo aws-login --configure --profile <name>`
-2. **Daily start:** `devo aws-login --status` → `devo aws-login --refresh-all`
-3. **Switch profiles:** `devo aws-login --profile <name>` + `export AWS_PROFILE=<name>`
-4. **Check status:** `devo aws-login --status`
-5. **Refresh all:** `devo aws-login --refresh-all`
+1. **First time:** `devo aws-login configure <name>`
+2. **Daily start:** `devo aws-login list` → `devo aws-login refresh`
+3. **Switch profiles:** `devo aws-login login <name>` + `export AWS_PROFILE=<name>`
+4. **Check status:** `devo aws-login list`
+5. **Refresh all:** `devo aws-login refresh`
 
 ## Related Guides
 

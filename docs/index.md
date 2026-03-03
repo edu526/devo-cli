@@ -15,42 +15,39 @@ Devo CLI is a Python-based command-line tool that enhances developer productivit
 - **Shell Completion**: Tab completion support for bash, zsh, and fish
 - **Standalone Binaries**: No Python installation required for end users
 
-## Quick Start
+---
 
-### Installation
+## 🚀 New here? Start in 3 steps
 
-**Linux/macOS:**
+**Step 1 — Install**
+
+=== "Linux/macOS"
+
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/edu526/devo-cli/main/install.sh | bash
+    ```
+
+=== "Windows (PowerShell)"
+
+    ```powershell
+    irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex
+    ```
+
+**Step 2 — Set up AWS** (required for AI features)
+
+→ Follow the [AWS Setup Guide](guides/aws-setup.md) to configure SSO and enable Bedrock access, then use `devo aws-login` to authenticate daily.
+
+**Step 3 — Use it**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/edu526/devo-cli/main/install.sh | bash
-```
-
-**Windows (PowerShell):**
-
-```powershell
-irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex
-```
-
-### First Use
-
-```bash
-# Configure AWS credentials (required)
-aws configure
-
-# Generate your first AI commit message
 git add .
-devo commit
-
-# Get help
-devo --help
+devo commit        # AI-generated commit message
+devo code-reviewer # AI code review of your branch
 ```
 
-## Use Cases
+→ See the [Quick Start Guide](getting-started/quickstart.md) for more detail.
 
-- **Standardized Commits**: Enforce conventional commit format across your team
-- **Code Quality**: Automated code review before merging
-- **AWS Workflows**: Simplified CodeArtifact authentication
-- **Developer Onboarding**: Consistent tooling for all team members
+---
 
 ## Documentation
 
@@ -66,6 +63,7 @@ devo --help
 - [AWS Setup](guides/aws-setup.md) - Configure AWS credentials and permissions
 - [Commit Workflow](guides/commit-workflow.md) - Generate AI commit messages
 - [Code Review Workflow](guides/code-review-workflow.md) - Automated code review
+- [CodeArtifact Login](guides/codeartifact-login.md) - Access private npm packages
 - [DynamoDB Export](guides/dynamodb-export.md) - Export table data
 - [SSM Port Forwarding](guides/ssm-port-forwarding.md) - Connect to private resources
 
@@ -82,14 +80,13 @@ devo --help
 
 ## Requirements
 
-- AWS credentials configured (`aws configure`)
+- AWS credentials configured (see [AWS Setup](guides/aws-setup.md))
 - Python 3.12+ (for development only, not required for binary installation)
 - Git repository
 
 ## Support
 
 - [GitHub Issues](https://github.com/edu526/devo-cli/issues) - Report bugs or request features
-- [Contributing Guide](development/contributing.md) - Learn how to contribute
 - [Troubleshooting](reference/troubleshooting.md) - Common issues and solutions
 
 ## License
