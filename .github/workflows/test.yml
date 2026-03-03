@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04, windows-latest, macos-latest]
+        os: [ubuntu-22.04, windows-latest, macos-latest]
         python-version: ['3.12', '3.13']
     uses: ./.github/workflows/test-reusable.yml
     with:
@@ -37,8 +37,8 @@ jobs:
     strategy:
       matrix:
         include:
-          # Linux (use Ubuntu 20.04 for maximum GLIBC compatibility)
-          - os: ubuntu-20.04
+          # Linux (use Ubuntu 22.04 - balance between compatibility and runner availability)
+          - os: ubuntu-22.04
             platform: linux
             arch: amd64
             build_script: bash scripts/build.sh --ci --release
