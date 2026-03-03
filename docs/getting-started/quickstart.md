@@ -2,47 +2,44 @@
 
 Get up and running with Devo CLI in 5 minutes.
 
-## Installation
+## Step 1 — Install
 
-### Linux/macOS
+=== "Linux/macOS"
+
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/edu526/devo-cli/main/install.sh | bash
+    ```
+
+=== "Windows (PowerShell)"
+
+    ```powershell
+    irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex
+    ```
+
+## Step 2 — Configure AWS
+
+Devo CLI uses AWS Bedrock for AI features. You need valid AWS credentials:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/edu526/devo-cli/main/install.sh | bash
-```
+# Option A: AWS SSO (recommended) — configure once, then use devo aws-login daily
+aws configure sso              # first-time profile setup
+devo aws-login login           # login (opens browser)
+devo aws-login refresh         # refresh expired credentials without browser
 
-### Windows (PowerShell)
-
-```powershell
-irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex
-```
-
-## Configure AWS Credentials
-
-Devo CLI requires AWS credentials to use AI features:
-
-```bash
-# Configure AWS CLI
+# Option B: Access keys
 aws configure
 ```
 
-Enter your:
+→ See the [AWS Setup Guide](../guides/aws-setup.md) for detailed setup including Bedrock model access.
 
-- AWS Access Key ID
-- AWS Secret Access Key
-- Default region (e.g., `us-east-1`)
-- Default output format (e.g., `json`)
-
-## Verify Installation
+## Step 3 — Verify
 
 ```bash
-# Check version
 devo --version
-
-# Show help
 devo --help
 ```
 
-## First Commands
+## Step 4 — First Commands
 
 ### Generate a Commit Message
 
@@ -54,17 +51,16 @@ git add .
 devo commit
 ```
 
-### Review Your Code
+### Review Your Branch
 
 ```bash
-# Review staged changes
+# Review current branch vs main/master
 devo code-reviewer
 ```
 
 ### Check Configuration
 
 ```bash
-# View current configuration
 devo config show
 ```
 
@@ -72,71 +68,72 @@ devo config show
 
 Add to your shell configuration file:
 
-**Zsh (~/.zshrc):**
+=== "Zsh (~/.zshrc)"
 
-```bash
-eval "$(_DEVO_COMPLETE=zsh_source devo)"
-```
+    ```bash
+    eval "$(_DEVO_COMPLETE=zsh_source devo)"
+    ```
 
-**Bash (~/.bashrc):**
+=== "Bash (~/.bashrc)"
 
-```bash
-eval "$(_DEVO_COMPLETE=bash_source devo)"
-```
+    ```bash
+    eval "$(_DEVO_COMPLETE=bash_source devo)"
+    ```
 
-**Fish (~/.config/fish/config.fish):**
+=== "Fish (~/.config/fish/config.fish)"
 
-```bash
-_DEVO_COMPLETE=fish_source devo | source
-```
+    ```bash
+    _DEVO_COMPLETE=fish_source devo | source
+    ```
 
 Then restart your terminal or run `source ~/.zshrc` (or equivalent).
 
-## Common Workflows
-
-### Daily Development
+## Daily Workflow
 
 ```bash
-# 1. Make changes to your code
-# ... edit files ...
+# 1. Work on your feature branch
+git checkout -b feature/my-feature
 
-# 2. Stage changes
+# 2. Refresh AWS credentials if expired
+devo aws-login refresh
+
+# 3. Make changes, then stage
 git add .
 
-# 3. Generate commit message
-devo commit
-
-# 4. Review code (optional)
+# 4. Review branch before committing (optional)
 devo code-reviewer
 
-# 5. Push changes
+# 5. Generate commit message
+devo commit
+
+# 6. Push
 git push
 ```
 
-### Working with AWS Profiles
+## Working with AWS Profiles
 
 ```bash
 # Use specific AWS profile
 devo --profile production commit
 
-# Or set default profile
+# Or set default for the session
 export AWS_PROFILE=production
 devo commit
 ```
 
-### Update Devo CLI
+## Update Devo CLI
 
 ```bash
-# Update to latest version
 devo upgrade
 ```
 
 ## Next Steps
 
-- [Installation Guide](installation.md) - Detailed installation options
-- [Configuration](configuration.md) - Configure CLI settings (Bedrock, GitHub, CodeArtifact, version check)
-- [Commands Reference](../commands/index.md) - Learn all available commands
-- [AWS Setup](../guides/aws-setup.md) - Detailed AWS configuration
+- [AWS Setup](../guides/aws-setup.md) - Enable Bedrock model access and IAM permissions
+- [Commit Workflow](../guides/commit-workflow.md) - Learn how commit message generation works
+- [Code Review Workflow](../guides/code-review-workflow.md) - AI-powered code review
+- [Commands Reference](../commands/index.md) - All available commands
+- [Configuration](configuration.md) - Bedrock model, GitHub, CodeArtifact settings
 
 ## Troubleshooting
 
@@ -150,19 +147,17 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ### AWS Credentials Error
 
-Configure AWS credentials:
+See [AWS Setup Guide](../guides/aws-setup.md) or run:
 
 ```bash
-aws configure
+aws sts get-caller-identity  # verify credentials
 ```
 
 ### Need Help?
 
 ```bash
-# Get help for any command
 devo --help
 devo commit --help
-devo config --help
 ```
 
 See [Troubleshooting Guide](../reference/troubleshooting.md) for more help.

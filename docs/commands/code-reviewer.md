@@ -10,22 +10,18 @@ devo code-reviewer [OPTIONS]
 
 ## Description
 
-Performs comprehensive analysis of code changes using AWS Bedrock AI. Analyzes staged changes or specific commits for code quality, security vulnerabilities, performance issues, and best practices compliance.
-
-## Usage
-
-::: mkdocs-click
-    :module: cli_tool.commands.code_reviewer.commands.analyze
-    :command: code_reviewer
-    :prog_name: devo
-    :depth: 1
+Performs comprehensive analysis of code changes using AWS Bedrock AI. Analyzes the diff between your current branch and a base branch (e.g., main/master) for code quality, security vulnerabilities, performance issues, and best practices compliance.
 
 ## Options
 
-| Option | Description |
-|--------|-------------|
-| `--commit TEXT` | Analyze specific commit instead of staged changes |
-| `--help` | Show help message and exit |
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--base-branch TEXT` | `-b` | Base branch to compare against (default: auto-detect main/master) |
+| `--repo-path TEXT` | `-r` | Path to the Git repository (default: current directory) |
+| `--output [json\|table]` | `-o` | Output format (default: table) |
+| `--show-metrics` | `-m` | Include detailed execution metrics in the output |
+| `--full-prompt` | `-f` | Use full detailed prompt (default: optimized short prompt) |
+| `--help` | | Show help message and exit |
 
 ## Review Categories
 
@@ -63,11 +59,23 @@ Structured feedback includes:
 ## Examples
 
 ```bash
-# Review staged changes
+# Review changes in current branch vs auto-detected base branch (main/master)
 devo code-reviewer
 
-# Review specific commit
-devo code-reviewer --commit abc123
+# Review changes vs a specific base branch
+devo code-reviewer --base-branch develop
+
+# Get JSON output for CI/CD integration
+devo code-reviewer --output json
+
+# Show execution metrics
+devo code-reviewer --show-metrics
+
+# Use full detailed prompt (more comprehensive but slower)
+devo code-reviewer --full-prompt
+
+# Combine options
+devo code-reviewer --base-branch develop --show-metrics --output json
 
 # Use specific AWS profile
 devo --profile production code-reviewer

@@ -66,6 +66,7 @@ nav:
           - Commit Workflow: guides/commit-workflow.md
           - Code Review Workflow: guides/code-review-workflow.md
       - AWS Services:
+          - CodeArtifact Login: guides/codeartifact-login.md
           - DynamoDB Export: guides/dynamodb-export.md
           - SSM Port Forwarding: guides/ssm-port-forwarding.md
   - Development:

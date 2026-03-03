@@ -84,7 +84,7 @@ Complete reference for all Devo CLI configuration options.
 ### aws.required_role
 
 - **Type:** string
-- **Default:** `DeveloperTools`
+- **Default:** `Developer`
 - **Description:** Required IAM role name for operations
 - **Example:**
 
@@ -181,7 +181,7 @@ Complete reference for all Devo CLI configuration options.
 ### codeartifact.required_role
 
 - **Type:** string
-- **Default:** Same as `aws.required_role`
+- **Default:** `Developer`
 - **Description:** Required IAM role for CodeArtifact operations
 - **Example:**
 
@@ -245,7 +245,7 @@ Configuration values are resolved in this order (later overrides earlier):
     "region": "us-east-1",
     "account_id": "123456789012",
     "sso_url": "https://my-org.awsapps.com/start",
-    "required_role": "DeveloperTools"
+    "required_role": "Developer"
   },
   "bedrock": {
     "model_id": "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
@@ -259,7 +259,7 @@ Configuration values are resolved in this order (later overrides earlier):
     "region": "us-east-1",
     "account_id": "123456789012",
     "sso_url": "https://my-org.awsapps.com/start",
-    "required_role": "DeveloperTools",
+    "required_role": "Developer",
     "domains": []
   },
   "version_check": {

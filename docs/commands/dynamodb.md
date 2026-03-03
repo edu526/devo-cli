@@ -93,10 +93,10 @@ devo dynamodb export TABLE_NAME [OPTIONS]
 
 | Option | Description |
 |--------|-------------|
-| `--filter TEXT` | Filter expression (auto-detects indexes for optimization) |
-| `--filter-values TEXT` | Expression attribute values as JSON |
-| `--filter-names TEXT` | Expression attribute names as JSON |
-| `--key-condition TEXT` | Manual key condition expression (rarely needed) |
+| `--filter TEXT` | Filter expression — handles all types automatically, use this for most cases |
+| `--filter-values TEXT` | [Advanced] Manual expression attribute values in DynamoDB typed format — only needed with `--key-condition` or complex manual expressions |
+| `--filter-names TEXT` | [Advanced] Expression attribute name substitutions as JSON — only needed for DynamoDB reserved keywords |
+| `--key-condition TEXT` | Manual key condition expression for query mode (rarely needed — auto-detected from `--filter`) |
 | `--index TEXT` | Force specific GSI/LSI (auto-selected from filter) |
 
 #### Export Modes
@@ -196,7 +196,7 @@ devo dynamodb export my-table -a "id,name,email" --filter "status = 'active'"
 # Manual filter values (when auto-detection doesn't work)
 devo dynamodb export my-table \
   --filter "userId = :uid AND #status = :st" \
-  --filter-values '{":uid": "user123", ":st": "active"}' \
+  --filter-values '{":uid": {"S": "user123"}, ":st": {"S": "active"}}' \
   --filter-names '{"#status": "status"}'
 
 # Force specific index
@@ -207,7 +207,7 @@ devo dynamodb export my-table \
 # Manual key condition (rarely needed)
 devo dynamodb export my-table \
   --key-condition "userId = :uid" \
-  --filter-values '{":uid": "user123"}'
+  --filter-values '{":uid": {"S": "user123"}}'
 ```
 
 ### Export Modes
@@ -363,17 +363,14 @@ devo dynamodb export my-table --filter "status = 'active'" --dry-run
 # Use manual filter values if needed
 devo dynamodb export my-table \
   --filter "status = :st" \
-  --filter-values '{":st": "active"}'
-```
-
-### Reserved keywords
+  --filter-values '{":st": {"S": "active"}}'
 
 ```bash
 # Use expression attribute names
 devo dynamodb export my-table \
   --filter "#status = :st" \
   --filter-names '{"#status": "status"}' \
-  --filter-values '{":st": "active"}'
+  --filter-values '{":st": {"S": "active"}}'
 ```
 
 ## Exit Codes

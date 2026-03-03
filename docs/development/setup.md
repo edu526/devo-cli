@@ -40,7 +40,7 @@ pip install -r requirements.txt
 pip install -e .
 
 # Setup shell completion
-devo completion
+devo autocomplete
 ```
 
 ## Building Binaries

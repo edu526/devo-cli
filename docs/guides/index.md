@@ -77,6 +77,20 @@ Learn how to use AI-powered code review to analyze changes before committing.
 
 ## AWS Services
 
+### [CodeArtifact Login](codeartifact-login.md)
+
+Authenticate with AWS CodeArtifact to access private npm packages.
+
+**Topics covered:**
+
+- First-time setup and configuration
+- Daily token refresh workflow
+- Multiple domains
+- Team configuration sharing
+- Troubleshooting
+
+**Best for:** Developers who need to install private npm packages from AWS CodeArtifact.
+
 ### [DynamoDB Export](dynamodb-export.md)
 
 Export DynamoDB table data for backup, analysis, and migration.
@@ -120,15 +134,17 @@ Securely connect to private databases and services using AWS Systems Manager.
 
 1. [AWS Login Workflow](aws-login-workflow.md) - Standardize AWS authentication
 2. [Code Review Workflow](code-review-workflow.md) - Implement code reviews
-3. [SSM Port Forwarding](ssm-port-forwarding.md) - Share database configurations
-4. [DynamoDB Export](dynamodb-export.md) - Automate data exports
+3. [CodeArtifact Login](codeartifact-login.md) - Share private npm package access
+4. [SSM Port Forwarding](ssm-port-forwarding.md) - Share database configurations
+5. [DynamoDB Export](dynamodb-export.md) - Automate data exports
 
 ### For AWS Users
 
 1. [AWS Setup](aws-setup.md) - Configure AWS access
 2. [AWS Login Workflow](aws-login-workflow.md) - Manage SSO credentials
-3. [DynamoDB Export](dynamodb-export.md) - Work with DynamoDB
-4. [SSM Port Forwarding](ssm-port-forwarding.md) - Access private resources
+3. [CodeArtifact Login](codeartifact-login.md) - Access private npm packages
+4. [DynamoDB Export](dynamodb-export.md) - Work with DynamoDB
+5. [SSM Port Forwarding](ssm-port-forwarding.md) - Access private resources
 
 ## Related Documentation
 

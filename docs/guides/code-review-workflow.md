@@ -5,26 +5,15 @@ Learn how to use AI-powered code review to analyze your changes before committin
 ## Quick Start
 
 ```bash
-# Stage your changes
-git add .
-
-# Run code review
+# Run code review (compares current branch vs main/master)
 devo code-reviewer
 ```
 
 ## Review Process
 
-### 1. Prepare Your Changes
+### 1. Make Your Changes
 
-Stage the files you want to review:
-
-```bash
-# Stage specific files
-git add src/auth.py src/utils.py
-
-# Stage all changes
-git add .
-```
+Work on your branch normally.
 
 ### 2. Run the Review
 
@@ -32,7 +21,7 @@ git add .
 devo code-reviewer
 ```
 
-The AI will analyze:
+The AI will compare your current branch against the auto-detected base branch (main/master) and analyze:
 
 - Code quality and maintainability
 - Security vulnerabilities
@@ -57,9 +46,6 @@ Fix the identified issues and run the review again:
 # Make fixes
 vim src/auth.py
 
-# Stage changes
-git add src/auth.py
-
 # Review again
 devo code-reviewer
 ```
@@ -68,38 +54,28 @@ devo code-reviewer
 
 ### Pre-Commit Review
 
-Review changes before committing:
+Review branch changes before committing:
 
 ```bash
-git add .
 devo code-reviewer
 # Fix issues
 devo commit
 ```
 
-### Review Specific Commit
+### Review Against Specific Branch
 
-Analyze a specific commit:
+Compare your branch against a specific base:
 
 ```bash
-devo code-reviewer --commit abc123
+devo code-reviewer --base-branch develop
 ```
 
-### Review Branch Changes
+### JSON Output for CI/CD
 
-Compare your branch against main:
-
-```bash
-git diff main feature/my-branch | devo code-reviewer
-```
-
-### Review Pull Request
-
-Before creating a PR:
+Get machine-readable output:
 
 ```bash
-# Review all changes in your branch
-git diff main...HEAD | devo code-reviewer
+devo code-reviewer --output json
 ```
 
 ## Understanding Review Categories
@@ -135,7 +111,7 @@ git diff main...HEAD | devo code-reviewer
 ## Tips for Better Reviews
 
 1. **Review small changes**: Smaller diffs get more focused feedback
-2. **Stage related changes**: Group related files together
+2. **Commit frequently**: Keep changes grouped and meaningful
 3. **Run frequently**: Catch issues early in development
 4. **Address critical issues first**: Prioritize by severity
 5. **Use with commit workflow**: Combine with `devo commit` for complete workflow
@@ -154,16 +130,11 @@ export BEDROCK_MODEL_ID=us.anthropic.claude-3-7-sonnet-20250219-v1:0
 devo --profile production code-reviewer
 ```
 
-## Troubleshooting
+### Troubleshooting
 
 ### No Changes Detected
 
-Make sure you have staged changes:
-
-```bash
-git status
-git add <files>
-```
+Make sure your branch has commits that differ from the base branch (main/master). Code reviewer compares branch history, not staged files.
 
 ### Access Denied
 
@@ -176,12 +147,17 @@ aws bedrock list-foundation-models --region us-east-1
 
 ### Review Takes Too Long
 
-For large diffs, consider reviewing in smaller chunks:
+For large diffs, consider reviewing against a more recent base branch or use the short prompt (default):
 
 ```bash
-# Review specific files
-git add src/auth.py
+# Short prompt (default, faster)
 devo code-reviewer
+
+# Full prompt (more thorough but slower)
+devo code-reviewer --full-prompt
+
+# Compare against closer base branch
+devo code-reviewer --base-branch your-feature-parent-branch
 ```
 
 ## Next Steps

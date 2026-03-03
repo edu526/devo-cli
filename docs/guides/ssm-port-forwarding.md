@@ -4,15 +4,18 @@ Learn how to securely connect to private databases and services using AWS System
 
 ## Quick Start
 
+!!! note "Permissions required for hostname forwarding"
+    `devo ssm hosts setup` modifies `/etc/hosts`. On **Linux/macOS** it will prompt for your sudo password. On **Windows** run your terminal as Administrator.
+
 ```bash
 # 1. Add database
-devo ssm add-db \
+devo ssm database add \
   --name mydb \
   --bastion i-0123456789abcdef0 \
   --host mydb.cluster-xyz.us-east-1.rds.amazonaws.com \
   --port 5432
 
-# 2. Setup hostname forwarding
+# 2. Setup hostname forwarding (requires sudo on Linux/macOS)
 devo ssm hosts setup
 
 # 3. Connect
@@ -64,6 +67,9 @@ Installation guides:
 
 **Linux/macOS:**
 
+- `devo ssm hosts setup` uses `sudo tee` to write `/etc/hosts` — you will be prompted for your password
+- On **macOS**, loopback aliases (127.0.0.x) are also configured automatically with `sudo ifconfig` — expect two sudo prompts on first setup
+
 ```bash
 # Install socat
 brew install socat  # macOS
@@ -72,7 +78,7 @@ sudo apt-get install socat  # Ubuntu/Debian
 
 **Windows:**
 
-- Run terminal as Administrator for hostname forwarding setup
+- Run terminal as Administrator for hostname forwarding setup — `devo ssm hosts setup` requires elevated privileges to write `C:\Windows\System32\drivers\etc\hosts`
 - `netsh portproxy` is built-in, no installation needed
 
 ## Common Workflows
@@ -83,7 +89,7 @@ Connect to one database:
 
 ```bash
 # 1. Add database configuration
-devo ssm add-db \
+devo ssm database add \
   --name myapp-dev \
   --bastion i-0123456789abcdef0 \
   --host myapp-dev.cluster-xyz.us-east-1.rds.amazonaws.com \
@@ -113,9 +119,9 @@ Connect to multiple databases simultaneously:
 
 ```bash
 # Add databases
-devo ssm add-db --name dev-db --bastion i-xxx --host dev.rds.amazonaws.com --port 5432
-devo ssm add-db --name prod-db --bastion i-yyy --host prod.rds.amazonaws.com --port 5432
-devo ssm add-db --name redis --bastion i-xxx --host redis.cache.amazonaws.com --port 6379
+devo ssm database add --name dev-db --bastion i-xxx --host dev.rds.amazonaws.com --port 5432
+devo ssm database add --name prod-db --bastion i-yyy --host prod.rds.amazonaws.com --port 5432
+devo ssm database add --name redis --bastion i-xxx --host redis.cache.amazonaws.com --port 6379
 
 # Setup all at once
 devo ssm hosts setup
@@ -132,13 +138,13 @@ Each database gets a unique loopback IP automatically, avoiding port conflicts.
 Share database configurations with your team:
 
 ```bash
-# Team lead exports configuration
-devo ssm export team-ssm-config.json
+# Export SSM configuration
+devo config export -s ssm -o team-ssm-config.json
 
 # Share file via git, Slack, etc.
 
-# Team members import
-devo ssm import team-ssm-config.json
+# Team members import to their config
+devo config import team-ssm-config.json -s ssm
 
 # Each person runs setup
 devo ssm hosts setup
@@ -153,21 +159,21 @@ Manage databases across different environments:
 
 ```bash
 # Add databases for each environment
-devo ssm add-db \
+devo ssm database add \
   --name myapp-dev \
   --bastion i-dev \
   --host dev.rds.amazonaws.com \
   --port 5432 \
   --profile dev
 
-devo ssm add-db \
+devo ssm database add \
   --name myapp-staging \
   --bastion i-staging \
   --host staging.rds.amazonaws.com \
   --port 5432 \
   --profile staging
 
-devo ssm add-db \
+devo ssm database add \
   --name myapp-prod \
   --bastion i-prod \
   --host prod.rds.amazonaws.com \
@@ -213,7 +219,7 @@ devo ssm forward \
 ### PostgreSQL / RDS
 
 ```bash
-devo ssm add-db \
+devo ssm database add \
   --name postgres-db \
   --bastion i-xxx \
   --host mydb.cluster-xyz.us-east-1.rds.amazonaws.com \
@@ -223,7 +229,7 @@ devo ssm add-db \
 ### MySQL / Aurora
 
 ```bash
-devo ssm add-db \
+devo ssm database add \
   --name mysql-db \
   --bastion i-xxx \
   --host mydb.cluster-xyz.us-east-1.rds.amazonaws.com \
@@ -233,7 +239,7 @@ devo ssm add-db \
 ### Redis / ElastiCache
 
 ```bash
-devo ssm add-db \
+devo ssm database add \
   --name redis \
   --bastion i-xxx \
   --host redis.cache.amazonaws.com \
@@ -243,7 +249,7 @@ devo ssm add-db \
 ### MongoDB / DocumentDB
 
 ```bash
-devo ssm add-db \
+devo ssm database add \
   --name mongodb \
   --bastion i-xxx \
   --host docdb.cluster-xyz.us-east-1.docdb.amazonaws.com \
@@ -255,7 +261,7 @@ devo ssm add-db \
 ### List Configured Databases
 
 ```bash
-devo ssm list
+devo ssm database list
 ```
 
 ### Connect to Specific Database
@@ -263,20 +269,6 @@ devo ssm list
 ```bash
 devo ssm connect mydb
 ```
-
-### Connect with Different Profile
-
-Override the configured AWS profile:
-
-```bash
-devo ssm connect mydb --profile production
-```
-
-Useful for:
-
-- Testing with different credentials
-- Accessing same database from different accounts
-- Temporary access without modifying configuration
 
 ### Connect Without Hostname Forwarding
 
@@ -340,7 +332,7 @@ devo ssm hosts clear
 ### Add Instance for Shell Access
 
 ```bash
-devo ssm add-instance \
+devo ssm instance add \
   --name bastion-dev \
   --instance-id i-0123456789abcdef0 \
   --region us-east-1 \
@@ -356,39 +348,43 @@ devo ssm shell bastion-dev
 ### List Instances
 
 ```bash
-devo ssm list-instances
+devo ssm instance list
 ```
 
 ### Remove Instance
 
 ```bash
-devo ssm remove-instance bastion-dev
+devo ssm instance remove bastion-dev
 ```
 
 ## Configuration Management
 
-### View Configuration Path
+### View SSM Configuration
+
+The SSM configuration is stored under the `ssm` key in `~/.devo/config.json`. View it with:
 
 ```bash
-devo ssm show-config
+devo config show -s ssm
 ```
 
-Default: `~/.devo/ssm-config.json`
+### Share Configuration
 
-### Export Configuration
+To share your SSM configuration with team members:
 
 ```bash
-devo ssm export team-config.json
+# Export SSM section
+devo config export -s ssm -o team-ssm-config.json
+
+# Share the file with your team (via git, Slack, etc.)
 ```
 
 ### Import Configuration
 
-```bash
-# Replace current configuration
-devo ssm import team-config.json
+To use a shared configuration:
 
-# Merge with existing
-devo ssm import team-config.json --merge
+```bash
+# Import and merge with existing config
+devo config import team-ssm-config.json -s ssm
 ```
 
 ## Troubleshooting
@@ -406,7 +402,7 @@ session-manager-plugin
 
 ### Permission Denied (Linux/macOS)
 
-The tool will prompt for sudo password when modifying /etc/hosts.
+The tool automatically uses `sudo tee` to write `/etc/hosts` and will prompt for your password. If you see permission errors, make sure your user has sudo rights.
 
 ### Access Denied (Windows)
 
@@ -437,7 +433,7 @@ devo ssm hosts setup
 Each database automatically gets a unique loopback IP, avoiding conflicts. Check configuration:
 
 ```bash
-devo ssm list
+devo ssm database list
 ```
 
 ### Cleanup Port Forwarding (Windows)
@@ -465,8 +461,8 @@ netsh interface portproxy reset
 
 1. **Use descriptive names**: `myapp-dev-db` instead of `db1`
 2. **Run setup after adding databases**: `devo ssm hosts setup`
-3. **Export configuration for team**: Share `ssm-config.json`
-4. **Use environment-specific profiles**: `--profile dev`, `--profile prod`
+3. **Export configuration for team**: `devo config export -s ssm -o team-ssm-config.json`
+4. **Use environment-specific profiles**: set `--profile` when adding databases with `devo ssm database add`
 5. **Install Session Manager Plugin first**: Verify before using SSM commands
 6. **Clean up on exit**: Press Ctrl+C to properly stop connections
 7. **Test connections**: Verify with `devo ssm connect` before deploying

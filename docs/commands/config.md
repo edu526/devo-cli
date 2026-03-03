@@ -126,18 +126,18 @@ devo config import <filename> [OPTIONS]
 **Options:**
 
 - `-s, --section TEXT` - Import only specific section(s)
-- `--replace` - Replace section completely instead of merging
+- `--replace` - Replace section completely instead of merging (default: merge)
 
 **Examples:**
 
 ```bash
-# Import full config (merge with existing)
+# Import full config (merges with existing)
 devo config import backup.json
 
 # Import only SSM section
 devo config import backup.json -s ssm
 
-# Replace SSM section completely
+# Replace SSM section completely (instead of merging)
 devo config import backup.json -s ssm --replace
 
 # Import multiple sections

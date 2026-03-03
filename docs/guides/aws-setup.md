@@ -39,10 +39,10 @@ For organizations using AWS SSO, use the `devo aws-login` command:
 
 ```bash
 # Configure SSO profile interactively
-devo aws-login --configure --profile production
+devo aws-login configure production
 
 # Login
-devo aws-login --profile production
+devo aws-login login production
 ```
 
 The command will:
@@ -133,12 +133,12 @@ If you have multiple AWS accounts or roles, use the `devo aws-login` command:
 
 ```bash
 # Configure multiple profiles
-devo aws-login --configure --profile dev
-devo aws-login --configure --profile staging
-devo aws-login --configure --profile production
+devo aws-login configure dev
+devo aws-login configure staging
+devo aws-login configure production
 
 # Check status
-devo aws-login --status
+devo aws-login list
 
 # Use with Devo CLI
 devo --profile production commit
@@ -157,16 +157,16 @@ For organizations using AWS SSO, we recommend using the `devo aws-login` command
 
 ```bash
 # Configure SSO profile
-devo aws-login --configure --profile my-profile
+devo aws-login configure my-profile
 
 # Login
-devo aws-login --profile my-profile
+devo aws-login login my-profile
 
 # Check status
-devo aws-login --status
+devo aws-login list
 
 # Refresh expired credentials
-devo aws-login --refresh-all
+devo aws-login refresh
 ```
 
 **For detailed SSO workflows, see the [AWS Login Workflow](aws-login-workflow.md) guide.**
@@ -249,10 +249,10 @@ Use the `devo aws-login` command to refresh:
 
 ```bash
 # Refresh specific profile
-devo aws-login --profile my-profile
+devo aws-login login my-profile
 
 # Or refresh all profiles
-devo aws-login --refresh-all
+devo aws-login refresh
 ```
 
 ### Wrong Account/Role

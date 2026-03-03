@@ -53,12 +53,12 @@ Export only specific data:
 # Export active users only
 devo dynamodb export users \
   --filter "status = :s" \
-  --filter-values '{"s": "active"}'
+  --filter-values '{":s": {"S": "active"}}'
 
 # Export specific user's data
 devo dynamodb export orders \
   --key-condition "userId = :uid" \
-  --filter-values '{"uid": "user123"}'
+  --filter-values '{":uid": {"S": "user123"}}'
 ```
 
 ### Data Migration
@@ -217,7 +217,7 @@ Save frequently used export configurations:
 devo dynamodb export my-table \
   -a "id,name,email,status" \
   --filter "status = :s" \
-  --filter-values '{"s": "active"}' \
+  --filter-values '{":s": {"S": "active"}}' \
   --save-template active-users
 ```
 
@@ -244,7 +244,7 @@ devo dynamodb list-templates
 ```bash
 devo dynamodb export users \
   --filter "age > :age" \
-  --filter-values '{"age": 18}'
+  --filter-values '{":age": {"N": "18"}}'
 ```
 
 ### Multiple Conditions
@@ -252,7 +252,7 @@ devo dynamodb export users \
 ```bash
 devo dynamodb export users \
   --filter "status = :s AND age > :age" \
-  --filter-values '{"s": "active", "age": 18}'
+  --filter-values '{":s": {"S": "active"}, ":age": {"N": "18"}}'
 ```
 
 ### Query with Key Condition
@@ -260,7 +260,7 @@ devo dynamodb export users \
 ```bash
 devo dynamodb export orders \
   --key-condition "userId = :uid AND orderDate > :date" \
-  --filter-values '{"uid": "user123", "date": "2024-01-01"}'
+  --filter-values '{":uid": {"S": "user123"}, ":date": {"S": "2024-01-01"}}'
 ```
 
 ### Using Index
@@ -269,7 +269,7 @@ devo dynamodb export orders \
 devo dynamodb export users \
   --index email-index \
   --key-condition "email = :email" \
-  --filter-values '{"email": "john@example.com"}'
+  --filter-values '{":email": {"S": "john@example.com"}}'
 ```
 
 ## Customizing Output
@@ -315,13 +315,13 @@ devo dynamodb export users --metadata
 ### Share Export Templates
 
 ```bash
-# Export configuration
-devo dynamodb export users \
-  -a "id,name,email" \
-  --save-template user-export
+# Export DynamoDB configuration (includes templates)
+devo config export -s dynamodb -o team-dynamodb-config.json
 
-# Share template file with team
-# Templates stored in: ~/.devo/dynamodb-templates/
+# Share team-dynamodb-config.json with team
+
+# Import on another machine
+devo config import team-dynamodb-config.json -s dynamodb
 ```
 
 ### Automated Reports
