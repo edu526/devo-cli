@@ -129,6 +129,9 @@ if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
   BINARY_PATH="${BINARY_NAME}"
 else
   # Linux: single file binary
+  # Rename to 'devo' for consistency
+  mv "${DOWNLOAD_FILE}" devo
+
   # Make executable
   chmod +x devo
 
