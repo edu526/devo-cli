@@ -84,6 +84,7 @@ devo dynamodb export my-table -f csv
 ```
 
 Output:
+
 ```csv
 id,name,email,status
 1,John,john@example.com,active
@@ -99,6 +100,7 @@ devo dynamodb export my-table -f json --pretty
 ```
 
 Output:
+
 ```json
 [
   {"id": 1, "name": "John", "email": "john@example.com"},
@@ -115,6 +117,7 @@ devo dynamodb export my-table -f jsonl
 ```
 
 Output:
+
 ```jsonl
 {"id": 1, "name": "John", "email": "john@example.com"}
 {"id": 2, "name": "Jane", "email": "jane@example.com"}
@@ -139,6 +142,7 @@ devo dynamodb export my-table --mode strings
 ```
 
 Output:
+
 ```csv
 id,name,metadata
 1,John,"{\"age\": 30, \"city\": \"NYC\"}"
@@ -153,6 +157,7 @@ devo dynamodb export my-table --mode flatten
 ```
 
 Output:
+
 ```csv
 id,name,metadata.age,metadata.city
 1,John,30,NYC
@@ -167,6 +172,7 @@ devo dynamodb export my-table --mode normalize
 ```
 
 Output:
+
 ```csv
 id,name,tag
 1,John,developer
@@ -367,6 +373,7 @@ For large tables:
 ### Memory Issues
 
 For very large exports:
+
 1. Use JSONL format instead of JSON
 2. Enable compression: `--compress gzip`
 3. Export specific attributes: `-a "id,name"`
@@ -386,4 +393,3 @@ For very large exports:
 - [DynamoDB Command Reference](../commands/dynamodb.md) - Full command options
 - [AWS Setup](aws-setup.md) - Configure AWS credentials
 - [Configuration Guide](../getting-started/configuration.md) - DynamoDB settings
-

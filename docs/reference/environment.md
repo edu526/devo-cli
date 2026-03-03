@@ -13,6 +13,7 @@ Environment variables override configuration file values and provide temporary c
 - **Description:** AWS region for all AWS operations
 - **Default:** `us-east-1`
 - **Example:**
+
   ```bash
   export AWS_REGION=us-west-2
   devo commit
@@ -23,6 +24,7 @@ Environment variables override configuration file values and provide temporary c
 - **Description:** AWS account ID for authentication
 - **Default:** `123456789012`
 - **Example:**
+
   ```bash
   export AWS_ACCOUNT_ID=123456789012
   devo commit
@@ -33,6 +35,7 @@ Environment variables override configuration file values and provide temporary c
 - **Description:** AWS SSO start URL for authentication
 - **Default:** `https://my-org.awsapps.com/start`
 - **Example:**
+
   ```bash
   export AWS_SSO_URL=https://your-org.awsapps.com/start
   devo commit
@@ -43,6 +46,7 @@ Environment variables override configuration file values and provide temporary c
 - **Description:** Required IAM role name for operations
 - **Default:** `DeveloperTools`
 - **Example:**
+
   ```bash
   export AWS_REQUIRED_ROLE=Developer
   devo commit
@@ -53,6 +57,7 @@ Environment variables override configuration file values and provide temporary c
 - **Description:** AWS CLI profile to use
 - **Default:** `default`
 - **Example:**
+
   ```bash
   export AWS_PROFILE=production
   devo commit
@@ -68,6 +73,7 @@ Environment variables override configuration file values and provide temporary c
   - `us.anthropic.claude-3-7-sonnet-20250219-v1:0` (Claude 3.7 Sonnet)
   - `us.anthropic.claude-sonnet-4-20250514-v1:0` (Claude Sonnet 4)
 - **Example:**
+
   ```bash
   export BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-20250514-v1:0
   devo commit
@@ -80,6 +86,7 @@ Environment variables override configuration file values and provide temporary c
 - **Description:** GitHub repository owner or organization
 - **Default:** `edu526`
 - **Example:**
+
   ```bash
   export GITHUB_REPO_OWNER=myorg
   devo upgrade
@@ -90,6 +97,7 @@ Environment variables override configuration file values and provide temporary c
 - **Description:** GitHub repository name
 - **Default:** `devo-cli`
 - **Example:**
+
   ```bash
   export GITHUB_REPO_NAME=my-cli
   devo upgrade
@@ -102,6 +110,7 @@ Environment variables override configuration file values and provide temporary c
 - **Description:** AWS region for CodeArtifact operations
 - **Default:** Same as `AWS_REGION`
 - **Example:**
+
   ```bash
   export CODEARTIFACT_REGION=us-east-1
   devo codeartifact-login
@@ -117,6 +126,7 @@ Environment variables override configuration file values and provide temporary c
   - `0` - Version checks enabled
   - `1` - Version checks disabled
 - **Example:**
+
   ```bash
   export DEVO_SKIP_VERSION_CHECK=1
   devo commit

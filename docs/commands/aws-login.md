@@ -1,78 +1,58 @@
-# AWS Login Command
+# devo aws-login
 
-Automates AWS SSO authentication and credential management.
+AWS SSO authentication and profile management.
 
-## Overview
-
-The `aws-login` command eliminates manual credential management by automating the AWS SSO authentication process. It opens your browser, handles authentication, and caches credentials automatically.
-
-## Quick Start
+## Synopsis
 
 ```bash
-# Configure a new profile
-devo aws-login --configure --profile production
-
-# Login
-devo aws-login --profile production
-
-# Check status
-devo aws-login --status
+devo aws-login [COMMAND] [OPTIONS]
 ```
 
-## Command Options
+## Description
 
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--profile` | `-p` | AWS profile name to login |
-| `--list` | `-l` | List available AWS profiles |
-| `--configure` | `-c` | Configure a new SSO profile interactively |
-| `--refresh-all` | `-r` | Refresh all expired/expiring profiles |
-| `--status` | `-s` | Show detailed expiration status for all profiles |
-| `--set-default` | `-d` | Set a profile as the default (updates shell configuration) |
+Automates AWS SSO authentication and credential management. Eliminates manual credential management by automating the AWS SSO authentication process. Opens your browser, handles authentication, and caches credentials automatically.
 
-## Usage
+## Commands
 
-### Configure Profile
+### login
 
-Interactive configuration using AWS CLI's SSO wizard:
+Login to AWS using SSO with a specific profile.
 
 ```bash
-devo aws-login --configure
-devo aws-login --configure --profile production
+devo aws-login login [PROFILE] [OPTIONS]
 ```
 
-The wizard will:
+**Arguments:**
 
-1. Prompt for SSO start URL
-2. Open browser for authentication
-3. Show available accounts and roles
-4. Configure default region
+- `PROFILE` - AWS profile name (optional, shows interactive menu if omitted)
 
-### Login
+**Example:**
 
 ```bash
-# Login to specific profile
-devo aws-login --profile production
-
 # Interactive profile selection
-devo aws-login
+devo aws-login login
+
+# Login to specific profile
+devo aws-login login production
 ```
 
-### List Profiles
+### list
+
+List all AWS profiles with detailed status.
 
 ```bash
-devo aws-login --list
+devo aws-login list [OPTIONS]
 ```
 
-Shows all configured profiles with their status (Active/Expired).
+Shows all configured profiles with their status (Active/Expired/Expiring Soon).
 
-### Check Status
+**Example:**
 
 ```bash
-devo aws-login --status
+devo aws-login list
 ```
 
-Displays detailed expiration information for all profiles:
+**Output:**
 
 ```
 ═══ AWS Profile Expiration Status ═══
@@ -86,23 +66,62 @@ Displays detailed expiration information for all profiles:
 └──────────────────────┴─────────────────┴───────────────────────────┴──────────────────────┘
 ```
 
-### Refresh All
+### configure
+
+Configure a new SSO profile interactively.
 
 ```bash
-devo aws-login --refresh-all
+devo aws-login configure [PROFILE] [OPTIONS]
+```
+
+**Arguments:**
+
+- `PROFILE` - AWS profile name (optional, prompts if omitted)
+
+Uses AWS CLI's SSO wizard to configure a new profile. The wizard will:
+
+1. Prompt for SSO start URL
+2. Open browser for authentication
+3. Show available accounts and roles
+4. Configure default region
+
+**Example:**
+
+```bash
+# Interactive configuration
+devo aws-login configure
+
+# Configure specific profile
+devo aws-login configure production
+```
+
+### refresh
+
+Refresh expired or expiring credentials.
+
+```bash
+devo aws-login refresh [OPTIONS]
 ```
 
 Automatically refreshes all profiles that are expired or expiring within 10 minutes. Groups profiles by SSO session to minimize login prompts.
 
-### Set Default Profile
+**Example:**
 
 ```bash
-# Set a profile as default
-devo aws-login --set-default production
-
-# Interactive selection
-devo aws-login --set-default
+devo aws-login refresh
 ```
+
+### set-default
+
+Set a profile as the default.
+
+```bash
+devo aws-login set-default [PROFILE] [OPTIONS]
+```
+
+**Arguments:**
+
+- `PROFILE` - AWS profile name (optional, shows interactive menu if omitted)
 
 Sets the AWS_PROFILE environment variable as default:
 
@@ -116,6 +135,16 @@ After setting default, you can use AWS CLI without `--profile`:
 aws s3 ls
 aws sts get-caller-identity
 devo codeartifact-login
+```
+
+**Example:**
+
+```bash
+# Interactive selection
+devo aws-login set-default
+
+# Set specific profile as default
+devo aws-login set-default production
 ```
 
 ## Configuration
@@ -149,110 +178,28 @@ output = json
 
 Both formats are supported.
 
-## How It Works
+## Requirements
 
-1. **Configuration**: Uses AWS CLI's `aws configure sso`
-2. **Authentication**: Opens browser for SSO authentication
-3. **Caching**: Stores credentials in `~/.aws/sso/cache/`
-4. **Expiration**: Account credentials typically last 1-8 hours
-5. **Detection**: Monitors expiration and prompts for refresh
-
-## Using Credentials
-
-```bash
-# Set as default (recommended)
-devo aws-login --set-default production
-
-# Or export manually
-export AWS_PROFILE=production
-
-# Use with AWS CLI
-aws s3 ls --profile production
-
-# Use with other devo commands
-devo codeartifact-login --profile production
-```
-
-## Examples
-
-### Basic Usage
-
-```bash
-# Configure and login
-devo aws-login --configure --profile production
-devo aws-login --profile production
-```
-
-### Multiple Profiles
-
-```bash
-# Configure multiple environments
-devo aws-login --configure --profile dev
-devo aws-login --configure --profile staging
-devo aws-login --configure --profile production
-
-# Check status
-devo aws-login --status
-
-# Set default
-devo aws-login --set-default production
-
-# Refresh all
-devo aws-login --refresh-all
-```
-
-## Troubleshooting
-
-### No AWS profiles found
-
-```bash
-devo aws-login --configure
-```
-
-### Credentials expired
-
-```bash
-devo aws-login --profile production
-# or
-devo aws-login --refresh-all
-```
-
-### SSO authentication failed
-
-Check:
-
-- SSO start URL is correct
+- AWS CLI v2
+- Web browser for SSO authentication
 - Network access to SSO portal
-- SSO account is active
-- Role name matches assigned role
 
-### Profile already exists
+## Exit Codes
 
-The configure command will prompt to overwrite or keep existing profile.
+| Code | Description |
+|------|-------------|
+| 0 | Success |
+| 1 | Error (authentication failed, profile not found, etc.) |
 
-## Features
-
-- **Interactive Configuration**: Browser-based account/role selection
-- **Auto-Refresh**: Detects and refreshes expiring credentials
-- **Session Reuse**: Groups profiles by SSO session to minimize logins
-- **Status Monitoring**: Real-time expiration tracking
-- **Multi-Format Support**: Works with both legacy and sso-session formats
-- **Local Timezone**: Shows expiration times in your timezone
-
-## Related Commands
-
-- [`devo codeartifact-login`](codeartifact.md) - Login to CodeArtifact
-- [`devo config`](config.md) - Configure Devo CLI settings
-
-## Related Guides
+## See Also
 
 - [AWS Login Workflow](../guides/aws-login-workflow.md) - Complete workflow guide
 - [AWS Setup](../guides/aws-setup.md) - Initial AWS configuration
+- [devo codeartifact-login](codeartifact.md) - Login to CodeArtifact
 
 ## Notes
 
 - Account credentials expire after 1-8 hours (organization-dependent)
 - SSO tokens can last up to 12 hours
-- Requires AWS CLI v2
 - Credentials cached securely by AWS CLI
 - Supports multiple profiles for different accounts/roles

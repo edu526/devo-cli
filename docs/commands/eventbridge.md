@@ -2,46 +2,48 @@
 
 Check EventBridge scheduled rules status by environment.
 
-## Overview
-
-The `eventbridge` command lists and filters AWS EventBridge scheduled rules, showing their status, schedules, targets, and environment tags. This is useful for monitoring scheduled Lambda functions and other automated workflows.
-
-## Usage
+## Synopsis
 
 ```bash
 devo eventbridge [OPTIONS]
 ```
 
+## Description
+
+Lists and monitors AWS EventBridge scheduled rules with filtering by environment, status, and region. Useful for checking which scheduled tasks are enabled or disabled across environments.
+
 ## Options
 
-| Option | Description |
-|--------|-------------|
-| `-e, --env TEXT` | Filter by environment (e.g., dev, staging, prod) |
-| `-r, --region TEXT` | AWS region (default: us-east-1) |
-| `-s, --status [ENABLED\|DISABLED\|ALL]` | Filter by rule status (default: ALL) |
-| `-o, --output [table\|json]` | Output format (default: table) |
-| `--profile TEXT` | AWS profile to use for authentication |
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--env TEXT` | `-e` | Filter by environment (e.g., dev, staging, prod) |
+| `--region TEXT` | `-r` | AWS region (default: us-east-1) |
+| `--status [enabled\|disabled\|all]` | `-s` | Filter by rule status (default: all) |
+| `--output [table\|json]` | `-o` | Output format (default: table) |
 
-## Examples
+## Usage
 
-### List All Rules
+### Basic Usage
 
 ```bash
-# List all EventBridge rules in default region
+# List all rules
 devo eventbridge
 
 # List rules in specific region
 devo eventbridge --region us-west-2
+
+# With specific AWS profile
+devo --profile production eventbridge
 ```
 
 ### Filter by Environment
 
 ```bash
-# Show only production rules
-devo eventbridge --env prod
-
-# Show only development rules
+# Show only dev environment rules
 devo eventbridge --env dev
+
+# Show production rules
+devo eventbridge --env prod
 
 # Show staging rules
 devo eventbridge --env staging
@@ -51,104 +53,161 @@ devo eventbridge --env staging
 
 ```bash
 # Show only enabled rules
-devo eventbridge --status ENABLED
+devo eventbridge --status enabled
 
 # Show only disabled rules
-devo eventbridge --status DISABLED
+devo eventbridge --status disabled
 
 # Show all rules (default)
-devo eventbridge --status ALL
+devo eventbridge --status all
 ```
 
-### JSON Output
+### Output Formats
 
 ```bash
-# Output as JSON for scripting
+# Table format (default, human-readable)
+devo eventbridge
+
+# JSON format (for scripting/CI/CD)
 devo eventbridge --output json
-
-# Filter and output as JSON
-devo eventbridge --env prod --status ENABLED --output json
 ```
 
-### Use with AWS Profile
+### Combined Filters
 
 ```bash
-# Use specific AWS profile
-devo --profile production eventbridge
+# Production enabled rules
+devo eventbridge --env prod --status enabled
 
-# Or use command-level profile option
-devo eventbridge --profile production --env prod
+# Dev disabled rules in us-west-2
+devo eventbridge --env dev --status disabled --region us-west-2
+
+# All staging rules as JSON
+devo eventbridge --env staging --output json
 ```
 
-## Output Format
+## Output
 
-### Table Output (Default)
+### Table Format
 
-Displays rules in a formatted table with:
+```
+EventBridge Scheduled Rules (us-east-1)
 
-- **Rule Name**: EventBridge rule name
-- **Status**: ✅ ENABLED or ❌ DISABLED
-- **Schedule**: Cron or rate expression
-- **Targets**: Lambda functions or other AWS services
-- **Env**: Environment tag (dev, staging, prod, etc.)
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Rule Name                            ┃ Environment  ┃ Status                               ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ daily-backup-prod                    │ prod         │ ENABLED                              │
+│ hourly-sync-dev                      │ dev          │ DISABLED                             │
+│ weekly-report-staging                │ staging      │ ENABLED                              │
+└──────────────────────────────────────┴──────────────┴──────────────────────────────────────┘
+```
 
-### JSON Output
+### JSON Format
 
-Returns structured JSON with:
-
-- `name`: Rule name
-- `arn`: Rule ARN
-- `state`: ENABLED or DISABLED
-- `schedule`: Schedule expression
-- `description`: Rule description
-- `targets`: Array of target configurations
-- `tags`: Rule tags
+```json
+[
+  {
+    "name": "daily-backup-prod",
+    "environment": "prod",
+    "status": "ENABLED",
+    "schedule": "cron(0 2 * * ? *)",
+    "description": "Daily backup job"
+  },
+  {
+    "name": "hourly-sync-dev",
+    "environment": "dev",
+    "status": "DISABLED",
+    "schedule": "rate(1 hour)",
+    "description": "Hourly data sync"
+  }
+]
+```
 
 ## Environment Detection
 
-The command detects environment in multiple ways:
+The command detects environment from rule names using common patterns:
 
-| Method | Description |
-|--------|-------------|
-| **Tags** | Checks for `Env` or `Environment` tags on the rule |
-| **Target Names** | Extracts environment from Lambda function names (e.g., `service-prod-lambda`) |
-| **Common Patterns** | Recognizes standard environment names (dev, staging, prod, test, qa, uat, demo) |
+- Rules containing `prod`, `production` → prod
+- Rules containing `dev`, `development` → dev
+- Rules containing `stg`, `staging` → staging
+- Rules containing `qa`, `test` → qa
 
-## Use Cases
+## Examples
 
 ### Monitor Production Rules
 
 ```bash
-# Check all production scheduled rules
+# Check all production rules
 devo eventbridge --env prod
+
+# Check if any production rules are disabled
+devo eventbridge --env prod --status disabled
 ```
 
-### Find Disabled Rules
+### CI/CD Integration
 
 ```bash
-# Find disabled rules that might need attention
-devo eventbridge --status DISABLED
+# Get JSON output for processing
+devo eventbridge --env prod --output json | jq '.[] | select(.status == "DISABLED")'
+
+# Check if specific rule is enabled
+devo eventbridge --output json | jq '.[] | select(.name == "my-rule") | .status'
 ```
 
-### Audit Scheduled Jobs
-
-```bash
-# Export all rules to JSON for auditing
-devo eventbridge --output json > eventbridge-audit.json
-```
-
-### Cross-Region Check
+### Multi-Region Check
 
 ```bash
 # Check rules in multiple regions
-devo eventbridge --region us-east-1 --env prod
-devo eventbridge --region us-west-2 --env prod
-devo eventbridge --region eu-west-1 --env prod
+for region in us-east-1 us-west-2 eu-west-1; do
+  echo "=== $region ==="
+  devo eventbridge --region $region --env prod
+done
 ```
 
-## Required Permissions
+## Use Cases
 
-Your AWS user/role needs these EventBridge permissions:
+1. **Environment Monitoring**: Check which scheduled tasks are running in each environment
+2. **Deployment Verification**: Verify rules are enabled/disabled after deployment
+3. **Troubleshooting**: Identify disabled rules that should be enabled
+4. **Auditing**: Generate reports of scheduled tasks across environments
+5. **CI/CD**: Automate checks in deployment pipelines
+
+## Requirements
+
+- AWS credentials with EventBridge read permissions
+- `events:ListRules` permission
+- `events:DescribeRule` permission (for detailed info)
+
+## Troubleshooting
+
+### No rules found
+
+```
+No EventBridge rules found
+```
+
+**Possible causes:**
+
+- No rules exist in the region
+- Insufficient permissions
+- Wrong region specified
+
+**Solution:**
+
+```bash
+# Check different region
+devo eventbridge --region us-west-2
+
+# Verify AWS credentials
+aws sts get-caller-identity
+```
+
+### Access denied
+
+```
+Error: Access denied
+```
+
+**Solution:** Ensure your AWS credentials have EventBridge read permissions:
 
 ```json
 {
@@ -158,8 +217,7 @@ Your AWS user/role needs these EventBridge permissions:
       "Effect": "Allow",
       "Action": [
         "events:ListRules",
-        "events:ListTargetsByRule",
-        "events:ListTagsForResource"
+        "events:DescribeRule"
       ],
       "Resource": "*"
     }
@@ -167,36 +225,21 @@ Your AWS user/role needs these EventBridge permissions:
 }
 ```
 
-## Troubleshooting
+## Exit Codes
 
-### Access Denied
-
-Verify IAM permissions:
-```bash
-aws events list-rules --profile your-profile
-```
-
-### No Rules Found
-
-Check region and environment filter:
-```bash
-# List all rules without filters
-devo eventbridge --status ALL
-
-# Check different region
-devo eventbridge --region us-west-2
-```
-
-### Environment Not Detected
-
-If environment is not detected automatically:
-
-1. Add `Env` or `Environment` tag to the rule
-2. Use standard naming patterns in Lambda function names (e.g., `service-prod-lambda`)
+| Code | Description |
+|------|-------------|
+| 0 | Success |
+| 1 | Error (access denied, invalid region, etc.) |
 
 ## See Also
 
-- [Configuration](../getting-started/configuration.md) - AWS configuration
-- [AWS Setup](../guides/aws-setup.md) - AWS credentials setup
-- [Troubleshooting](../reference/troubleshooting.md) - Common issues
-- [AWS EventBridge Documentation](https://docs.aws.amazon.com/eventbridge/)
+- [AWS Setup](../guides/aws-setup.md) - Configure AWS credentials
+- [devo aws-login](aws-login.md) - AWS SSO authentication
+
+## Notes
+
+- Only lists scheduled rules (not event pattern rules)
+- Environment detection is based on rule name patterns
+- Requires read-only EventBridge permissions
+- Output can be piped to other tools for processing

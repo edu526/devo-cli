@@ -222,4 +222,3 @@ aws bedrock list-foundation-models --region us-east-1
 - [Code Review Workflow](code-review-workflow.md) - Review changes before committing
 - [AWS Setup](aws-setup.md) - Configure AWS credentials
 - [Commit Command Reference](../commands/commit.md) - Full command options
-

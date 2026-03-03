@@ -63,6 +63,7 @@ Installation guides:
 ### Platform-Specific Requirements
 
 **Linux/macOS:**
+
 ```bash
 # Install socat
 brew install socat  # macOS
@@ -97,6 +98,7 @@ devo ssm connect myapp-dev
 ```
 
 Your application uses:
+
 ```bash
 # .env
 DATABASE_HOST=myapp-dev.cluster-xyz.us-east-1.rds.amazonaws.com
@@ -285,6 +287,7 @@ devo ssm connect mydb --no-hosts
 ```
 
 Your application uses:
+
 ```bash
 DATABASE_HOST=localhost
 DATABASE_PORT=5432
@@ -473,4 +476,3 @@ netsh interface portproxy reset
 - [SSM Command Reference](../commands/ssm.md) - Full command options
 - [AWS Setup](aws-setup.md) - Configure AWS credentials
 - [DynamoDB Export](dynamodb-export.md) - Export DynamoDB data
-

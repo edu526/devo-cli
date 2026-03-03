@@ -38,21 +38,25 @@ docs/
 ## Documentation Categories
 
 ### Getting Started
+
 Entry point for new users. Covers installation, basic configuration, and quick start.
 
 **Target Audience:** New users, first-time installers
 
 **Files:**
+
 - `getting-started/quickstart.md` - 5-minute quick start
 - `getting-started/installation.md` - Detailed installation instructions
 - `getting-started/configuration.md` - Configuration basics
 
 ### Commands
+
 Complete reference for all CLI commands with usage examples.
 
 **Target Audience:** All users looking for command documentation
 
 **Files:**
+
 - `commands/index.md` - Commands overview
 - `commands/commit.md` - Commit message generation
 - `commands/code-reviewer.md` - Code review
@@ -61,40 +65,48 @@ Complete reference for all CLI commands with usage examples.
 - `commands/config.md` - Configuration management
 
 ### Guides
+
 Step-by-step guides for specific tasks and configurations.
 
 **Target Audience:** Users setting up specific features
 
 **Files:**
+
 - `guides/aws-setup.md` - AWS credentials and Bedrock setup
 - `guides/shell-completion.md` - Shell completion configuration
 
 ### Development
+
 Documentation for contributors and developers.
 
 **Target Audience:** Contributors, maintainers
 
 **Files:**
+
 - `development/setup.md` - Development environment setup
 - `development/contributing.md` - Contributing guidelines
 - `development/building.md` - Building binaries
 
 ### CI/CD
+
 Documentation for continuous integration and deployment.
 
 **Target Audience:** Maintainers, DevOps engineers
 
 **Files:**
+
 - `cicd/overview.md` - CI/CD pipeline overview
 - `cicd/github-actions.md` - GitHub Actions workflows
 - `cicd/semantic-release.md` - Automated versioning
 
 ### Reference
+
 Technical reference documentation.
 
 **Target Audience:** Advanced users, developers
 
 **Files:**
+
 - `reference/configuration.md` - Complete configuration reference
 - `reference/environment.md` - Environment variables reference
 - `reference/troubleshooting.md` - Troubleshooting guide
@@ -102,21 +114,25 @@ Technical reference documentation.
 ## Documentation Principles
 
 ### 1. Progressive Disclosure
+
 - Start simple (Quick Start)
 - Provide detailed information as needed
 - Link to related documentation
 
 ### 2. Task-Oriented
+
 - Focus on what users want to accomplish
 - Provide clear steps and examples
 - Include troubleshooting
 
 ### 3. Consistent Structure
+
 - Each command page follows same format
 - Guides use step-by-step approach
 - Reference docs are comprehensive
 
 ### 4. Searchable
+
 - Clear headings and structure
 - Keywords in titles
 - Cross-references between docs
@@ -126,6 +142,7 @@ Technical reference documentation.
 ### Command Documentation
 
 Each command page should include:
+
 1. Overview - What the command does
 2. Usage - Basic syntax
 3. Options - All available options
@@ -135,6 +152,7 @@ Each command page should include:
 ### Guide Documentation
 
 Each guide should include:
+
 1. Prerequisites - What's needed
 2. Steps - Clear, numbered steps
 3. Verification - How to test
@@ -144,6 +162,7 @@ Each guide should include:
 ### Reference Documentation
 
 Reference docs should include:
+
 1. Complete list of options
 2. Default values
 3. Valid values/formats
@@ -210,11 +229,12 @@ mkdocs gh-deploy
 ## GitHub Pages Deployment
 
 Documentation is automatically deployed to GitHub Pages when:
+
 - Changes are pushed to `main` branch
 - Changes affect `docs/**` or `mkdocs.yml`
 - Workflow is manually triggered
 
-**URL:** https://edu526.github.io/devo-cli
+**URL:** <https://edu526.github.io/devo-cli>
 
 ## See Also
 

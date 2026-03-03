@@ -73,16 +73,19 @@ devo config show
 Add to your shell configuration file:
 
 **Zsh (~/.zshrc):**
+
 ```bash
 eval "$(_DEVO_COMPLETE=zsh_source devo)"
 ```
 
 **Bash (~/.bashrc):**
+
 ```bash
 eval "$(_DEVO_COMPLETE=bash_source devo)"
 ```
 
 **Fish (~/.config/fish/config.fish):**
+
 ```bash
 _DEVO_COMPLETE=fish_source devo | source
 ```

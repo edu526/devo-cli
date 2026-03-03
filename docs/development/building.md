@@ -236,6 +236,7 @@ pyinstaller --onedir cli_tool/cli.py
 ```
 
 **Performance comparison:**
+
 - onefile (Linux): Single binary, 2-5s startup overhead due to extraction
 - onedir (macOS/Windows): Directory with files, ~0.1-0.3s startup (no extraction)
 

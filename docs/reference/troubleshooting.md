@@ -11,6 +11,7 @@ Common issues and solutions for Devo CLI.
 **Solutions:**
 
 1. **Restart terminal:**
+
    ```bash
    # Close and reopen terminal
    # Or reload shell configuration
@@ -18,6 +19,7 @@ Common issues and solutions for Devo CLI.
    ```
 
 2. **Check PATH:**
+
    ```bash
    # Verify devo is in PATH
    which devo
@@ -27,6 +29,7 @@ Common issues and solutions for Devo CLI.
    ```
 
 3. **Verify installation:**
+
    ```bash
    # Check if binary exists
    ls -la ~/.local/bin/devo
@@ -70,17 +73,20 @@ irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex
 **Solutions:**
 
 1. **Configure AWS CLI:**
+
    ```bash
    aws configure
    ```
 
 2. **Use AWS SSO:**
+
    ```bash
    aws sso login --profile my-profile
    export AWS_PROFILE=my-profile
    ```
 
 3. **Verify credentials:**
+
    ```bash
    aws sts get-caller-identity
    ```
@@ -97,6 +103,7 @@ irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex
    - Request access to Claude models
 
 2. **Check IAM permissions:**
+
    ```json
    {
      "Effect": "Allow",
@@ -109,6 +116,7 @@ irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex
    ```
 
 3. **Verify region:**
+
    ```bash
    # Bedrock is not available in all regions
    devo config set aws.region us-east-1
@@ -140,17 +148,20 @@ export AWS_PROFILE=production
 **Solutions:**
 
 1. **Verify configuration file:**
+
    ```bash
    devo config path
    devo config show
    ```
 
 2. **Validate configuration:**
+
    ```bash
    devo config validate
    ```
 
 3. **Reset if corrupted:**
+
    ```bash
    devo config reset
    ```
@@ -193,16 +204,19 @@ devo commit
 **Solutions:**
 
 1. **Check AWS credentials:**
+
    ```bash
    aws sts get-caller-identity
    ```
 
 2. **Verify Bedrock access:**
+
    ```bash
    aws bedrock list-foundation-models --region us-east-1
    ```
 
 3. **Try different model:**
+
    ```bash
    devo config set bedrock.model_id us.anthropic.claude-3-7-sonnet-20250219-v1:0
    ```
@@ -214,6 +228,7 @@ devo commit
 **Solutions:**
 
 1. **Check diff size:**
+
    ```bash
    # Large diffs may timeout
    git diff --staged --stat
@@ -224,6 +239,7 @@ devo commit
    ```
 
 2. **Verify AWS credentials:**
+
    ```bash
    aws sts get-caller-identity
    ```
@@ -235,16 +251,19 @@ devo commit
 **Solutions:**
 
 1. **Check internet connection:**
+
    ```bash
    curl -I https://github.com
    ```
 
 2. **Verify GitHub access:**
+
    ```bash
    curl -I https://api.github.com/repos/edu526/devo-cli/releases/latest
    ```
 
 3. **Manual upgrade:**
+
    ```bash
    # Download manually
    curl -L https://github.com/edu526/devo-cli/releases/latest/download/devo-linux-amd64 -o devo
@@ -259,6 +278,7 @@ devo commit
 **Solutions:**
 
 1. **Check IAM permissions:**
+
    ```json
    {
      "Effect": "Allow",
@@ -273,12 +293,14 @@ devo commit
    ```
 
 2. **Verify configuration:**
+
    ```bash
    devo config get codeartifact.region
    devo config get codeartifact.account_id
    ```
 
 3. **Use AWS SSO:**
+
    ```bash
    aws sso login --profile my-profile
    devo --profile my-profile codeartifact-login
@@ -293,17 +315,20 @@ devo commit
 **Solutions:**
 
 1. **Disable version check:**
+
    ```bash
    export DEVO_SKIP_VERSION_CHECK=1
    devo commit
    ```
 
 2. **Check network connectivity:**
+
    ```bash
    ping api.github.com
    ```
 
 3. **Use faster Bedrock model:**
+
    ```bash
    devo config set bedrock.model_id us.anthropic.claude-3-7-sonnet-20250219-v1:0
    ```
@@ -332,11 +357,13 @@ devo code-reviewer
 **Solutions:**
 
 1. **Reload shell configuration:**
+
    ```bash
    source ~/.bashrc  # or ~/.zshrc
    ```
 
 2. **Verify completion is loaded:**
+
    ```bash
    # Zsh
    echo $_comps[devo]
@@ -346,6 +373,7 @@ devo code-reviewer
    ```
 
 3. **Reinstall completion:**
+
    ```bash
    # Add to ~/.bashrc or ~/.zshrc
    eval "$(_DEVO_COMPLETE=bash_source devo)"  # Bash
@@ -362,6 +390,7 @@ devo code-reviewer
 
 1. **Add exception** in antivirus software
 2. **Build from source:**
+
    ```bash
    git clone https://github.com/edu526/devo-cli.git
    cd devo-cli
@@ -370,6 +399,7 @@ devo code-reviewer
    ```
 
 3. **Use Python installation:**
+
    ```bash
    pip install -e .
    ```
@@ -401,6 +431,7 @@ If you can't resolve your issue:
    - [AWS Setup](../guides/aws-setup.md)
 
 2. **Enable debug output:**
+
    ```bash
    # Set verbose logging (if supported)
    devo --verbose commit

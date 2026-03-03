@@ -9,13 +9,16 @@ Complete guide for GitHub Actions workflows in this project.
 **Purpose:** Run tests and build verification on pull requests
 
 **Triggers:**
+
 - Pull requests to `main` branch
 
 **Jobs:**
+
 - **test**: Run pytest test suite with Python 3.12
 - **build-test**: Build and test binaries on all platforms (Linux, macOS Intel, macOS ARM, Windows)
 
 **Example:**
+
 ```bash
 git push origin feature/my-feature
 # → Opens PR → Triggers test workflow
@@ -28,6 +31,7 @@ git push origin feature/my-feature
 **Purpose:** Automated versioning and release creation
 
 **Triggers:**
+
 - Push to `main` branch
 - Manual trigger via GitHub UI
 
@@ -41,6 +45,7 @@ git push origin feature/my-feature
 6. **notify-telegram** - Send notification (optional)
 
 **Example:**
+
 ```bash
 git commit -m "feat: add new feature"
 git push origin main
@@ -64,9 +69,11 @@ matrix:
 ## Artifacts
 
 ### Test Workflow
+
 - Binary artifacts for verification (not published)
 
 ### Release Workflow
+
 - `devo-linux-amd64` - Linux binary
 - `devo-darwin-amd64` - macOS Intel binary
 - `devo-darwin-arm64` - macOS Apple Silicon binary
@@ -86,6 +93,7 @@ When commits are pushed to main, the workflow:
 7. Updates CHANGELOG.md
 
 **Release includes:**
+
 - All platform binaries
 - SHA256SUMS file
 - Auto-generated release notes from commits
@@ -103,7 +111,9 @@ You can manually trigger the release workflow:
 ## Secrets and Permissions
 
 ### Required Permissions
+
 The workflow needs:
+
 - `contents: write` - To create releases and push tags
 - `issues: write` - For semantic-release
 - `pull-requests: write` - For semantic-release
@@ -111,6 +121,7 @@ The workflow needs:
 These are automatically granted by GitHub.
 
 ### Optional Secrets (for Telegram notifications)
+
 - `TELEGRAM_BOT_TOKEN` - Your Telegram bot token
 - `TELEGRAM_CHAT_ID` - Your Telegram chat ID (configured as variable)
 
@@ -158,16 +169,19 @@ Add status badges to your README:
 ## Monitoring Workflows
 
 ### View Workflow Runs
+
 1. Go to **Actions** tab
 2. See all workflow runs
 3. Click on a run to see details
 
 ### View Logs
+
 1. Click on a workflow run
 2. Click on a job (e.g., "Build linux-amd64")
 3. Expand steps to see logs
 
 ### Download Artifacts
+
 1. Go to a completed workflow run
 2. Scroll to **Artifacts** section
 3. Click to download
@@ -177,6 +191,7 @@ Add status badges to your README:
 ### Workflow not triggering
 
 **Check:**
+
 - Workflow file is in `.github/workflows/`
 - YAML syntax is valid
 - Branch matches trigger conditions
@@ -184,6 +199,7 @@ Add status badges to your README:
 ### Build fails on specific platform
 
 **Check:**
+
 - Build script works locally on that platform
 - Dependencies are correctly installed
 - Python version matches (3.12)
@@ -191,6 +207,7 @@ Add status badges to your README:
 ### Release not created
 
 **Check:**
+
 - Commits follow conventional format (feat:, fix:, etc.)
 - Commits exist since last release
 - `GITHUB_TOKEN` has write permissions
@@ -198,6 +215,7 @@ Add status badges to your README:
 ### Binary doesn't work
 
 **Check:**
+
 - Downloaded correct platform binary
 - Binary has execute permissions (Linux/macOS)
 - AWS credentials are configured

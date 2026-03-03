@@ -20,11 +20,13 @@ Devo CLI is a Python-based command-line tool that enhances developer productivit
 ### Installation
 
 **Linux/macOS:**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/edu526/devo-cli/main/install.sh | bash
 ```
 
 **Windows (PowerShell):**
+
 ```powershell
 irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex
 ```

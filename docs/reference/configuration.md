@@ -52,6 +52,7 @@ Complete reference for all Devo CLI configuration options.
 - **Description:** AWS region for all AWS operations
 - **Valid Values:** Any valid AWS region (e.g., `us-east-1`, `us-west-2`, `eu-west-1`)
 - **Example:**
+
   ```bash
   devo config set aws.region us-west-2
   ```
@@ -63,6 +64,7 @@ Complete reference for all Devo CLI configuration options.
 - **Description:** AWS account ID for authentication
 - **Format:** 12-digit number
 - **Example:**
+
   ```bash
   devo config set aws.account_id 123456789012
   ```
@@ -74,6 +76,7 @@ Complete reference for all Devo CLI configuration options.
 - **Description:** AWS SSO start URL for authentication
 - **Format:** HTTPS URL
 - **Example:**
+
   ```bash
   devo config set aws.sso_url https://your-org.awsapps.com/start
   ```
@@ -84,6 +87,7 @@ Complete reference for all Devo CLI configuration options.
 - **Default:** `DeveloperTools`
 - **Description:** Required IAM role name for operations
 - **Example:**
+
   ```bash
   devo config set aws.required_role Developer
   ```
@@ -99,6 +103,7 @@ Complete reference for all Devo CLI configuration options.
   - `us.anthropic.claude-3-7-sonnet-20250219-v1:0` (Claude 3.7 Sonnet)
   - `us.anthropic.claude-sonnet-4-20250514-v1:0` (Claude Sonnet 4)
 - **Example:**
+
   ```bash
   devo config set bedrock.model_id us.anthropic.claude-sonnet-4-20250514-v1:0
   ```
@@ -109,6 +114,7 @@ Complete reference for all Devo CLI configuration options.
 - **Default:** `us.anthropic.claude-3-7-sonnet-20250219-v1:0`
 - **Description:** Fallback model ID if primary model fails
 - **Example:**
+
   ```bash
   devo config set bedrock.fallback_model_id us.anthropic.claude-3-7-sonnet-20250219-v1:0
   ```
@@ -121,6 +127,7 @@ Complete reference for all Devo CLI configuration options.
 - **Default:** `edu526`
 - **Description:** GitHub repository owner or organization name
 - **Example:**
+
   ```bash
   devo config set github.repo_owner myorg
   ```
@@ -131,6 +138,7 @@ Complete reference for all Devo CLI configuration options.
 - **Default:** `devo-cli`
 - **Description:** GitHub repository name
 - **Example:**
+
   ```bash
   devo config set github.repo_name my-cli
   ```
@@ -143,6 +151,7 @@ Complete reference for all Devo CLI configuration options.
 - **Default:** Same as `aws.region`
 - **Description:** AWS region for CodeArtifact operations
 - **Example:**
+
   ```bash
   devo config set codeartifact.region us-east-1
   ```
@@ -153,6 +162,7 @@ Complete reference for all Devo CLI configuration options.
 - **Default:** Same as `aws.account_id`
 - **Description:** AWS account ID for CodeArtifact
 - **Example:**
+
   ```bash
   devo config set codeartifact.account_id 123456789012
   ```
@@ -163,6 +173,7 @@ Complete reference for all Devo CLI configuration options.
 - **Default:** Same as `aws.sso_url`
 - **Description:** AWS SSO URL for CodeArtifact authentication
 - **Example:**
+
   ```bash
   devo config set codeartifact.sso_url https://your-org.awsapps.com/start
   ```
@@ -173,6 +184,7 @@ Complete reference for all Devo CLI configuration options.
 - **Default:** Same as `aws.required_role`
 - **Description:** Required IAM role for CodeArtifact operations
 - **Example:**
+
   ```bash
   devo config set codeartifact.required_role Developer
   ```
@@ -187,6 +199,7 @@ Complete reference for all Devo CLI configuration options.
   - `repository` (string): Repository name
   - `namespace` (string): NPM namespace
 - **Example:**
+
   ```json
   {
     "codeartifact": {
@@ -210,6 +223,7 @@ Complete reference for all Devo CLI configuration options.
 - **Description:** Enable automatic version checks on command execution
 - **Valid Values:** `true`, `false`
 - **Example:**
+
   ```bash
   devo config set version_check.enabled false
   ```
