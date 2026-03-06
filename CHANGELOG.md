@@ -2,6 +2,37 @@
 
 <!-- version list -->
 
+## v3.2.2 (2026-03-06)
+
+### Bug Fixes
+
+- **build**: Add chardet as pure-Python charset detection fallback
+  ([`fd03e48`](https://github.com/edu526/devo-cli/commit/fd03e486d05b2533038af0b609b7b4e3660edbbc))
+
+- **build**: Add runtime hook to ensure charset_normalizer imports before requests
+  ([`1652285`](https://github.com/edu526/devo-cli/commit/165228572ad777e356dc580d663353a1f70eb296))
+
+- **build**: Correct charset_normalizer collection order and add explicit dependency
+  ([`f88d3a4`](https://github.com/edu526/devo-cli/commit/f88d3a4f8b7e00895c922471aa3736df139d7e68))
+
+- **build**: Enforce charset-normalizer binary wheel installation with version pinning
+  ([`69a7d4f`](https://github.com/edu526/devo-cli/commit/69a7d4f2a61947b76bb1c03e104d2a064aa1419d))
+
+- **build**: Handle charset-normalizer mypyc modules in PyInstaller bundling
+  ([`1a9ada1`](https://github.com/edu526/devo-cli/commit/1a9ada19c866f0f98f8c9bfe173a68911ef60705))
+
+- **build**: Improve charset_normalizer bundling in PyInstaller spec
+  ([`9a6ac53`](https://github.com/edu526/devo-cli/commit/9a6ac5328568738df4dc11a811a76c15aa99d938))
+
+- **release**: Trigger release for binary bundle fixes
+  ([`fdab7fd`](https://github.com/edu526/devo-cli/commit/fdab7fda2cbd8d456439fcf53c5ca32562fb23b1))
+
+### Continuous Integration
+
+- **release**: Enhance binary validation and add charset_normalizer imports
+  ([`20f237d`](https://github.com/edu526/devo-cli/commit/20f237d03e66c635095eccd3304c5d92f8266f49))
+
+
 ## v3.2.1 (2026-03-06)
 
 ### Bug Fixes
