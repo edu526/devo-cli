@@ -188,7 +188,7 @@ hidden_imports += collect_submodules('gitdb')
 
 # charset_normalizer ships compiled C extensions (.so/.pyd) that collect_submodules misses.
 # collect_all bundles Python modules + binaries + data files so the extension is always included.
-_charset_hiddenimports, _charset_datas, _charset_binaries = collect_all('charset_normalizer')
+_charset_datas, _charset_binaries, _charset_hiddenimports = collect_all('charset_normalizer')
 
 # Collect data files
 datas = []
