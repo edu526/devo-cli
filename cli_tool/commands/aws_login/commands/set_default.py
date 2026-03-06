@@ -9,6 +9,7 @@ import click
 from rich.console import Console
 
 from cli_tool.commands.aws_login.core.config import list_aws_profiles
+from cli_tool.commands.aws_login.core.credentials import write_default_credentials
 
 console = Console()
 
@@ -154,3 +155,13 @@ def set_default_profile(profile_name=None):
     console.print("\n[cyan]You can now use AWS CLI without --profile:[/cyan]")
     console.print("  aws s3 ls")
     console.print("  aws sts get-caller-identity")
+
+    # Write temporary credentials to ~/.aws/credentials as [default]
+    console.print(f"\n[blue]Writing temporary credentials for '{profile_name}' as [default]...[/blue]")
+    result = write_default_credentials(profile_name)
+    if result:
+        console.print("[green]✓ Credentials written to ~/.aws/credentials as [default][/green]")
+        if result.get("expiration"):
+            console.print(f"[dim]  Expires: {result['expiration']}[/dim]")
+    else:
+        console.print("[yellow]⚠ Could not write credentials to ~/.aws/credentials — AWS_PROFILE is still set[/yellow]")
