@@ -9,7 +9,7 @@ import click
 from rich.console import Console
 
 from cli_tool.commands.aws_login.core.config import list_aws_profiles
-from cli_tool.commands.aws_login.core.credentials import write_default_credentials
+from cli_tool.commands.aws_login.core.credentials import check_profile_credentials_available, write_default_credentials
 
 console = Console()
 
@@ -56,6 +56,15 @@ def set_default_profile(profile_name=None):
         console.print("\nAvailable profiles:")
         for prof_name, source in profiles:
             console.print(f"  - {prof_name} [{source}]")
+        sys.exit(1)
+
+    # Validate that the selected profile has valid, non-expired credentials before proceeding
+    available, err_msg = check_profile_credentials_available(profile_name)
+    if not available:
+        console.print(f"[red]✗ Credentials for '{profile_name}' are not available or have expired.[/red]")
+        if err_msg:
+            console.print(f"[dim]  {err_msg}[/dim]")
+        console.print("[dim]  Run 'devo aws-login' to refresh them first.[/dim]")
         sys.exit(1)
 
     # Set in current process (won't affect parent shell, but shows intent)

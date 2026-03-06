@@ -222,20 +222,17 @@ def get_profile_config(profile_name):
         return None
 
 
-def remove_profile_section(profile_name):
-    """Remove a profile section from the AWS config file.
+def remove_section_from_file(file_path, section_header):
+    """Remove a named section and its key-value lines from an INI-style file.
 
-    Reads the entire config, strips out the matching [profile <name>] (or [default])
-    section and all its key-value lines, then writes the file back.
+    Reads the file, skips the matching section header and all lines until the
+    next section, then writes the result back.
     """
-    config_path = get_aws_config_path()
-    if not config_path.exists():
+    if not file_path.exists():
         return
 
-    profile_section = f"[profile {profile_name}]" if profile_name != "default" else "[default]"
-
     try:
-        with open(config_path, "r") as f:
+        with open(file_path, "r") as f:
             lines = f.readlines()
 
         new_lines = []
@@ -243,20 +240,25 @@ def remove_profile_section(profile_name):
 
         for line in lines:
             stripped = line.strip()
-            if stripped == profile_section:
+            if stripped == section_header:
                 skip = True
                 continue
             elif stripped.startswith("[") and skip:
-                # We've hit the next section — stop skipping
                 skip = False
 
             if not skip:
                 new_lines.append(line)
 
-        with open(config_path, "w") as f:
+        with open(file_path, "w") as f:
             f.writelines(new_lines)
     except Exception as e:
-        console.print(f"[red]Error removing profile section: {e}[/red]")
+        console.print(f"[red]Error removing section '{section_header}' from {file_path}: {e}[/red]")
+
+
+def remove_profile_section(profile_name):
+    """Remove a profile section from the AWS config file."""
+    section = f"[profile {profile_name}]" if profile_name != "default" else "[default]"
+    remove_section_from_file(get_aws_config_path(), section)
 
 
 def get_existing_sso_sessions():
