@@ -22,6 +22,7 @@ dependencies = [
     "click>=8.1.0,<9.0.0",
     "requests>=2.32.0,<3.0.0",
     "charset-normalizer>=3.3.2,<4.0.0",
+    "chardet>=3.0.0,<6.0.0",
     "rich>=13.0.0,<15.0.0",
     "tzdata>=2025.2",
     "strands-agents>=1.7.0,<2.0.0",
