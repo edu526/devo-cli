@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v3.2.0 (2026-03-06)
+
+### Bug Fixes
+
+- **aws-login**: Prevent duplicate profile sections in config file
+  ([`978bb07`](https://github.com/edu526/devo-cli/commit/978bb07ae064e35555de5e3e7598c017e7dc0279))
+
+### Documentation
+
+- Restructure documentation and update DynamoDB examples
+  ([`3860d43`](https://github.com/edu526/devo-cli/commit/3860d43a98732acc28554b49b2f067dfcc305d67))
+
+### Features
+
+- **aws-login**: Add ability to write temporary credentials as default profile
+  ([`8d32b13`](https://github.com/edu526/devo-cli/commit/8d32b1348be14aeb8287fbfd2fe44e74dd185da9))
+
+- **aws-login**: Add credential expiry checks and validation
+  ([`02da84c`](https://github.com/edu526/devo-cli/commit/02da84cc5bbbbf8cae04a5398818d00704d71b61))
+
+
 ## v3.1.1 (2026-03-03)
 
 ### Bug Fixes
