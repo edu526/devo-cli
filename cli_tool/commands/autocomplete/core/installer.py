@@ -52,7 +52,7 @@ To make it permanent, add that line to your `~/.config/fish/config.fish` file.""
 
     @classmethod
     def is_already_configured(cls, shell_name: str) -> bool:
-        """Check if completion is already configured for shell."""
+        """Check if completion is already configured (active, not commented out) for shell."""
         if shell_name not in cls.SHELL_CONFIGS:
             return False
 
@@ -60,8 +60,11 @@ To make it permanent, add that line to your `~/.config/fish/config.fish` file.""
         if not rc_file.exists():
             return False
 
-        content = rc_file.read_text()
-        return "_DEVO_COMPLETE" in content
+        for line in rc_file.read_text().splitlines():
+            stripped = line.strip()
+            if "_DEVO_COMPLETE" in stripped and not stripped.startswith("#"):
+                return True
+        return False
 
     @classmethod
     def install(cls, shell_name: str) -> tuple[bool, str]:
