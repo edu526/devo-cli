@@ -206,9 +206,13 @@ def configure_sso_profile(profile_name=None):
     if not profile_name:
         profile_name = click.prompt(
             "Profile name",
-            default="default",
             type=str,
         )
+
+    if profile_name.lower() == "default":
+        console.print("[red]✗ Cannot use 'default' as a profile name.[/red]")
+        console.print("[dim]Use 'devo aws-login set-default' to set a profile as default.[/dim]")
+        return None
 
     # Check if profile already exists
     existing_config = get_profile_config(profile_name)
@@ -244,6 +248,10 @@ def configure_sso_profile(profile_name=None):
                 return None
         elif choice == 3:
             new_name = click.prompt("\nNew name", type=str)
+            if new_name.lower() == "default":
+                console.print("[red]✗ Cannot use 'default' as a profile name.[/red]")
+                console.print("[dim]Use 'devo aws-login set-default' to set a profile as default.[/dim]")
+                return None
             if get_profile_config(new_name):
                 console.print(f"[red]'{new_name}' exists too[/red]")
                 return None

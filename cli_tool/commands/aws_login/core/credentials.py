@@ -7,7 +7,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from cli_tool.commands.aws_login.core.config import get_profile_config
+from cli_tool.commands.aws_login.core.config import get_aws_credentials_path, get_profile_config
 
 console = Console()
 
@@ -57,6 +57,90 @@ def get_sso_token_expiration(sso_start_url):
 
         return None
     except Exception:
+        return None
+
+
+def write_default_credentials(profile_name):
+    """Export temporary credentials for a profile and write them as [default] in ~/.aws/credentials.
+
+    Replaces any existing [default] section in the credentials file.
+
+    Returns:
+        dict with keys 'expiration' (str or None) on success, or None on failure.
+    """
+    try:
+        cmd = ["aws", "configure", "export-credentials", "--profile", profile_name]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+
+        if result.returncode != 0:
+            console.print(f"[red]Could not export credentials for '{profile_name}': {result.stderr.strip()}[/red]")
+            return None
+
+        creds = json.loads(result.stdout)
+        access_key = creds.get("AccessKeyId")
+        secret_key = creds.get("SecretAccessKey")
+        session_token = creds.get("SessionToken")
+        expiration = creds.get("Expiration")
+
+        if not access_key or not secret_key:
+            console.print("[red]Incomplete credentials received — missing AccessKeyId or SecretAccessKey[/red]")
+            return None
+
+    except subprocess.TimeoutExpired:
+        console.print("[red]Timed out while exporting credentials[/red]")
+        return None
+    except Exception as e:
+        console.print(f"[red]Error exporting credentials: {e}[/red]")
+        return None
+
+    # Get region from profile config
+    profile_config = get_profile_config(profile_name)
+    region = profile_config.get("region") if profile_config else None
+
+    credentials_path = get_aws_credentials_path()
+    credentials_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Remove existing [default] section before writing
+    if credentials_path.exists():
+        try:
+            with open(credentials_path, "r") as f:
+                lines = f.readlines()
+
+            new_lines = []
+            skip = False
+            for line in lines:
+                stripped = line.strip()
+                if stripped == "[default]":
+                    skip = True
+                    continue
+                elif stripped.startswith("[") and skip:
+                    skip = False
+                if not skip:
+                    new_lines.append(line)
+
+            with open(credentials_path, "w") as f:
+                f.writelines(new_lines)
+        except Exception as e:
+            console.print(f"[red]Error updating credentials file: {e}[/red]")
+            return None
+
+    # Append new [default] section
+    try:
+        new_section = "[default]\n"
+        new_section += f"aws_access_key_id = {access_key}\n"
+        new_section += f"aws_secret_access_key = {secret_key}\n"
+        if session_token:
+            new_section += f"aws_session_token = {session_token}\n"
+        if region:
+            new_section += f"region = {region}\n"
+
+        with open(credentials_path, "a") as f:
+            f.write("\n")
+            f.write(new_section)
+
+        return {"expiration": expiration}
+    except Exception as e:
+        console.print(f"[red]Error writing credentials file: {e}[/red]")
         return None
 
 
