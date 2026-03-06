@@ -11,6 +11,7 @@ if not defined VIRTUAL_ENV (
 REM Install dependencies
 echo Installing dependencies...
 pip install -q -r requirements.txt
+pip install -q --upgrade --prefer-binary charset-normalizer
 pip install -q -e .
 
 REM Install PyInstaller if not present
