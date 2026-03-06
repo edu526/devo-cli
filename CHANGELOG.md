@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.2.1 (2026-03-06)
+
+### Bug Fixes
+
+- **autocomplete**: Improve completion detection to ignore commented lines
+  ([`e9482bf`](https://github.com/edu526/devo-cli/commit/e9482bf60ab2cd497ca4c687091fe068aaa9de28))
+
+
 ## v3.2.0 (2026-03-06)
 
 ### Bug Fixes
