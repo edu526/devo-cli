@@ -1,9 +1,13 @@
-"""Runtime hook to ensure a charset detection library is importable before requests loads.
+"""Runtime hook: ensure a charset detection library is importable before requests loads.
 
-chardet is pure Python and bundles reliably across all platforms. charset_normalizer
-is also included but may lack its compiled C extension (md__mypyc) on some CI environments.
-Having chardet as a fallback prevents the RequestsDependencyWarning from requests.
+chardet is pure Python and always bundles reliably. charset_normalizer binary wheels
+on some platforms (e.g. macOS universal2) contain mypyc-compiled modules with
+hash-based names that PyInstaller cannot resolve — so we import it defensively.
 """
 
-import chardet  # noqa: F401 - ensures requests finds a charset detection library
-import charset_normalizer  # noqa: F401
+try:
+    import charset_normalizer  # noqa: F401
+except Exception:
+    pass
+
+import chardet  # noqa: F401 - guaranteed pure-Python fallback for requests
