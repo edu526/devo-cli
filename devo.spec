@@ -107,6 +107,11 @@ hidden_imports = [
     # Third-party dependencies
     'click',
     'requests',
+    'charset_normalizer',
+    'charset_normalizer.md__mypyc',
+    'chardet',
+    'charset_normalizer',
+    'charset_normalizer.md__mypyc',
     'rich',
     'rich.console',
     'rich.live',
@@ -182,6 +187,7 @@ hidden_imports += collect_submodules('strands_agents')
 hidden_imports += collect_submodules('strands')
 hidden_imports += collect_submodules('pydantic')
 hidden_imports += collect_submodules('pydantic_core')
+hidden_imports += collect_submodules('charset_normalizer')
 hidden_imports += collect_submodules('click')
 hidden_imports += collect_submodules('git')
 hidden_imports += collect_submodules('gitdb')
