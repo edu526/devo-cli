@@ -66,9 +66,10 @@ if [ "$CI_MODE" = true ]; then
   # Install dependencies
   python -m pip install --quiet setuptools_scm
   python -m pip install --quiet -r requirements.txt
-  # Force binary wheel for charset-normalizer so the compiled C extension
-  # (md__mypyc) is available for PyInstaller to bundle
-  python -m pip install --quiet --upgrade --prefer-binary charset-normalizer
+  # Force reinstall charset-normalizer binary wheel so the compiled C extension
+  # (md__mypyc) is always present for PyInstaller to bundle — skip cache to avoid
+  # restoring a previously cached pure-Python wheel
+  python -m pip install --force-reinstall --no-cache-dir --prefer-binary "charset-normalizer>=3.3.2,<4.0.0"
   python -m pip install --quiet .
   python -m pip install --quiet pyinstaller
 else
