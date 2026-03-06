@@ -188,17 +188,30 @@ jobs:
           # Linux: single file, macOS: directory
           if [ "${{ matrix.platform }}" = "linux" ]; then
             chmod +x dist/devo
-            BINARY_VERSION=$(./dist/devo --version 2>&1 | head -1 || echo "ERROR")
+            BINARY="./dist/devo"
           else
             # macOS: directory with executable
             chmod +x dist/devo/devo
-            BINARY_VERSION=$(./dist/devo/devo --version 2>&1 | head -1 || echo "ERROR")
+            BINARY="./dist/devo/devo"
           fi
+
+          # Capture stdout and stderr separately
+          BINARY_STDERR=$(mktemp)
+          BINARY_VERSION=$($BINARY --version 2>"$BINARY_STDERR" || echo "ERROR")
+          STDERR_OUTPUT=$(cat "$BINARY_STDERR")
+          rm -f "$BINARY_STDERR"
 
           echo "Binary version output: $BINARY_VERSION"
 
           if [ "$BINARY_VERSION" = "ERROR" ] || [ -z "$BINARY_VERSION" ]; then
             echo "❌ Binary test failed - no version output"
+            exit 1
+          fi
+
+          # Fail if binary prints anything to stderr (warnings, missing deps, etc.)
+          if [ -n "$STDERR_OUTPUT" ]; then
+            echo "❌ Binary produced unexpected stderr output:"
+            echo "$STDERR_OUTPUT"
             exit 1
           fi
 
@@ -210,15 +223,27 @@ jobs:
         run: |
           Write-Host "🧪 Testing binary..."
           try {
-            $output = & "dist\devo\devo.exe" --version 2>&1 | Select-Object -First 1
-            Write-Host "Binary version output: $output"
+            # Capture stdout and stderr separately
+            $tempErr = [System.IO.Path]::GetTempFileName()
+            $BINARY_VERSION = & "dist\devo\devo.exe" --version 2>$tempErr
+            $STDERR_OUTPUT = Get-Content $tempErr -Raw
+            Remove-Item $tempErr -ErrorAction SilentlyContinue
 
-            if ([string]::IsNullOrWhiteSpace($output)) {
+            Write-Host "Binary version output: $BINARY_VERSION"
+
+            if ([string]::IsNullOrWhiteSpace($BINARY_VERSION)) {
               Write-Host "❌ Binary test failed - no version output"
               exit 1
             }
 
-            Write-Host "✅ Binary works! Version: $output"
+            # Fail if binary prints anything to stderr (warnings, missing deps, etc.)
+            if (-not [string]::IsNullOrWhiteSpace($STDERR_OUTPUT)) {
+              Write-Host "❌ Binary produced unexpected stderr output:"
+              Write-Host $STDERR_OUTPUT
+              exit 1
+            }
+
+            Write-Host "✅ Binary works! Version: $BINARY_VERSION"
           } catch {
             Write-Host "❌ Binary test failed with error: $_"
             exit 1
