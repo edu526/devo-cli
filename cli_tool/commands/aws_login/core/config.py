@@ -222,6 +222,43 @@ def get_profile_config(profile_name):
         return None
 
 
+def remove_profile_section(profile_name):
+    """Remove a profile section from the AWS config file.
+
+    Reads the entire config, strips out the matching [profile <name>] (or [default])
+    section and all its key-value lines, then writes the file back.
+    """
+    config_path = get_aws_config_path()
+    if not config_path.exists():
+        return
+
+    profile_section = f"[profile {profile_name}]" if profile_name != "default" else "[default]"
+
+    try:
+        with open(config_path, "r") as f:
+            lines = f.readlines()
+
+        new_lines = []
+        skip = False
+
+        for line in lines:
+            stripped = line.strip()
+            if stripped == profile_section:
+                skip = True
+                continue
+            elif stripped.startswith("[") and skip:
+                # We've hit the next section — stop skipping
+                skip = False
+
+            if not skip:
+                new_lines.append(line)
+
+        with open(config_path, "w") as f:
+            f.writelines(new_lines)
+    except Exception as e:
+        console.print(f"[red]Error removing profile section: {e}[/red]")
+
+
 def get_existing_sso_sessions():
     """Get existing SSO sessions from config."""
     config_path = get_aws_config_path()

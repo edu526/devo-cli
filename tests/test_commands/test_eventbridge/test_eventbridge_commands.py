@@ -124,7 +124,7 @@ def mock_eventbridge_rules(mock_eventbridge_client):
 @pytest.fixture
 def mock_aws_client(mocker, mock_eventbridge_rules):
     """Mock create_aws_client to return mocked EventBridge client."""
-    mocker.patch("cli_tool.core.utils.aws.create_aws_client", return_value=mock_eventbridge_rules)
+    mocker.patch("cli_tool.commands.eventbridge.core.rules_manager.create_aws_client", return_value=mock_eventbridge_rules)
     return mock_eventbridge_rules
 
 
@@ -631,7 +631,7 @@ def test_list_rules_with_no_credentials_error(cli_runner, mocker):
     from botocore.exceptions import NoCredentialsError
 
     # Mock create_aws_client to raise NoCredentialsError
-    mocker.patch("cli_tool.core.utils.aws.create_aws_client", side_effect=NoCredentialsError())
+    mocker.patch("cli_tool.commands.eventbridge.core.rules_manager.create_aws_client", side_effect=NoCredentialsError())
 
     eventbridge_cmd = register_eventbridge_commands()
 
@@ -658,7 +658,7 @@ def test_list_rules_with_client_error(cli_runner, mocker):
 
     # Mock create_aws_client to raise ClientError
     mocker.patch(
-        "cli_tool.core.utils.aws.create_aws_client",
+        "cli_tool.commands.eventbridge.core.rules_manager.create_aws_client",
         side_effect=ClientError(
             error_response={"Error": {"Code": "AccessDeniedException", "Message": "User is not authorized to perform: events:ListRules"}},
             operation_name="ListRules",
@@ -687,7 +687,7 @@ def test_list_rules_with_client_error(cli_runner, mocker):
 def test_list_rules_with_generic_exception(cli_runner, mocker):
     """Test listing rules with generic exception."""
     # Mock create_aws_client to raise generic exception
-    mocker.patch("cli_tool.core.utils.aws.create_aws_client", side_effect=Exception("Unexpected error"))
+    mocker.patch("cli_tool.commands.eventbridge.core.rules_manager.create_aws_client", side_effect=Exception("Unexpected error"))
 
     eventbridge_cmd = register_eventbridge_commands()
 
@@ -723,7 +723,7 @@ def test_list_rules_empty_result_shows_message(cli_runner, monkeypatch, mocker):
 
     with mock_aws():
         empty_client = boto3.client("events", region_name="us-east-1")
-        mocker.patch("cli_tool.core.utils.aws.create_aws_client", return_value=empty_client)
+        mocker.patch("cli_tool.commands.eventbridge.core.rules_manager.create_aws_client", return_value=empty_client)
 
         eventbridge_cmd = register_eventbridge_commands()
 
