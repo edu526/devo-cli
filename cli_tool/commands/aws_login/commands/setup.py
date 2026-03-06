@@ -10,6 +10,7 @@ from cli_tool.commands.aws_login.core.config import (
     get_aws_config_path,
     get_existing_sso_sessions,
     get_profile_config,
+    remove_profile_section,
 )
 from cli_tool.commands.aws_login.core.credentials import get_sso_cache_token
 
@@ -183,6 +184,9 @@ sso_role_name = {role_name}
 region = {region}
 output = json
 """
+
+    # Remove existing profile section before writing to avoid duplicates
+    remove_profile_section(profile_name)
 
     # Append new profile
     with open(config_path, "a") as f:
