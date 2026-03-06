@@ -225,7 +225,7 @@ a = Analysis(
     hiddenimports=hidden_imports + _charset_hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['hooks/rth_charset_normalizer.py'],
     excludes=[
         'matplotlib',
         'numpy',
