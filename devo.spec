@@ -5,7 +5,7 @@ Generates standalone binaries for Linux, macOS, and Windows
 """
 
 import sys
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules, copy_metadata
 
 block_cipher = None
 
@@ -107,11 +107,6 @@ hidden_imports = [
     # Third-party dependencies
     'click',
     'requests',
-    'charset_normalizer',
-    'charset_normalizer.md__mypyc',
-    'chardet',
-    'charset_normalizer',
-    'charset_normalizer.md__mypyc',
     'rich',
     'rich.console',
     'rich.live',
@@ -187,13 +182,17 @@ hidden_imports += collect_submodules('strands_agents')
 hidden_imports += collect_submodules('strands')
 hidden_imports += collect_submodules('pydantic')
 hidden_imports += collect_submodules('pydantic_core')
-hidden_imports += collect_submodules('charset_normalizer')
 hidden_imports += collect_submodules('click')
 hidden_imports += collect_submodules('git')
 hidden_imports += collect_submodules('gitdb')
 
+# charset_normalizer ships compiled C extensions (.so/.pyd) that collect_submodules misses.
+# collect_all bundles Python modules + binaries + data files so the extension is always included.
+_charset_hiddenimports, _charset_datas, _charset_binaries = collect_all('charset_normalizer')
+
 # Collect data files
 datas = []
+datas += _charset_datas
 
 # Collect all data files from dependencies
 datas += collect_data_files('strands_agents', include_py_files=True)
@@ -221,9 +220,9 @@ except Exception:
 a = Analysis(
     ['cli_tool/cli.py'],
     pathex=[],
-    binaries=[],
+    binaries=_charset_binaries,
     datas=datas,
-    hiddenimports=hidden_imports,
+    hiddenimports=hidden_imports + _charset_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
