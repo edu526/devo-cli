@@ -7,7 +7,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from cli_tool.commands.aws_login.core.config import get_aws_credentials_path, get_profile_config
+from cli_tool.commands.aws_login.core.config import get_aws_credentials_path, get_profile_config, remove_section_from_file
 
 console = Console()
 
@@ -101,28 +101,7 @@ def write_default_credentials(profile_name):
     credentials_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Remove existing [default] section before writing
-    if credentials_path.exists():
-        try:
-            with open(credentials_path, "r") as f:
-                lines = f.readlines()
-
-            new_lines = []
-            skip = False
-            for line in lines:
-                stripped = line.strip()
-                if stripped == "[default]":
-                    skip = True
-                    continue
-                elif stripped.startswith("[") and skip:
-                    skip = False
-                if not skip:
-                    new_lines.append(line)
-
-            with open(credentials_path, "w") as f:
-                f.writelines(new_lines)
-        except Exception as e:
-            console.print(f"[red]Error updating credentials file: {e}[/red]")
-            return None
+    remove_section_from_file(credentials_path, "[default]")
 
     # Append new [default] section
     try:
@@ -169,6 +148,29 @@ def get_profile_credentials_expiration(profile_name):
         return None
     except Exception:
         return None
+
+
+def check_profile_credentials_available(profile_name):
+    """Check if a profile's credentials can be exported (i.e. not expired / not missing).
+
+    Returns:
+        tuple: (available: bool, error_message: str | None)
+            available=True  → credentials are accessible (may or may not have expiration)
+            available=False → credentials are expired, missing, or the export failed
+    """
+    try:
+        cmd = ["aws", "configure", "export-credentials", "--profile", profile_name]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+
+        if result.returncode == 0:
+            return True, None
+
+        stderr = result.stderr.strip()
+        return False, stderr if stderr else "Could not export credentials"
+    except subprocess.TimeoutExpired:
+        return False, "Timed out while checking credentials"
+    except Exception as e:
+        return False, str(e)
 
 
 def check_profile_needs_refresh(profile_name, threshold_minutes=10):
