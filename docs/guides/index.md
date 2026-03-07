@@ -49,7 +49,7 @@ Enable tab completion for your shell.
 
 ### [Commit Workflow](commit-workflow.md)
 
-Learn how to generate conventional commit messages using AI.
+Learn how to generate conventional commit messages using AWS Bedrock.
 
 **Topics covered:**
 
@@ -63,7 +63,7 @@ Learn how to generate conventional commit messages using AI.
 
 ### [Code Review Workflow](code-review-workflow.md)
 
-Learn how to use AI-powered code review to analyze changes before committing.
+Learn how to use automated code review to analyze changes before committing.
 
 **Topics covered:**
 

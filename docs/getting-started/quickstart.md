@@ -18,7 +18,7 @@ Get up and running with Devo CLI in 5 minutes.
 
 ## Step 2 — Configure AWS
 
-Devo CLI uses AWS Bedrock for AI features. You need valid AWS credentials:
+Devo CLI uses AWS Bedrock for the `commit` and `code-reviewer` commands. You need valid AWS credentials:
 
 ```bash
 # Option A: AWS SSO (recommended) — configure once, then use devo aws-login daily
@@ -47,8 +47,8 @@ devo --help
 # Stage your changes
 git add .
 
-# Generate AI-powered commit message
-devo commit
+        # Generate commit message
+        devo commit
 ```
 
 ### Review Your Branch
@@ -131,7 +131,7 @@ devo upgrade
 
 - [AWS Setup](../guides/aws-setup.md) - Enable Bedrock model access and IAM permissions
 - [Commit Workflow](../guides/commit-workflow.md) - Learn how commit message generation works
-- [Code Review Workflow](../guides/code-review-workflow.md) - AI-powered code review
+- [Code Review Workflow](../guides/code-review-workflow.md) - Automated code review
 - [Commands Reference](../commands/index.md) - All available commands
 - [Configuration](configuration.md) - Bedrock model, GitHub, CodeArtifact settings
 

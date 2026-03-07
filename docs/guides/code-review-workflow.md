@@ -1,6 +1,6 @@
 # Code Review Workflow
 
-Learn how to use AI-powered code review to analyze your changes before committing.
+Learn how to use automated code review to analyze your changes before committing.
 
 ## Quick Start
 
