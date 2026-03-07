@@ -56,47 +56,47 @@ The command will:
 
 ## Installation Details
 
-### Bash
+=== "Bash"
 
-Adds to `~/.bashrc`:
+    Adds to `~/.bashrc`:
 
-```bash
-eval "$(_DEVO_COMPLETE=bash_source devo)"
-```
+    ```bash
+    eval "$(_DEVO_COMPLETE=bash_source devo)"
+    ```
 
-**Reload:**
+    Reload:
 
-```bash
-source ~/.bashrc
-```
+    ```bash
+    source ~/.bashrc
+    ```
 
-### Zsh
+=== "Zsh"
 
-Adds to `~/.zshrc`:
+    Adds to `~/.zshrc`:
 
-```bash
-eval "$(_DEVO_COMPLETE=zsh_source devo)"
-```
+    ```bash
+    eval "$(_DEVO_COMPLETE=zsh_source devo)"
+    ```
 
-**Reload:**
+    Reload:
 
-```bash
-source ~/.zshrc
-```
+    ```bash
+    source ~/.zshrc
+    ```
 
-### Fish
+=== "Fish"
 
-Adds to `~/.config/fish/completions/devo.fish`:
+    Adds to `~/.config/fish/completions/devo.fish`:
 
-```fish
-eval (env _DEVO_COMPLETE=fish_source devo)
-```
+    ```fish
+    eval (env _DEVO_COMPLETE=fish_source devo)
+    ```
 
-**Reload:**
+    Reload:
 
-```bash
-source ~/.config/fish/config.fish
-```
+    ```fish
+    source ~/.config/fish/config.fish
+    ```
 
 ## Examples
 
@@ -141,18 +141,25 @@ configure  list  login  refresh  set-default
 
 **Solution:** Reload your shell configuration:
 
-```bash
-# Bash
-source ~/.bashrc
+=== "Bash"
 
-# Zsh
-source ~/.zshrc
+    ```bash
+    source ~/.bashrc
+    ```
 
-# Fish
-source ~/.config/fish/config.fish
+=== "Zsh"
 
-# Or restart your terminal
-```
+    ```bash
+    source ~/.zshrc
+    ```
+
+=== "Fish"
+
+    ```fish
+    source ~/.config/fish/config.fish
+    ```
+
+Or restart your terminal.
 
 ### "Command not found: _DEVO_COMPLETE"
 
@@ -174,31 +181,31 @@ source ~/.bashrc  # or ~/.zshrc
 
 ## Manual Installation
 
-If automatic installation doesn't work, you can manually add the completion code:
+If automatic installation doesn't work, add the completion code manually:
 
-### Bash
+=== "Bash"
 
-Edit `~/.bashrc`:
+    Edit `~/.bashrc`:
 
-```bash
-eval "$(_DEVO_COMPLETE=bash_source devo)"
-```
+    ```bash
+    eval "$(_DEVO_COMPLETE=bash_source devo)"
+    ```
 
-### Zsh
+=== "Zsh"
 
-Edit `~/.zshrc`:
+    Edit `~/.zshrc`:
 
-```bash
-eval "$(_DEVO_COMPLETE=zsh_source devo)"
-```
+    ```bash
+    eval "$(_DEVO_COMPLETE=zsh_source devo)"
+    ```
 
-### Fish
+=== "Fish"
 
-Create `~/.config/fish/completions/devo.fish`:
+    Create `~/.config/fish/completions/devo.fish`:
 
-```fish
-eval (env _DEVO_COMPLETE=fish_source devo)
-```
+    ```fish
+    eval (env _DEVO_COMPLETE=fish_source devo)
+    ```
 
 ## Exit Codes
 

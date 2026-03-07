@@ -16,28 +16,34 @@ Get up and running with Devo CLI in 5 minutes.
     irm https://devo.heyedu.dev/install.ps1 | iex
     ```
 
-## Step 2 — Configure AWS
-
-Devo CLI uses AWS Bedrock for the `commit` and `code-reviewer` commands. You need valid AWS credentials:
-
-```bash
-# Option A: AWS SSO (recommended) — configure once, then use devo aws-login daily
-aws configure sso              # first-time profile setup
-devo aws-login login           # login (opens browser)
-devo aws-login refresh         # refresh expired credentials without browser
-
-# Option B: Access keys
-aws configure
-```
-
-→ See the [AWS Setup Guide](../guides/aws-setup.md) for detailed setup including Bedrock model access.
-
-## Step 3 — Verify
+## Step 2 — Verify
 
 ```bash
 devo --version
 devo --help
 ```
+
+## Step 3 — Configure AWS
+
+Devo CLI uses AWS Bedrock for the `commit` and `code-reviewer` commands. You need valid AWS credentials:
+
+=== "AWS SSO (Recommended)"
+
+    Configure once, then use `devo aws-login` daily:
+
+    ```bash
+    aws configure sso       # first-time profile setup
+    devo aws-login login    # login (opens browser)
+    devo aws-login refresh  # refresh expired credentials without browser
+    ```
+
+=== "Access Keys (IAM User)"
+
+    ```bash
+    aws configure
+    ```
+
+→ See the [AWS Setup Guide](../guides/aws-setup.md) for detailed setup including Bedrock model access.
 
 ## Step 4 — First Commands
 
@@ -47,8 +53,8 @@ devo --help
 # Stage your changes
 git add .
 
-        # Generate commit message
-        devo commit
+# Generate commit message
+devo commit
 ```
 
 ### Review Your Branch

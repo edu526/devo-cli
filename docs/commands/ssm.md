@@ -340,15 +340,17 @@ devo ssm forward --bastion i-xxx --host db.rds.amazonaws.com --port 5432
 - AWS Session Manager Plugin (separate from AWS CLI)
 - Verify: `session-manager-plugin`
 
-### Linux/macOS
+### Platform-Specific
 
-- `socat` for hostname forwarding
-- `sudo` access for /etc/hosts modification
+=== "Linux / macOS"
 
-### Windows
+    - `socat` for hostname forwarding
+    - `sudo` access for `/etc/hosts` modification
 
-- `netsh portproxy` (built-in)
-- Administrator privileges for hostname forwarding setup only
+=== "Windows"
+
+    - `netsh portproxy` (built-in, no installation needed)
+    - Administrator privileges for hostname forwarding setup only
 
 ## Configuration File Format
 
