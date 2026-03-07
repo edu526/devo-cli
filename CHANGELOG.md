@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v3.2.3 (2026-03-07)
+
+### Bug Fixes
+
+- **docs**: Include install scripts in documentation deployment
+  ([`6d46e76`](https://github.com/edu526/devo-cli/commit/6d46e7615d473daa30ddf07fdba17c9b33febded))
+
+- **docs**: Update installation URLs to use the new domain
+  ([`01274dd`](https://github.com/edu526/devo-cli/commit/01274dd09438ac5936f17c7658281605d3f935cd))
+
+### Chores
+
+- Remove outdated assistant rules and language guidelines
+  ([`634c76e`](https://github.com/edu526/devo-cli/commit/634c76ef787507cc1058a2f748703e916a64e48c))
+
+### Refactoring
+
+- **docs**: Update documentation formatting and improve clarity across multiple files
+  ([`0df4c69`](https://github.com/edu526/devo-cli/commit/0df4c69cee951c895f4c70e41457bd4e538733eb))
+
+
 ## v3.2.2 (2026-03-06)
 
 ### Bug Fixes
