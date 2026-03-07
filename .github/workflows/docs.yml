@@ -44,7 +44,7 @@ jobs:
           cp install.ps1 docs/
 
       - name: Build documentation
-        run: mkdocs build
+        run: zensical build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

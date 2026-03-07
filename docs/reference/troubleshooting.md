@@ -365,13 +365,25 @@ devo code-reviewer
    complete -p devo
    ```
 
-3. **Reinstall completion:**
+3. **Reinstall completion** — add to your shell config file:
 
-   ```bash
-   # Add to ~/.bashrc or ~/.zshrc
-   eval "$(_DEVO_COMPLETE=bash_source devo)"  # Bash
-   eval "$(_DEVO_COMPLETE=zsh_source devo)"   # Zsh
-   ```
+    === "Bash"
+
+        ```bash
+        eval "$(_DEVO_COMPLETE=bash_source devo)"
+        ```
+
+    === "Zsh"
+
+        ```bash
+        eval "$(_DEVO_COMPLETE=zsh_source devo)"
+        ```
+
+    === "Fish"
+
+        ```fish
+        _DEVO_COMPLETE=fish_source devo | source
+        ```
 
 ## Binary Issues
 

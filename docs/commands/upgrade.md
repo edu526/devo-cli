@@ -158,18 +158,19 @@ Run 'devo upgrade' to update.
 
 ## Rollback
 
-If the upgrade fails or you want to rollback:
+If the upgrade fails or you want to rollback, the old binary is backed up as `devo.backup`:
 
-```bash
-# The old binary is backed up as devo.backup
-# Restore it manually:
+=== "System-wide install"
 
-# Linux/macOS
-sudo mv /usr/local/bin/devo.backup /usr/local/bin/devo
+    ```bash
+    sudo mv /usr/local/bin/devo.backup /usr/local/bin/devo
+    ```
 
-# Or for user installation
-mv ~/.local/bin/devo.backup ~/.local/bin/devo
-```
+=== "User install"
+
+    ```bash
+    mv ~/.local/bin/devo.backup ~/.local/bin/devo
+    ```
 
 ## Troubleshooting
 

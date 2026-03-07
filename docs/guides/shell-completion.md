@@ -13,47 +13,47 @@ Shell completion allows you to:
 
 ## Quick Setup
 
-### Zsh
+=== "Zsh"
 
-Add to `~/.zshrc`:
+    Add to `~/.zshrc`:
 
-```bash
-eval "$(_DEVO_COMPLETE=zsh_source devo)"
-```
+    ```bash
+    eval "$(_DEVO_COMPLETE=zsh_source devo)"
+    ```
 
-Then reload:
+    Then reload:
 
-```bash
-source ~/.zshrc
-```
+    ```bash
+    source ~/.zshrc
+    ```
 
-### Bash
+=== "Bash"
 
-Add to `~/.bashrc`:
+    Add to `~/.bashrc`:
 
-```bash
-eval "$(_DEVO_COMPLETE=bash_source devo)"
-```
+    ```bash
+    eval "$(_DEVO_COMPLETE=bash_source devo)"
+    ```
 
-Then reload:
+    Then reload:
 
-```bash
-source ~/.bashrc
-```
+    ```bash
+    source ~/.bashrc
+    ```
 
-### Fish
+=== "Fish"
 
-Add to `~/.config/fish/config.fish`:
+    Add to `~/.config/fish/config.fish`:
 
-```fish
-_DEVO_COMPLETE=fish_source devo | source
-```
+    ```fish
+    _DEVO_COMPLETE=fish_source devo | source
+    ```
 
-Then reload:
+    Then reload:
 
-```fish
-source ~/.config/fish/config.fish
-```
+    ```fish
+    source ~/.config/fish/config.fish
+    ```
 
 ## Verification
 
@@ -108,43 +108,46 @@ devo --profile <TAB>
 
 ## Advanced Configuration
 
-### Zsh with Oh My Zsh
+=== "Zsh (Oh My Zsh)"
 
-If using Oh My Zsh, add to `~/.zshrc`:
+    Add to `~/.zshrc`:
 
-```bash
-# Enable completion
-autoload -Uz compinit && compinit
+    ```bash
+    # Enable completion
+    autoload -Uz compinit && compinit
 
-# Add Devo completion
-eval "$(_DEVO_COMPLETE=zsh_source devo)"
-```
+    # Add Devo completion
+    eval "$(_DEVO_COMPLETE=zsh_source devo)"
+    ```
 
-### Bash with Bash Completion
+=== "Bash (bash-completion)"
 
-If using bash-completion package:
+    Install bash-completion if needed, then add to `~/.bashrc`:
 
-```bash
-# Install bash-completion if needed
-# macOS: brew install bash-completion
-# Ubuntu: sudo apt install bash-completion
+    ```bash
+    # macOS
+    brew install bash-completion
 
-# Add to ~/.bashrc
-if [ -f /etc/bash_completion ]; then
-    . /etc/bash_completion
-fi
+    # Ubuntu/Debian
+    sudo apt install bash-completion
+    ```
 
-eval "$(_DEVO_COMPLETE=bash_source devo)"
-```
+    ```bash
+    # Add to ~/.bashrc
+    if [ -f /etc/bash_completion ]; then
+        . /etc/bash_completion
+    fi
 
-### Fish with Fisher
+    eval "$(_DEVO_COMPLETE=bash_source devo)"
+    ```
 
-If using Fisher plugin manager:
+=== "Fish (Fisher)"
 
-```fish
-# Add to ~/.config/fish/config.fish
-_DEVO_COMPLETE=fish_source devo | source
-```
+    Add to `~/.config/fish/config.fish`:
+
+    ```fish
+    _DEVO_COMPLETE=fish_source devo | source
+    ```
 
 ## Troubleshooting
 
@@ -160,16 +163,23 @@ _DEVO_COMPLETE=fish_source devo | source
 
 2. **Reload shell configuration**:
 
-   ```bash
-   # Zsh
-   source ~/.zshrc
+    === "Zsh"
 
-   # Bash
-   source ~/.bashrc
+        ```bash
+        source ~/.zshrc
+        ```
 
-   # Fish
-   source ~/.config/fish/config.fish
-   ```
+    === "Bash"
+
+        ```bash
+        source ~/.bashrc
+        ```
+
+    === "Fish"
+
+        ```fish
+        source ~/.config/fish/config.fish
+        ```
 
 3. **Check completion is loaded**:
 
@@ -183,103 +193,114 @@ _DEVO_COMPLETE=fish_source devo | source
 
 ### Slow Completion
 
-If completion is slow, you can generate a static completion file:
+If completion is slow, generate a static completion file:
 
-#### Zsh
+=== "Zsh"
 
-```bash
-# Generate completion file
-_DEVO_COMPLETE=zsh_source devo > ~/.zsh/completions/_devo
+    ```bash
+    # Generate completion file
+    _DEVO_COMPLETE=zsh_source devo > ~/.zsh/completions/_devo
+    ```
 
-# Add to ~/.zshrc
-fpath=(~/.zsh/completions $fpath)
-autoload -Uz compinit && compinit
-```
+    Add to `~/.zshrc`:
 
-#### Bash
+    ```bash
+    fpath=(~/.zsh/completions $fpath)
+    autoload -Uz compinit && compinit
+    ```
 
-```bash
-# Generate completion file
-_DEVO_COMPLETE=bash_source devo > ~/.bash_completions/devo
+=== "Bash"
 
-# Add to ~/.bashrc
-source ~/.bash_completions/devo
-```
+    ```bash
+    # Generate completion file
+    _DEVO_COMPLETE=bash_source devo > ~/.bash_completions/devo
+    ```
+
+    Add to `~/.bashrc`:
+
+    ```bash
+    source ~/.bash_completions/devo
+    ```
 
 ### Completion Shows Wrong Commands
 
 Clear completion cache:
 
-```bash
-# Zsh
-rm ~/.zcompdump*
-compinit
+=== "Zsh"
 
-# Bash
-complete -r devo
-source ~/.bashrc
-```
+    ```bash
+    rm ~/.zcompdump*
+    compinit
+    ```
+
+=== "Bash"
+
+    ```bash
+    complete -r devo
+    source ~/.bashrc
+    ```
 
 ### Permission Denied
 
-Ensure completion directory exists and is writable:
+Ensure the completion directory exists and is writable:
 
-```bash
-# Zsh
-mkdir -p ~/.zsh/completions
-chmod 755 ~/.zsh/completions
+=== "Zsh"
 
-# Bash
-mkdir -p ~/.bash_completions
-chmod 755 ~/.bash_completions
-```
+    ```bash
+    mkdir -p ~/.zsh/completions
+    chmod 755 ~/.zsh/completions
+    ```
+
+=== "Bash"
+
+    ```bash
+    mkdir -p ~/.bash_completions
+    chmod 755 ~/.bash_completions
+    ```
 
 ## Uninstalling Completion
 
-### Zsh
+=== "Zsh"
 
-Remove from `~/.zshrc`:
+    Remove from `~/.zshrc`:
 
-```bash
-# Remove this line:
-eval "$(_DEVO_COMPLETE=zsh_source devo)"
-```
+    ```bash
+    eval "$(_DEVO_COMPLETE=zsh_source devo)"
+    ```
 
-Then reload:
+    Then reload:
 
-```bash
-source ~/.zshrc
-```
+    ```bash
+    source ~/.zshrc
+    ```
 
-### Bash
+=== "Bash"
 
-Remove from `~/.bashrc`:
+    Remove from `~/.bashrc`:
 
-```bash
-# Remove this line:
-eval "$(_DEVO_COMPLETE=bash_source devo)"
-```
+    ```bash
+    eval "$(_DEVO_COMPLETE=bash_source devo)"
+    ```
 
-Then reload:
+    Then reload:
 
-```bash
-source ~/.bashrc
-```
+    ```bash
+    source ~/.bashrc
+    ```
 
-### Fish
+=== "Fish"
 
-Remove from `~/.config/fish/config.fish`:
+    Remove from `~/.config/fish/config.fish`:
 
-```fish
-# Remove this line:
-_DEVO_COMPLETE=fish_source devo | source
-```
+    ```fish
+    _DEVO_COMPLETE=fish_source devo | source
+    ```
 
-Then reload:
+    Then reload:
 
-```fish
-source ~/.config/fish/config.fish
-```
+    ```fish
+    source ~/.config/fish/config.fish
+    ```
 
 ## Completion Features
 

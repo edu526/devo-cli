@@ -86,46 +86,44 @@ pyinstaller --onefile \
 
 ## Platform-Specific Builds
 
-### Linux
+=== "Linux"
 
-```bash
-# Build on Linux
-make build-binary
+    ```bash
+    make build-binary
+    ```
 
-# Output
-dist/devo-linux-amd64
+    Output: `dist/devo-linux-amd64` (single file)
 
-# Test
-./dist/devo-linux-amd64 --version
-```
+    ```bash
+    ./dist/devo-linux-amd64 --version
+    ```
 
-### macOS
+=== "macOS"
 
-```bash
-# Build on macOS
-make build-binary
+    ```bash
+    make build-binary
+    ```
 
-# Output (depends on architecture)
-dist/devo/devo  # Directory with executable and dependencies
+    Output: `dist/devo/devo` (directory with executable and dependencies)
 
-# Test
-./dist/devo/devo --version
-```
+    ```bash
+    ./dist/devo/devo --version
+    ```
 
-**Note:** macOS uses onedir mode (directory with executable) for faster startup. Linux uses onefile mode (single binary) for easier distribution.
+    !!! note
+        macOS uses onedir mode (directory with executable) for faster startup. Linux uses onefile mode (single binary) for easier distribution.
 
-### Windows
+=== "Windows"
 
-```bash
-# Build on Windows
-make build-binary
+    ```bash
+    make build-binary
+    ```
 
-# Output
-dist/devo-windows-amd64.exe
+    Output: `dist/devo-windows-amd64.exe`
 
-# Test
-.\dist\devo-windows-amd64.exe --version
-```
+    ```powershell
+    .\dist\devo-windows-amd64.exe --version
+    ```
 
 ## Cross-Platform Building
 
@@ -244,19 +242,21 @@ pyinstaller --onedir cli_tool/cli.py
 
 ### Basic Tests
 
-```bash
-# Version check
-./dist/devo --version  # Linux
-./dist/devo/devo --version  # macOS/Windows
+=== "Linux"
 
-# Help text
-./dist/devo --help  # Linux
-./dist/devo/devo --help  # macOS/Windows
+    ```bash
+    ./dist/devo --version
+    ./dist/devo --help
+    ./dist/devo config show
+    ```
 
-# Command execution
-./dist/devo config show  # Linux
-./dist/devo/devo config show  # macOS/Windows
-```
+=== "macOS / Windows"
+
+    ```bash
+    ./dist/devo/devo --version
+    ./dist/devo/devo --help
+    ./dist/devo/devo config show
+    ```
 
 ### Comprehensive Tests
 
@@ -275,16 +275,23 @@ pytest tests/
 
 ### Create Release Package
 
-```bash
-# Linux - single binary
-cp dist/devo release/devo-linux-amd64
+=== "Linux"
 
-# macOS - tarball (already created by build.sh --release)
-tar -czf devo-darwin-amd64.tar.gz -C release/vX.Y.Z devo-darwin-amd64
+    ```bash
+    cp dist/devo release/devo-linux-amd64
+    ```
 
-# Windows - zip (already created by build.sh --release)
-powershell Compress-Archive release/vX.Y.Z/devo-windows-amd64 devo-windows-amd64.zip
-```
+=== "macOS"
+
+    ```bash
+    tar -czf devo-darwin-amd64.tar.gz -C release/vX.Y.Z devo-darwin-amd64
+    ```
+
+=== "Windows"
+
+    ```powershell
+    Compress-Archive release/vX.Y.Z/devo-windows-amd64 devo-windows-amd64.zip
+    ```
 
 ### Generate Checksums
 
@@ -360,28 +367,28 @@ Some antivirus software flags PyInstaller binaries:
 
 ## Code Signing
 
-### macOS
+=== "macOS"
 
-```bash
-# Sign binary
-codesign --sign "Developer ID Application" dist/devo
+    ```bash
+    # Sign binary
+    codesign --sign "Developer ID Application" dist/devo
 
-# Verify signature
-codesign --verify --verbose dist/devo
+    # Verify signature
+    codesign --verify --verbose dist/devo
 
-# Notarize for Gatekeeper
-xcrun notarytool submit dist/devo.zip --wait
-```
+    # Notarize for Gatekeeper
+    xcrun notarytool submit dist/devo.zip --wait
+    ```
 
-### Windows
+=== "Windows"
 
-```bash
-# Sign with certificate
-signtool sign /f certificate.pfx /p password dist/devo.exe
+    ```powershell
+    # Sign with certificate
+    signtool sign /f certificate.pfx /p password dist/devo.exe
 
-# Verify signature
-signtool verify /pa dist/devo.exe
-```
+    # Verify signature
+    signtool verify /pa dist/devo.exe
+    ```
 
 ## Makefile Targets
 

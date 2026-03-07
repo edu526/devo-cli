@@ -65,21 +65,22 @@ Installation guides:
 
 ### Platform-Specific Requirements
 
-**Linux/macOS:**
+=== "Linux / macOS"
 
-- `devo ssm hosts setup` uses `sudo tee` to write `/etc/hosts` — you will be prompted for your password
-- On **macOS**, loopback aliases (127.0.0.x) are also configured automatically with `sudo ifconfig` — expect two sudo prompts on first setup
+    - `devo ssm hosts setup` uses `sudo tee` to write `/etc/hosts` — you will be prompted for your password
+    - On **macOS**, loopback aliases (127.0.0.x) are also configured automatically with `sudo ifconfig` — expect two sudo prompts on first setup
 
-```bash
-# Install socat
-brew install socat  # macOS
-sudo apt-get install socat  # Ubuntu/Debian
-```
+    Install `socat`:
 
-**Windows:**
+    ```bash
+    brew install socat       # macOS
+    sudo apt-get install socat  # Ubuntu/Debian
+    ```
 
-- Run terminal as Administrator for hostname forwarding setup — `devo ssm hosts setup` requires elevated privileges to write `C:\Windows\System32\drivers\etc\hosts`
-- `netsh portproxy` is built-in, no installation needed
+=== "Windows"
+
+    - Run terminal as Administrator for hostname forwarding setup — `devo ssm hosts setup` requires elevated privileges to write `C:\Windows\System32\drivers\etc\hosts`
+    - `netsh portproxy` is built-in, no installation needed
 
 ## Common Workflows
 
@@ -186,19 +187,26 @@ devo ssm hosts setup
 
 Your microservices use environment variables:
 
-```bash
-# .env.dev
-DATABASE_HOST=dev.rds.amazonaws.com
-DATABASE_PORT=5432
+=== ".env.dev"
 
-# .env.staging
-DATABASE_HOST=staging.rds.amazonaws.com
-DATABASE_PORT=5432
+    ```bash
+    DATABASE_HOST=dev.rds.amazonaws.com
+    DATABASE_PORT=5432
+    ```
 
-# .env.prod
-DATABASE_HOST=prod.rds.amazonaws.com
-DATABASE_PORT=5432
-```
+=== ".env.staging"
+
+    ```bash
+    DATABASE_HOST=staging.rds.amazonaws.com
+    DATABASE_PORT=5432
+    ```
+
+=== ".env.prod"
+
+    ```bash
+    DATABASE_HOST=prod.rds.amazonaws.com
+    DATABASE_PORT=5432
+    ```
 
 No code changes needed across environments!
 
@@ -400,17 +408,19 @@ session-manager-plugin
 # If not found, install from AWS documentation
 ```
 
-### Permission Denied (Linux/macOS)
+### Permission / Access Denied
 
-The tool automatically uses `sudo tee` to write `/etc/hosts` and will prompt for your password. If you see permission errors, make sure your user has sudo rights.
+=== "Linux / macOS"
 
-### Access Denied (Windows)
+    The tool automatically uses `sudo tee` to write `/etc/hosts` and will prompt for your password. If you see permission errors, make sure your user has sudo rights.
 
-Run terminal as Administrator:
+=== "Windows"
 
-1. Right-click Command Prompt/PowerShell
-2. Select "Run as administrator"
-3. Run `devo ssm hosts setup`
+    Run terminal as Administrator:
+
+    1. Right-click Command Prompt/PowerShell
+    2. Select "Run as administrator"
+    3. Run `devo ssm hosts setup`
 
 ### Connection Refused
 

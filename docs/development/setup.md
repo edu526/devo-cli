@@ -27,14 +27,29 @@ The setup script will:
 If you prefer manual setup:
 
 ```bash
-# Create and activate virtual environment
+# Create virtual environment
 python -m venv venv
+```
 
-# Activate virtual environment
-source venv/bin/activate              # Linux/macOS
-venv\Scripts\activate                 # Windows CMD/PowerShell
-. venv/Scripts/activate               # Windows Git Bash
+=== "Linux / macOS"
 
+    ```bash
+    source venv/bin/activate
+    ```
+
+=== "Windows (CMD / PowerShell)"
+
+    ```powershell
+    venv\Scripts\activate
+    ```
+
+=== "Windows (Git Bash)"
+
+    ```bash
+    . venv/Scripts/activate
+    ```
+
+```bash
 # Install development dependencies
 pip install -r requirements.txt
 pip install -e .
