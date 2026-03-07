@@ -6,12 +6,12 @@
 
 **Linux/macOS:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/edu526/devo-cli/main/install.sh | bash
+curl -fsSL https://devo.heyedu.dev/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/edu526/devo-cli/main/install.ps1 | iex
+irm https://devo.heyedu.dev/install.ps1 | iex
 ```
 
 ### Verify Installation
@@ -172,7 +172,7 @@ devo commit        # Generate commit message
 - Run `make help` for all commands
 - Check `docs/contributing.md` for detailed guide
 - See `README.md` for full documentation
-- Visit [Full Documentation](https://edu526.github.io/devo-cli)
+- Visit [Full Documentation](https://devo.heyedu.dev)
 
 ## Quick Command Reference
 
