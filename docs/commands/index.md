@@ -6,7 +6,7 @@ Devo CLI provides several commands to enhance your development workflow.
 
 ### [devo commit](commit.md)
 
-Generate AI-powered conventional commit messages from staged changes.
+Generate conventional commit messages from staged changes using AWS Bedrock.
 
 ```bash
 devo commit [OPTIONS]

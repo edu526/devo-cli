@@ -259,5 +259,3 @@ If you have questions about regression testing or need help writing a regression
 - **Comprehensive Guidelines**: `GUIDELINES.md` - Complete reference for regression testing
 - **Templates Directory**: `templates/` - Specialized templates for different bug types
 - Main Testing Documentation: `tests/README.md`
-- Testing Strategy Design: `.kiro/specs/comprehensive-testing-strategy/design.md`
-- Requirements: `.kiro/specs/comprehensive-testing-strategy/requirements.md`

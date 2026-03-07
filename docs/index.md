@@ -1,19 +1,23 @@
 # Devo CLI
 
-AI-powered command-line tool for development workflows with AWS Bedrock integration.
+Developer productivity CLI for Git workflows and AWS management.
 
 ## What is Devo CLI?
 
-Devo CLI is a Python-based command-line tool that enhances developer productivity through AI-powered features and AWS integration. It helps teams maintain consistent commit messages, perform automated code reviews, and streamline development workflows.
+Devo CLI is a command-line tool that streamlines daily development tasks — from committing changes and reviewing code to managing AWS resources like DynamoDB, SSM, EventBridge and CodeArtifact. It uses AWS Bedrock internally for the `commit` and `code-reviewer` commands.
 
 ## Key Features
 
-- **AI-Powered Commit Messages**: Generate conventional commit messages from staged changes using AWS Bedrock (Claude 3.7 Sonnet)
-- **Automated Code Review**: AI-driven code analysis with security checks and best practices validation
-- **Self-Updating**: Keep your CLI up-to-date with a single command
-- **AWS Integration**: Seamless CodeArtifact authentication and Bedrock AI model access
+- **Commit Automation**: Generate conventional commit messages from staged changes using AWS Bedrock
+- **Code Review**: Automated code analysis with security checks and best practices validation
+- **AWS SSO**: Authentication and credential management across multiple profiles
+- **DynamoDB**: Table management and data export (CSV, JSON, JSONL, TSV)
+- **SSM Session Manager**: Connect to private instances and databases via port forwarding
+- **EventBridge**: Enable, disable and describe rules
+- **CodeArtifact**: Authenticate with private package registries
 - **Shell Completion**: Tab completion support for bash, zsh, and fish
-- **Standalone Binaries**: No Python installation required for end users
+- **Self-Updating**: Keep your CLI up-to-date with a single command
+- **Standalone Binaries**: No Python installation required
 
 ---
 
@@ -33,16 +37,16 @@ Devo CLI is a Python-based command-line tool that enhances developer productivit
     irm https://devo.heyedu.dev/install.ps1 | iex
     ```
 
-**Step 2 — Set up AWS** (required for AI features)
+**Step 2 — Set up AWS**
 
-→ Follow the [AWS Setup Guide](guides/aws-setup.md) to configure SSO and enable Bedrock access, then use `devo aws-login` to authenticate daily.
+→ Follow the [AWS Setup Guide](guides/aws-setup.md) to configure SSO, then use `devo aws-login` to authenticate daily.
 
 **Step 3 — Use it**
 
 ```bash
 git add .
-devo commit        # AI-generated commit message
-devo code-reviewer # AI code review of your branch
+devo commit        # generate commit message
+devo code-reviewer # review your branch changes
 ```
 
 → See the [Quick Start Guide](getting-started/quickstart.md) for more detail.
@@ -61,7 +65,7 @@ devo code-reviewer # AI code review of your branch
 
 - [Workflow Guides](guides/index.md) - Step-by-step guides for common workflows
 - [AWS Setup](guides/aws-setup.md) - Configure AWS credentials and permissions
-- [Commit Workflow](guides/commit-workflow.md) - Generate AI commit messages
+- [Commit Workflow](guides/commit-workflow.md) - Generate commit messages automatically
 - [Code Review Workflow](guides/code-review-workflow.md) - Automated code review
 - [CodeArtifact Login](guides/codeartifact-login.md) - Access private npm packages
 - [DynamoDB Export](guides/dynamodb-export.md) - Export table data

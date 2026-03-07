@@ -366,7 +366,7 @@ try {
     Write-Host "  3. Test the CLI: devo --help"
     Write-Host "  4. Generate a commit: devo commit"
     Write-Host ""
-    Write-Host "Documentation: https://github.com/$Repo" -ForegroundColor Gray
+    Write-Host "Documentation: https://devo.heyedu.dev" -ForegroundColor Gray
 
     # Pause before exiting so user can read the output
     Pause-OnSuccess

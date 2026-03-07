@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "devo-cli"
 dynamic = ["version"]
-description = "A CLI tool for developers with AI-powered features."
+description = "A CLI tool for streamlining daily development workflows and AWS management."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
@@ -34,7 +34,6 @@ dependencies = [
 dev = [
     "setuptools>=78.0.0",
     "setuptools-scm>=8.0.0",
-    "twine>=6.0.0",
     "pytest>=7.0.0",
     "pytest-mock>=3.0.0",
     "pytest-cov>=4.0.0",

@@ -1,5 +1,5 @@
 site_name: Devo CLI Documentation
-site_description: AI-powered CLI tool for development workflows
+site_description: Developer productivity CLI for Git workflows and AWS management
 site_url: https://devo.heyedu.dev
 repo_url: https://github.com/edu526/devo-cli
 repo_name: edu526/devo-cli

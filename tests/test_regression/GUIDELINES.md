@@ -606,6 +606,4 @@ If you have questions about writing regression tests:
 ## References
 
 - Main Testing Documentation: `tests/README.md`
-- Testing Strategy Design: `.kiro/specs/comprehensive-testing-strategy/design.md`
-- Requirements: `.kiro/specs/comprehensive-testing-strategy/requirements.md`
 - Regression Test README: `tests/test_regression/README.md`
