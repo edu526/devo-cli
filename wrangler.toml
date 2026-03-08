@@ -1,6 +1,8 @@
 name = "devo-cli-doc"
-pages_build_output_dir = "site"
 compatibility_date = "2026-03-08"
+
+[assets]
+directory = "./site"
 
 [vars]
 PYTHON_VERSION = "3.12"
