@@ -1,0 +1,18 @@
+name = "devo-cli-doc"
+pages_build_output_dir = "site"
+compatibility_date = "2026-03-08"
+
+[vars]
+PYTHON_VERSION = "3.12"
+
+[env.production]
+name = "devo-cli-doc"
+
+[env.production.vars]
+PYTHON_VERSION = "3.12"
+
+[env.preview]
+name = "devo-cli-doc-preview"
+
+[env.preview.vars]
+PYTHON_VERSION = "3.12"
