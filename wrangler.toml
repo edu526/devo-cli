@@ -1,20 +1,10 @@
 name = "devo-cli"
 compatibility_date = "2026-03-08"
+workers_dev = false
+preview_urls = true
 
 [assets]
 directory = "./site"
 
 [vars]
-PYTHON_VERSION = "3.12"
-
-[env.production]
-name = "devo-cli-doc"
-
-[env.production.vars]
-PYTHON_VERSION = "3.12"
-
-[env.preview]
-name = "devo-cli-doc-preview"
-
-[env.preview.vars]
 PYTHON_VERSION = "3.12"
