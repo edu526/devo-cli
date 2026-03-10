@@ -259,26 +259,24 @@ def test_codeartifact_login_token_expiration_note(cli_runner, mock_aws_utils, mo
 @pytest.mark.integration
 def test_codeartifact_login_lists_packages(cli_runner, mock_aws_utils, mocker):
     """Test CodeArtifact login lists available packages after authentication."""
-    # Mock subprocess for login and list-packages
     mock_run = mocker.patch("subprocess.run")
 
     def side_effect(*args, **kwargs):
         cmd = args[0] if args else kwargs.get("cmd", [])
-        if "list-packages" in str(cmd):
-            return MagicMock(returncode=0, stdout="package1\tpackage2\tpackage3", stderr="")
+        if "list-packages" in str(cmd) and "list-package-versions" not in str(cmd):
+            # Format: namespace\tpackage per line
+            return MagicMock(returncode=0, stdout="test\tpackage1\ntest\tpackage2", stderr="")
         elif "list-package-versions" in str(cmd):
             return MagicMock(returncode=0, stdout="1.0.0", stderr="")
         return MagicMock(returncode=0, stdout="", stderr="")
 
     mock_run.side_effect = side_effect
 
-    # Run login command
     result = cli_runner.invoke(codeartifact_login, [], obj={})
 
-    # Verify success and package listing
     assert result.exit_code == 0
     assert "Available Packages" in result.output
-    assert "package1" in result.output or "@test/package1" in result.output
+    assert "@test/package1" in result.output
 
 
 @pytest.mark.integration
@@ -306,25 +304,23 @@ def test_codeartifact_login_no_packages(cli_runner, mock_aws_utils, mocker):
 @pytest.mark.integration
 def test_codeartifact_login_package_version_retrieval(cli_runner, mock_aws_utils, mocker):
     """Test CodeArtifact login retrieves package versions."""
-    # Mock subprocess for login, list-packages, and list-package-versions
     mock_run = mocker.patch("subprocess.run")
 
     def side_effect(*args, **kwargs):
         cmd = args[0] if args else kwargs.get("cmd", [])
-        if "list-packages" in str(cmd):
-            return MagicMock(returncode=0, stdout="my-package", stderr="")
+        if "list-packages" in str(cmd) and "list-package-versions" not in str(cmd):
+            # Format: namespace\tpackage per line
+            return MagicMock(returncode=0, stdout="test\tmy-package", stderr="")
         elif "list-package-versions" in str(cmd):
             return MagicMock(returncode=0, stdout="2.5.1", stderr="")
         return MagicMock(returncode=0, stdout="", stderr="")
 
     mock_run.side_effect = side_effect
 
-    # Run login command
     result = cli_runner.invoke(codeartifact_login, [], obj={})
 
-    # Verify success and package version
     assert result.exit_code == 0
-    assert "my-package@2.5.1" in result.output or "my-package" in result.output
+    assert "@test/my-package@2.5.1" in result.output
 
 
 @pytest.mark.integration

@@ -26,10 +26,10 @@ from cli_tool.commands.upgrade.commands.upgrade import upgrade
 
 @pytest.fixture
 def mock_github_release_response():
-    """Provide mock GitHub release API response."""
+    """Provide mock releases API response (normalized to internal format)."""
     return {
         "tag_name": "v1.5.0",
-        "name": "Release 1.5.0",
+        "published_at": "2026-01-01T00:00:00Z",
         "assets": [
             {"name": "devo-linux-amd64", "browser_download_url": "https://github.com/example/devo-cli/releases/download/v1.5.0/devo-linux-amd64"},
             {

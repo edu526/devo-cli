@@ -17,7 +17,7 @@ from cli_tool.commands.upgrade.core.version import get_current_version, get_late
 @click.option("--force", "-f", is_flag=True, help="Force upgrade without confirmation")
 @click.option("--check", "-c", is_flag=True, help="Check for updates without upgrading")
 def upgrade(force, check):
-    """Upgrade the CLI tool to the latest version from GitHub Releases"""
+    """Upgrade the CLI tool to the latest version."""
     # Disable version check for upgrade command
     os.environ["DEVO_SKIP_VERSION_CHECK"] = "1"
 

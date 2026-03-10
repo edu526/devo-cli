@@ -23,15 +23,15 @@ def get_current_version():
         return None
 
 
-def get_latest_version_from_github():
-    """Fetch latest version from GitHub API"""
+def get_latest_version():
+    """Fetch latest version from releases API"""
     try:
-        from cli_tool.config import GITHUB_API_RELEASES_URL
+        from cli_tool.config import RELEASES_API_URL
 
-        response = requests.get(GITHUB_API_RELEASES_URL, timeout=2)
+        response = requests.get(RELEASES_API_URL, timeout=2)
         response.raise_for_status()
         data = response.json()
-        return data.get("tag_name", "").lstrip("v")
+        return data.get("version", "").lstrip("v")
     except Exception:
         return None
 
@@ -125,7 +125,7 @@ def check_for_updates():
         latest_version = cache_data.get("latest_version")
     else:
         # Fetch from GitHub
-        latest_version = get_latest_version_from_github()
+        latest_version = get_latest_version()
         if latest_version:
             write_cache(latest_version)
 

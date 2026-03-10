@@ -44,7 +44,6 @@ def test_issue_123_config_set_creates_nested_keys(temp_config_dir, mocker):
     # Start with minimal config (no 'aws' key)
     initial_config = {
         "bedrock": {"model_id": "test-model"},
-        "github": {"repo_owner": "test", "repo_name": "test-repo"},
     }
     with open(config_file, "w") as f:
         json.dump(initial_config, f)

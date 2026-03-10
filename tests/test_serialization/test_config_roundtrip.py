@@ -40,7 +40,6 @@ def test_config_export_import_roundtrip_full(temp_config_dir, mocker):
             "fallback_model_id": "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
             "region": "us-east-1",
         },
-        "github": {"repo_owner": "test-owner", "repo_name": "test-repo"},
         "codeartifact": {"region": "us-west-2", "domain": "test-domain"},
         "version_check": {"enabled": True, "last_check": 1234567890},
         "ssm": {
@@ -82,8 +81,6 @@ def test_config_export_import_roundtrip_full(temp_config_dir, mocker):
 
     # Verify key sections match the exported data
     assert restored_config["bedrock"]["model_id"] == exported["bedrock"]["model_id"]
-    assert restored_config["github"]["repo_owner"] == exported["github"]["repo_owner"]
-    assert restored_config["github"]["repo_name"] == exported["github"]["repo_name"]
     assert restored_config["ssm"]["databases"] == exported["ssm"]["databases"]
     assert restored_config["ssm"]["instances"] == exported["ssm"]["instances"]
     assert restored_config["dynamodb"]["export_templates"] == exported["dynamodb"]["export_templates"]
@@ -98,7 +95,6 @@ def test_config_export_import_roundtrip_partial_sections(temp_config_dir, mocker
     # Create initial config
     original_config = {
         "bedrock": {"model_id": "original-model", "region": "us-east-1"},
-        "github": {"repo_owner": "original-owner", "repo_name": "original-repo"},
         "ssm": {"databases": {"db1": {"instance_id": "i-original"}}, "instances": {}},
     }
 
@@ -121,7 +117,6 @@ def test_config_export_import_roundtrip_partial_sections(temp_config_dir, mocker
     assert restored_config["ssm"]["databases"] == exported_ssm["ssm"]["databases"]
     # Other sections should remain unchanged
     assert restored_config["bedrock"]["model_id"] == "original-model"
-    assert restored_config["github"]["repo_owner"] == "original-owner"
 
 
 @pytest.mark.unit
@@ -133,7 +128,6 @@ def test_config_export_import_roundtrip_with_merge(temp_config_dir, mocker):
     # Create initial config
     initial_config = {
         "bedrock": {"model_id": "initial-model", "region": "us-east-1"},
-        "github": {"repo_owner": "initial-owner", "repo_name": "initial-repo"},
     }
     save_config(initial_config)
 
@@ -144,7 +138,6 @@ def test_config_export_import_roundtrip_with_merge(temp_config_dir, mocker):
     # Modify config (add new keys)
     modified_config = load_config()
     modified_config["bedrock"]["new_key"] = "new_value"
-    modified_config["github"]["repo_name"] = "new-repo"
     save_config(modified_config)
 
     # Import with merge (should preserve new keys)
@@ -154,11 +147,8 @@ def test_config_export_import_roundtrip_with_merge(temp_config_dir, mocker):
     restored_config = load_config()
     # Original values should be restored
     assert restored_config["bedrock"]["model_id"] == "initial-model"
-    assert restored_config["github"]["repo_owner"] == "initial-owner"
     # New keys should be preserved (deep merge)
     assert restored_config["bedrock"]["new_key"] == "new_value"
-    # Note: repo_name gets overwritten by the import since it exists in the exported file
-    assert restored_config["github"]["repo_name"] == "initial-repo"
 
 
 # ============================================================================
@@ -658,7 +648,6 @@ def test_roundtrip_empty_config(temp_config_dir, mocker):
     restored = load_config()
     # Compare key sections to verify round-trip integrity
     assert restored["bedrock"] == exported["bedrock"]
-    assert restored["github"] == exported["github"]
 
 
 @pytest.mark.unit
@@ -726,7 +715,6 @@ def test_roundtrip_multiple_cycles(temp_config_dir, mocker):
 
     original_config = {
         "bedrock": {"model_id": "test-model", "region": "us-east-1"},
-        "github": {"repo_owner": "test", "repo_name": "repo"},
     }
     save_config(original_config)
 
@@ -741,5 +729,3 @@ def test_roundtrip_multiple_cycles(temp_config_dir, mocker):
     final_config = load_config()
     assert final_config["bedrock"]["model_id"] == original_config["bedrock"]["model_id"]
     assert final_config["bedrock"]["region"] == original_config["bedrock"]["region"]
-    assert final_config["github"]["repo_owner"] == original_config["github"]["repo_owner"]
-    assert final_config["github"]["repo_name"] == original_config["github"]["repo_name"]
