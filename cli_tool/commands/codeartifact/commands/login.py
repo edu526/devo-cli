@@ -168,16 +168,15 @@ def codeartifact_login(ctx):
             click.echo(click.style(f"Domain: {domain} ({namespace})", fg="blue"))
 
             with console.status(f"[blue]Fetching packages from {domain}...", spinner="dots"):
-                packages = authenticator.list_packages(domain, repository, profile)
+                packages_with_versions = authenticator.list_packages_with_versions(domain, repository, namespace, profile)
 
-                if packages:
-                    for package in packages:
-                        version = authenticator.get_package_version(domain, repository, package, namespace, profile)
-                        if version:
-                            click.echo(f"  - {namespace}/{package}@{version}")
-                        else:
-                            click.echo(f"  - {namespace}/{package}")
-                else:
-                    click.echo("  No packages found")
+            if packages_with_versions:
+                for package, version in sorted(packages_with_versions.items()):
+                    if version:
+                        click.echo(f"  - {package}@{version}")
+                    else:
+                        click.echo(f"  - {package}")
+            else:
+                click.echo("  No packages found")
 
             click.echo("")
