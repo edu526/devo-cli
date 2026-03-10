@@ -1,7 +1,8 @@
 """CodeArtifact authentication business logic."""
 
 import subprocess
-from typing import List, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Dict, List, Optional, Tuple
 
 
 class CodeArtifactAuthenticator:
@@ -70,7 +71,7 @@ class CodeArtifactAuthenticator:
         repository: str,
         profile: Optional[str] = None,
         timeout: int = 10,
-    ) -> List[str]:
+    ) -> List[Tuple[str, str]]:
         """List packages in a CodeArtifact repository.
 
         Args:
@@ -80,7 +81,7 @@ class CodeArtifactAuthenticator:
           timeout: Command timeout in seconds
 
         Returns:
-          List of package names
+          List of (namespace, package_name) tuples
         """
         cmd = [
             "aws",
@@ -95,7 +96,7 @@ class CodeArtifactAuthenticator:
             "--format",
             "npm",
             "--query",
-            "packages[].package",
+            "packages[].[namespace, package]",
             "--output",
             "text",
         ]
@@ -106,7 +107,12 @@ class CodeArtifactAuthenticator:
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
             if result.returncode == 0 and result.stdout.strip():
-                return [pkg for pkg in result.stdout.strip().split("\t") if pkg]
+                packages = []
+                for line in result.stdout.strip().splitlines():
+                    parts = line.split("\t")
+                    if len(parts) == 2:
+                        packages.append((parts[0], parts[1]))
+                return packages
             return []
         except Exception:
             return []
@@ -146,11 +152,13 @@ class CodeArtifactAuthenticator:
             "--package",
             package,
             "--namespace",
-            namespace,
+            namespace.lstrip("@"),
             "--region",
             self.region,
+            "--sort-by",
+            "PUBLISHED_TIME",
             "--query",
-            "versions[0].version",
+            "defaultDisplayVersion",
             "--output",
             "text",
         ]
@@ -166,3 +174,44 @@ class CodeArtifactAuthenticator:
             return None
         except Exception:
             return None
+
+    def list_packages_with_versions(
+        self,
+        domain: str,
+        repository: str,
+        namespace: str,
+        profile: Optional[str] = None,
+        max_workers: int = 10,
+    ) -> Dict[str, Optional[str]]:
+        """List packages with their latest versions in parallel.
+
+        Args:
+          domain: CodeArtifact domain name
+          repository: Repository name
+          namespace: Package namespace
+          profile: AWS profile to use
+          max_workers: Max parallel threads for version fetching
+
+        Returns:
+          Dict mapping package name to latest version (or None)
+        """
+        packages = self.list_packages(domain, repository, profile)
+        if not packages:
+            return {}
+
+        results: Dict[str, Optional[str]] = {}
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_pkg = {
+                executor.submit(self.get_package_version, domain, repository, pkg_name, pkg_ns, profile): (pkg_ns, pkg_name)
+                for pkg_ns, pkg_name in packages
+            }
+            for future in as_completed(future_to_pkg):
+                pkg_ns, pkg_name = future_to_pkg[future]
+                display_name = f"@{pkg_ns}/{pkg_name}"
+                try:
+                    results[display_name] = future.result()
+                except Exception:
+                    results[display_name] = None
+
+        return results
