@@ -45,7 +45,6 @@ def test_load_config_creates_default_if_not_exists(temp_config_dir, mocker):
     # Verify default config structure
     assert isinstance(config, dict)
     assert "bedrock" in config
-    assert "github" in config
     assert "codeartifact" in config
     assert "version_check" in config
     assert "ssm" in config
@@ -62,7 +61,7 @@ def test_load_config_returns_existing_config(temp_config_dir, mocker):
     config_file = temp_config_dir / "config.json"
     test_config = {
         "bedrock": {"model_id": "test-model", "region": "us-west-2"},
-        "github": {"repo_owner": "test", "repo_name": "test-repo"},
+        "custom": {"key": "value"},
         "codeartifact": {"region": "us-west-2"},
         "version_check": {"enabled": False},
         "ssm": {"databases": {}},
@@ -102,7 +101,6 @@ def test_load_config_merges_with_defaults(temp_config_dir, mocker):
     assert config["bedrock"]["model_id"] == "custom-model"
 
     # Verify default values are present
-    assert "github" in config
     assert "codeartifact" in config
     assert "version_check" in config
 
@@ -123,7 +121,7 @@ def test_load_config_handles_corrupted_file(temp_config_dir, mocker):
     # Verify default config is returned
     assert isinstance(config, dict)
     assert "bedrock" in config
-    assert "github" in config
+    assert "codeartifact" in config
 
 
 # ============================================================================
@@ -139,7 +137,7 @@ def test_save_config_writes_valid_json(temp_config_dir, mocker):
 
     test_config = {
         "bedrock": {"model_id": "test-model", "region": "us-east-1"},
-        "github": {"repo_owner": "test", "repo_name": "test-repo"},
+        "custom": {"key": "value"},
     }
 
     # Save config
@@ -207,7 +205,7 @@ def test_get_config_value_with_nested_keys_dot_notation(temp_config_dir, mocker)
     config_file = temp_config_dir / "config.json"
     test_config = {
         "bedrock": {"model_id": "test-model", "region": "us-east-1"},
-        "github": {"repo_owner": "test", "repo_name": "test-repo"},
+        "custom": {"key": "value"},
     }
     with open(config_file, "w") as f:
         json.dump(test_config, f)
@@ -221,8 +219,8 @@ def test_get_config_value_with_nested_keys_dot_notation(temp_config_dir, mocker)
     value = get_config_value("bedrock.region")
     assert value == "us-east-1"
 
-    value = get_config_value("github.repo_owner")
-    assert value == "test"
+    value = get_config_value("custom.key")
+    assert value == "value"
 
 
 @pytest.mark.unit
@@ -383,7 +381,7 @@ def test_deep_merge_simple_dicts():
 @pytest.mark.unit
 def test_deep_merge_nested_dicts():
     """Test deep merge with nested dictionaries."""
-    base = {"bedrock": {"model_id": "base-model", "region": "us-east-1"}, "github": {"repo_owner": "base"}}
+    base = {"bedrock": {"model_id": "base-model", "region": "us-east-1"}, "custom": {"key": "base"}}
     override = {"bedrock": {"model_id": "override-model"}, "version_check": {"enabled": False}}
 
     result = _deep_merge(base, override)
@@ -391,7 +389,7 @@ def test_deep_merge_nested_dicts():
     # Verify nested merge
     assert result["bedrock"]["model_id"] == "override-model"
     assert result["bedrock"]["region"] == "us-east-1"  # Preserved from base
-    assert result["github"]["repo_owner"] == "base"  # Preserved from base
+    assert result["custom"]["key"] == "base"  # Preserved from base
     assert result["version_check"]["enabled"] is False  # Added from override
 
 
@@ -429,7 +427,7 @@ def test_reset_config_restores_defaults(temp_config_dir, mocker):
 
     # Verify defaults are restored
     assert "bedrock" in result
-    assert "github" in result
+    assert "codeartifact" in result
     assert "custom" not in result
 
     # Verify file was updated
@@ -450,7 +448,7 @@ def test_export_config_full(temp_config_dir, mocker):
     config_file = temp_config_dir / "config.json"
     test_config = {
         "bedrock": {"model_id": "test-model"},
-        "github": {"repo_owner": "test"},
+        "custom": {"key": "value"},
         "ssm": {"databases": {}},
     }
     with open(config_file, "w") as f:
@@ -463,7 +461,7 @@ def test_export_config_full(temp_config_dir, mocker):
 
     # Verify all sections are exported
     assert "bedrock" in exported
-    assert "github" in exported
+    assert "codeartifact" in exported
     assert "ssm" in exported
 
 
@@ -473,7 +471,7 @@ def test_export_config_specific_sections(temp_config_dir, mocker):
     config_file = temp_config_dir / "config.json"
     test_config = {
         "bedrock": {"model_id": "test-model"},
-        "github": {"repo_owner": "test"},
+        "custom": {"key": "value"},
         "ssm": {"databases": {}},
     }
     with open(config_file, "w") as f:
@@ -487,7 +485,7 @@ def test_export_config_specific_sections(temp_config_dir, mocker):
     # Verify only requested sections are exported
     assert "ssm" in exported
     assert "bedrock" in exported
-    assert "github" not in exported
+    assert "custom" not in exported
 
 
 @pytest.mark.unit
@@ -527,7 +525,7 @@ def test_import_config_full_merge(temp_config_dir, mocker):
         json.dump(current_config, f)
 
     import_file = temp_config_dir / "import.json"
-    import_data = {"bedrock": {"model_id": "imported-model"}, "github": {"repo_owner": "imported"}}
+    import_data = {"bedrock": {"model_id": "imported-model"}, "custom": {"key": "imported"}}
     with open(import_file, "w") as f:
         json.dump(import_data, f)
 
@@ -541,19 +539,19 @@ def test_import_config_full_merge(temp_config_dir, mocker):
         config = json.load(f)
     assert config["bedrock"]["model_id"] == "imported-model"
     assert config["bedrock"]["region"] == "us-east-1"  # Preserved
-    assert config["github"]["repo_owner"] == "imported"
+    assert config["custom"]["key"] == "imported"
 
 
 @pytest.mark.unit
 def test_import_config_specific_sections(temp_config_dir, mocker):
     """Test importing specific configuration sections."""
     config_file = temp_config_dir / "config.json"
-    current_config = {"bedrock": {"model_id": "current"}, "github": {"repo_owner": "current"}}
+    current_config = {"bedrock": {"model_id": "current"}, "custom": {"key": "current"}}
     with open(config_file, "w") as f:
         json.dump(current_config, f)
 
     import_file = temp_config_dir / "import.json"
-    import_data = {"bedrock": {"model_id": "imported"}, "github": {"repo_owner": "imported"}}
+    import_data = {"bedrock": {"model_id": "imported"}, "custom": {"key": "imported"}}
     with open(import_file, "w") as f:
         json.dump(import_data, f)
 
@@ -566,7 +564,7 @@ def test_import_config_specific_sections(temp_config_dir, mocker):
     with open(config_file) as f:
         config = json.load(f)
     assert config["bedrock"]["model_id"] == "imported"
-    assert config["github"]["repo_owner"] == "current"  # Not updated
+    assert config["custom"]["key"] == "current"  # Not updated
 
 
 @pytest.mark.unit
@@ -616,7 +614,6 @@ def test_get_default_config_structure():
 
     # Verify all required sections exist
     assert "bedrock" in config
-    assert "github" in config
     assert "codeartifact" in config
     assert "version_check" in config
     assert "ssm" in config
@@ -640,8 +637,6 @@ def test_get_default_config_values():
     # Verify specific default values
     assert config["bedrock"]["model_id"] == "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
     assert config["bedrock"]["region"] == "us-east-1"
-    assert config["github"]["repo_owner"] == "edu526"
-    assert config["github"]["repo_name"] == "devo-cli"
     assert config["version_check"]["enabled"] is True
 
 
@@ -698,7 +693,7 @@ def test_load_config_handles_empty_file(temp_config_dir, mocker):
     # Verify default config is returned
     assert isinstance(config, dict)
     assert "bedrock" in config
-    assert "github" in config
+    assert "codeartifact" in config
     assert "codeartifact" in config
 
 
@@ -909,7 +904,7 @@ def test_load_config_handles_whitespace_only_file(temp_config_dir, mocker):
     # Verify default config is returned
     assert isinstance(config, dict)
     assert "bedrock" in config
-    assert "github" in config
+    assert "codeartifact" in config
 
 
 @pytest.mark.unit
@@ -958,7 +953,7 @@ def test_save_config_creates_directory_if_missing(temp_config_dir, mocker):
 def test_load_config_handles_unicode_content(temp_config_dir, mocker):
     """Test that load_config handles Unicode characters correctly."""
     config_file = temp_config_dir / "config.json"
-    test_config = {"bedrock": {"model_id": "test-模型-🚀"}, "github": {"repo_owner": "用户", "repo_name": "项目"}}
+    test_config = {"bedrock": {"model_id": "test-模型-🚀"}, "custom": {"key": "用户", "name": "项目"}}
     with open(config_file, "w", encoding="utf-8") as f:
         json.dump(test_config, f, ensure_ascii=False)
 
@@ -969,7 +964,7 @@ def test_load_config_handles_unicode_content(temp_config_dir, mocker):
 
     # Verify Unicode content is preserved
     assert config["bedrock"]["model_id"] == "test-模型-🚀"
-    assert config["github"]["repo_owner"] == "用户"
+    assert config["custom"]["key"] == "用户"
 
 
 @pytest.mark.unit
@@ -1116,7 +1111,7 @@ def test_load_config_handles_file_with_bom(temp_config_dir, mocker):
     assert isinstance(config, dict)
     assert "bedrock" in config
     # The function should return a valid config (either parsed or defaults)
-    assert "github" in config  # This is in defaults, so it should always be present
+    assert "codeartifact" in config  # This is in defaults, so it should always be present
 
 
 @pytest.mark.unit
@@ -1128,7 +1123,7 @@ def test_import_config_handles_empty_sections_list(temp_config_dir, mocker):
         json.dump(initial_config, f)
 
     import_file = temp_config_dir / "import.json"
-    import_data = {"bedrock": {"model_id": "imported"}, "github": {"repo_owner": "imported"}}
+    import_data = {"bedrock": {"model_id": "imported"}, "custom": {"key": "imported"}}
     with open(import_file, "w") as f:
         json.dump(import_data, f)
 
@@ -1144,7 +1139,7 @@ def test_import_config_handles_empty_sections_list(temp_config_dir, mocker):
     # The actual behavior is that empty sections list means no filtering, so everything gets imported
     # Let's verify the function behaves as implemented
     assert "bedrock" in config
-    assert "github" in config
+    assert "codeartifact" in config
 
 
 @pytest.mark.unit

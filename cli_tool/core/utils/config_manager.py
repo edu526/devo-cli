@@ -35,7 +35,6 @@ def get_default_config():
             "fallback_model_id": "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
             "region": "us-east-1",
         },
-        "github": {"repo_owner": "edu526", "repo_name": "devo-cli"},
         "codeartifact": {
             "region": "us-east-1",
             "account_id": "123456789012",

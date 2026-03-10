@@ -15,11 +15,8 @@ DEFAULT_MODEL_ID = get_config_value("bedrock.model_id", SONNET_3_7_MODEL_ID)
 BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", DEFAULT_MODEL_ID)
 BEDROCK_REGION = os.getenv("BEDROCK_REGION", get_config_value("bedrock.region", "us-east-1"))
 
-# GitHub Configuration
-GITHUB_REPO_OWNER = os.getenv("GITHUB_REPO_OWNER", get_config_value("github.repo_owner", "edu526"))
-GITHUB_REPO_NAME = os.getenv("GITHUB_REPO_NAME", get_config_value("github.repo_name", "devo-cli"))
-GITHUB_REPO_URL = f"https://github.com/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}"
-GITHUB_API_RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases/latest"
+# Releases API (used by upgrade command and version check)
+RELEASES_API_URL = os.getenv("RELEASES_API_URL", "https://releases.heyedu.dev/devo-cli/latest")
 
 # CodeArtifact Configuration
 CODEARTIFACT_REGION = os.getenv("CODEARTIFACT_REGION", get_config_value("codeartifact.region", "us-east-1"))
