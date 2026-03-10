@@ -2,6 +2,35 @@
 
 <!-- version list -->
 
+## v3.3.0 (2026-03-10)
+
+### Chores
+
+- Rename AGENT.md to AGENTS.md
+  ([`2c7fda7`](https://github.com/edu526/devo-cli/commit/2c7fda7bc34740928ace019090a6a950a04ea68d))
+
+- **config**: Add Wrangler configuration for Cloudflare Pages deployment
+  ([`1e0c217`](https://github.com/edu526/devo-cli/commit/1e0c217cf7abcfced894f7ae44a60a2045ca468e))
+
+- **config**: Update Wrangler configuration for assets directory
+  ([`fd4492a`](https://github.com/edu526/devo-cli/commit/fd4492a5e2bcdcc04284786048541ae41e54fd89))
+
+### Continuous Integration
+
+- Remove docs workflow and consolidate Wrangler configuration
+  ([`247dc7b`](https://github.com/edu526/devo-cli/commit/247dc7b56787818050a73ec2dcf439a4d126e5d1))
+
+### Features
+
+- **codeartifact**: Show latest version for each package on ca-login
+  ([`7c1f816`](https://github.com/edu526/devo-cli/commit/7c1f8165ff5d75f65da1784abcc4817d304ba837))
+
+### Refactoring
+
+- Migrate from GitHub API to releases.heyedu.dev for version management
+  ([`5c8c39a`](https://github.com/edu526/devo-cli/commit/5c8c39aaf03fac680699c01ff5d27510204c36c2))
+
+
 ## v3.2.3 (2026-03-07)
 
 ### Bug Fixes
