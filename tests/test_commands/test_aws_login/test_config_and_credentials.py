@@ -24,7 +24,7 @@ from cli_tool.commands.aws_login.core.config import remove_profile_section, remo
 def test_remove_section_removes_target(tmp_path):
     """Target section and its keys are removed; other sections survive."""
     cfg = tmp_path / "config"
-    cfg.write_text("[profile foo]\nregion = us-east-1\n\n[profile bar]\nregion = eu-west-1\n")
+    cfg.write_text("[profile foo]\nregion = us-east-1\n" + "\n[profile bar]\nregion = eu-west-1\n")
 
     remove_section_from_file(cfg, "[profile foo]")
 
@@ -54,7 +54,7 @@ def test_remove_section_missing_file_is_noop(tmp_path):
 def test_remove_section_last_section_in_file(tmp_path):
     """Removing the last section in the file leaves the rest intact."""
     cfg = tmp_path / "config"
-    cfg.write_text("[profile first]\nkey = val\n\n[profile last]\nkey = other\n")
+    cfg.write_text("[profile first]\nkey = val\n" + "\n[profile last]\nkey = other\n")
 
     remove_section_from_file(cfg, "[profile last]")
 
@@ -66,7 +66,7 @@ def test_remove_section_last_section_in_file(tmp_path):
 def test_remove_section_default_header(tmp_path):
     """[default] header is matched literally."""
     cfg = tmp_path / "credentials"
-    cfg.write_text("[default]\naws_access_key_id = AKIA\naws_secret_access_key = SECRET\n\n[other]\naws_access_key_id = OTHER\n")
+    cfg.write_text("[default]\naws_access_key_id = AKIA\naws_secret_access_key = SECRET\n" + "\n[other]\naws_access_key_id = OTHER\n")
 
     remove_section_from_file(cfg, "[default]")
 
@@ -166,7 +166,7 @@ def test_write_default_credentials_replaces_existing(mock_aws_home, mocker):
 
     creds_file = mock_aws_home / "credentials"
     creds_file.write_text(
-        "[default]\naws_access_key_id = OLD_KEY\naws_secret_access_key = OLD_SECRET\n\n[other-profile]\naws_access_key_id = OTHER\n"
+        "[default]\naws_access_key_id = OLD_KEY\naws_secret_access_key = OLD_SECRET\n" + "\n[other-profile]\naws_access_key_id = OTHER\n"
     )
 
     mocker.patch("subprocess.run", return_value=_make_export_creds_result(access_key="NEW_KEY", secret="NEW_SECRET", token=None))

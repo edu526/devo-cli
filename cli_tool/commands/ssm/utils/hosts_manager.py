@@ -16,15 +16,17 @@ class HostsManager:
 
     MARKER_START = "# DEVO-CLI-SSM-START - Do not edit manually"
     MARKER_END = "# DEVO-CLI-SSM-END"
+    UNIX_HOSTS_FILE = "/etc/hosts"
+    WINDOWS_HOSTS_FILE = "C:/Windows/System32/drivers/etc/hosts"
 
     @staticmethod
     def get_hosts_file_path() -> Path:
         """Get the hosts file path for the current OS"""
         system = platform.system()
         if system == "Windows":
-            return Path("C:/Windows/System32/drivers/etc/hosts")
+            return Path(HostsManager.WINDOWS_HOSTS_FILE)
         else:  # Linux, macOS, Unix
-            return Path("/etc/hosts")
+            return Path(HostsManager.UNIX_HOSTS_FILE)
 
     def __init__(self):
         self.HOSTS_FILE = self.get_hosts_file_path()
@@ -199,9 +201,12 @@ class HostsManager:
                     "  3. Run the command again"
                 ) from e
         else:
-            # Linux/macOS: Use sudo tee
+            # Linux/macOS: Use sudo tee with a fixed, validated path (not user-controlled)
+            hosts_path = self.get_hosts_file_path()
+            if hosts_path != Path(self.UNIX_HOSTS_FILE):
+                raise ValueError(f"Unexpected hosts file path: {hosts_path}")
             process = subprocess.Popen(
-                ["sudo", "tee", str(self.HOSTS_FILE)], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+                ["sudo", "tee", self.UNIX_HOSTS_FILE], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
             )
             _, stderr = process.communicate(input=content.encode())
 
