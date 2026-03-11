@@ -46,8 +46,8 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      echo -e "${RED}Unknown option: $1${NC}"
-      echo "Use --help for usage information"
+      echo -e "${RED}Unknown option: $1${NC}" >&2
+      echo "Use --help for usage information" >&2
       exit 1
       ;;
   esac
@@ -57,7 +57,7 @@ echo "🔨 Building Devo CLI Binary..."
 echo ""
 
 # CI Mode: Install dependencies and fetch git history
-if [ "$CI_MODE" = true ]; then
+if [[ "$CI_MODE" = true ]]; then
   echo -e "${BLUE}📦 CI Mode: Setting up environment...${NC}"
 
   # Fetch full git history for versioning
@@ -75,13 +75,13 @@ if [ "$CI_MODE" = true ]; then
   python -m pip install --quiet pyinstaller
 else
   # Local Mode: Check virtual environment
-  if [ -z "$VIRTUAL_ENV" ]; then
+  if [[ -z "$VIRTUAL_ENV" ]]; then
     echo -e "${YELLOW}⚠️  Virtual environment not activated${NC}"
     echo "Activating venv..."
-    if [ -f "venv/bin/activate" ]; then
+    if [[ -f "venv/bin/activate" ]]; then
       source venv/bin/activate
     else
-      echo -e "${RED}❌ Virtual environment not found. Run 'make venv' first.${NC}"
+      echo -e "${RED}❌ Virtual environment not found. Run 'make venv' first.${NC}" >&2
       exit 1
     fi
   fi
@@ -104,15 +104,15 @@ pyinstaller devo.spec --clean
 # Check if build was successful
 # Linux: onefile mode (dist/devo)
 # macOS/Windows: onedir mode (dist/devo/devo)
-if [ "$(uname -s)" = "Linux" ]; then
-  if [ ! -f "dist/devo" ]; then
-    echo -e "${RED}❌ Build failed - binary not found at dist/devo${NC}"
+if [[ "$(uname -s)" = "Linux" ]]; then
+  if [[ ! -f "dist/devo" ]]; then
+    echo -e "${RED}❌ Build failed - binary not found at dist/devo${NC}" >&2
     exit 1
   fi
   BINARY_PATH="dist/devo"
 else
-  if [ ! -f "dist/devo/devo" ]; then
-    echo -e "${RED}❌ Build failed - binary not found at dist/devo/devo${NC}"
+  if [[ ! -f "dist/devo/devo" ]]; then
+    echo -e "${RED}❌ Build failed - binary not found at dist/devo/devo${NC}" >&2
     exit 1
   fi
   BINARY_PATH="dist/devo/devo"
@@ -128,11 +128,11 @@ echo -e "${BLUE}🧪 Testing binary...${NC}"
 echo ""
 
 # Create release if requested
-if [ "$CREATE_RELEASE" = true ]; then
+if [[ "$CREATE_RELEASE" = true ]]; then
   echo -e "${BLUE}📦 Creating versioned release...${NC}"
 
   # Get version from environment or git tags
-  if [ -n "$RELEASE_VERSION" ]; then
+  if [[ -n "$RELEASE_VERSION" ]]; then
     VERSION="$RELEASE_VERSION"
   else
     VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
@@ -141,7 +141,7 @@ if [ "$CREATE_RELEASE" = true ]; then
   PLATFORM=$(uname -s | tr '[:upper:]' '[:lower:]')
 
   # Use FORCE_ARCH if set (for CI cross-compilation), otherwise detect
-  if [ -n "$FORCE_ARCH" ]; then
+  if [[ -n "$FORCE_ARCH" ]]; then
     ARCH="$FORCE_ARCH"
   else
     ARCH=$(uname -m)
@@ -169,7 +169,7 @@ if [ "$CREATE_RELEASE" = true ]; then
   BINARY_NAME="devo-${PLATFORM}-${ARCH}"
 
   # Copy the binary (different structure for Linux vs macOS/Windows)
-  if [ "$(uname -s)" = "Linux" ]; then
+  if [[ "$(uname -s)" = "Linux" ]]; then
     # Linux: single file
     cp dist/devo "${RELEASE_DIR}/${BINARY_NAME}"
     chmod +x "${RELEASE_DIR}/${BINARY_NAME}"
@@ -193,7 +193,7 @@ if [ "$CREATE_RELEASE" = true ]; then
   cd "${RELEASE_DIR}"
 
   # Create tarball for macOS/Windows (directory), checksum for Linux (single file)
-  if [ "$(uname -s)" = "Linux" ]; then
+  if [[ "$(uname -s)" = "Linux" ]]; then
     # Linux: checksum the single binary
     if command -v sha256sum &> /dev/null; then
       sha256sum "${BINARY_NAME}" > SHA256SUMS
@@ -221,7 +221,7 @@ if [ "$CREATE_RELEASE" = true ]; then
   echo -e "${GREEN}✅ Release ready!${NC}"
   echo ""
 
-  if [ "$(uname -s)" = "Linux" ]; then
+  if [[ "$(uname -s)" = "Linux" ]]; then
     echo "Binary: ${RELEASE_DIR}/${BINARY_NAME}"
     echo "Size: $(du -h ${RELEASE_DIR}/${BINARY_NAME} | cut -f1)"
   else
@@ -233,7 +233,7 @@ if [ "$CREATE_RELEASE" = true ]; then
   echo "Files in release:"
   ls -lh "${RELEASE_DIR}"
 else
-  if [ "$(uname -s)" = "Linux" ]; then
+  if [[ "$(uname -s)" = "Linux" ]]; then
     echo "Binary location: dist/devo"
     echo "Binary size: $(du -h dist/devo | cut -f1)"
   else

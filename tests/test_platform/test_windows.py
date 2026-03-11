@@ -280,7 +280,7 @@ class TestWindowsZipExtraction:
 
         # Create new version ZIP
         with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("devo/devo.exe", b"MZ" + b"\x00" * 100)  # Larger = newer
+            zf.writestr("devo/devo.exe", b"MZ" + b"\x00" * 100)
             zf.writestr("devo/_internal/base_library.zip", b"PK\x03\x04")
 
         # Mock subprocess.Popen to avoid actually running PowerShell

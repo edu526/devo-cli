@@ -108,7 +108,7 @@ def test_workflow_recovery_from_aws_credentials_error(cli_runner, mocker, mock_a
     mock_base_agent_query.side_effect = Exception("Unable to locate credentials")
 
     # Mock profile selection
-    mock_select_profile = mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
+    mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
 
     # Run commit command (should fail due to credentials error)
     commit_result_1 = cli_runner.invoke(commit)
@@ -203,7 +203,7 @@ def test_workflow_recovery_from_aws_rate_limit_error(cli_runner, mocker, mock_aw
     mock_base_agent_query.side_effect = Exception("ThrottlingException: Rate exceeded")
 
     # Mock profile selection
-    mock_select_profile = mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
+    mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
 
     # Run commit command (should fail due to rate limit)
     commit_result_1 = cli_runner.invoke(commit)
@@ -274,7 +274,7 @@ def test_workflow_recovery_from_aws_service_unavailable(cli_runner, mocker, mock
     mock_base_agent_query.side_effect = Exception("ServiceUnavailableException: Service is temporarily unavailable")
 
     # Mock profile selection
-    mock_select_profile = mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
+    mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
 
     # Run commit command (should fail due to service unavailable)
     commit_result_1 = cli_runner.invoke(commit)
@@ -322,24 +322,16 @@ def test_workflow_recovery_from_git_non_repository_error(cli_runner, mocker, moc
     mock_subprocess = mocker.patch("subprocess.run")
 
     def subprocess_side_effect_non_git(*args, **kwargs):
-        cmd = args[0] if args else kwargs.get("args", [])
         result = MagicMock()
-
-        if cmd == ["git", "diff", "--staged"]:
-            result.returncode = 128  # Git error code for not a repository
-            result.stderr = "fatal: not a git repository"
-            result.stdout = ""
-        else:
-            result.returncode = 128
-            result.stderr = "fatal: not a git repository"
-            result.stdout = ""
-
+        result.returncode = 128  # Git error code for not a repository
+        result.stderr = "fatal: not a git repository"
+        result.stdout = ""
         return result
 
     mock_subprocess.side_effect = subprocess_side_effect_non_git
 
     # Mock profile selection
-    mock_select_profile = mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
+    mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
 
     # Run commit command (should fail due to non-git directory)
     commit_result_1 = cli_runner.invoke(commit)
@@ -412,23 +404,18 @@ def test_workflow_recovery_from_git_merge_conflict(cli_runner, mocker, mock_aws_
     def subprocess_side_effect_conflict(*args, **kwargs):
         cmd = args[0] if args else kwargs.get("args", [])
         result = MagicMock()
+        result.returncode = 0
+        result.stdout = ""
 
-        if cmd == ["git", "diff", "--staged"]:
-            result.returncode = 0
-            result.stdout = ""  # No staged changes during conflict
-        elif cmd == ["git", "status", "--porcelain"]:
-            result.returncode = 0
+        if cmd == ["git", "status", "--porcelain"]:
             result.stdout = "UU file.py"  # Unmerged file
-        else:
-            result.returncode = 0
-            result.stdout = ""
 
         return result
 
     mock_subprocess.side_effect = subprocess_side_effect_conflict
 
     # Mock profile selection
-    mock_select_profile = mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
+    mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
 
     # Run commit command (should fail due to no staged changes)
     commit_result_1 = cli_runner.invoke(commit)
@@ -444,26 +431,22 @@ def test_workflow_recovery_from_git_merge_conflict(cli_runner, mocker, mock_aws_
     # ========== Step 2: Resolve Conflict and Stage Changes ==========
 
     # Mock subprocess.run to simulate resolved conflict
+    _git_stdout_resolved = {
+        tuple(["git", "rev-parse", "--abbrev-ref", "HEAD"]): "main",
+        tuple(["git", "status", "--porcelain"]): "M  file.py",
+        tuple(["git", "log", "--oneline", "-10"]): "abc1234 Previous commit",
+    }
+
     def subprocess_side_effect_resolved(*args, **kwargs):
         cmd = args[0] if args else kwargs.get("args", [])
         result = MagicMock()
         result.returncode = 0
-
+        result.stdout = _git_stdout_resolved.get(tuple(cmd), "")
         if cmd == ["git", "diff", "--staged"]:
             with open(fixtures_dir / "git_diffs" / "simple_change.json") as f:
-                diff_data = json.load(f)
-            result.stdout = diff_data["diff"]
-        elif cmd == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
-            result.stdout = "main"
-        elif cmd == ["git", "status", "--porcelain"]:
-            result.stdout = "M  file.py"
-        elif cmd == ["git", "log", "--oneline", "-10"]:
-            result.stdout = "abc1234 Previous commit"
+                result.stdout = json.load(f)["diff"]
         elif cmd[:2] == ["git", "commit"]:
             result.stdout = "[main abc1234] Commit message"
-        else:
-            result.stdout = ""
-
         return result
 
     mock_subprocess.side_effect = subprocess_side_effect_resolved
@@ -499,41 +482,36 @@ def test_workflow_recovery_from_git_authentication_failure(cli_runner, mocker, m
 
     call_count = {"push": 0}
 
+    def _handle_push(result):
+        call_count["push"] += 1
+        if call_count["push"] == 1:
+            result.returncode = 128
+            result.stderr = "fatal: Authentication failed"
+            result.stdout = ""
+        else:
+            result.returncode = 0
+            result.stdout = "Everything up-to-date"
+
     def subprocess_side_effect(*args, **kwargs):
         cmd = args[0] if args else kwargs.get("args", [])
         result = MagicMock()
+        result.returncode = 0
+        result.stdout = ""
 
         if cmd == ["git", "diff", "--staged"]:
-            result.returncode = 0
             with open(fixtures_dir / "git_diffs" / "simple_change.json") as f:
                 diff_data = json.load(f)
             result.stdout = diff_data["diff"]
         elif cmd == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
-            result.returncode = 0
             result.stdout = "main"
         elif cmd == ["git", "status", "--porcelain"]:
-            result.returncode = 0
             result.stdout = "M  file.py"
         elif cmd == ["git", "log", "--oneline", "-10"]:
-            result.returncode = 0
             result.stdout = "abc1234 Previous commit"
         elif cmd[:2] == ["git", "commit"]:
-            result.returncode = 0
             result.stdout = "[main abc1234] Commit message"
         elif cmd[:2] == ["git", "push"]:
-            call_count["push"] += 1
-            if call_count["push"] == 1:
-                # First push fails with authentication error
-                result.returncode = 128
-                result.stderr = "fatal: Authentication failed"
-                result.stdout = ""
-            else:
-                # Subsequent pushes succeed
-                result.returncode = 0
-                result.stdout = "Everything up-to-date"
-        else:
-            result.returncode = 0
-            result.stdout = ""
+            _handle_push(result)
 
         return result
 
@@ -544,7 +522,7 @@ def test_workflow_recovery_from_git_authentication_failure(cli_runner, mocker, m
     mock_base_agent_query.return_value = "feat(test): add new feature\n\nImplement new functionality."
 
     # Mock profile selection
-    mock_select_profile = mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
+    mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
 
     # ========== Step 1: Commit with Push (Authentication Fails) ==========
 
@@ -613,7 +591,7 @@ def test_workflow_state_persistence_across_failures(cli_runner, mocker, mock_aws
     mock_subprocess.side_effect = subprocess_side_effect
 
     # Mock profile selection
-    mock_select_profile = mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
+    mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
 
     # ========== Step 1: First Attempt - Fails ==========
 
@@ -706,7 +684,7 @@ region = us-east-1
     mock_subprocess.side_effect = subprocess_side_effect
 
     # Mock profile selection
-    mock_select_profile = mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
+    mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
 
     # ========== Step 1: First Attempt with Initial Config ==========
 
@@ -819,7 +797,7 @@ def test_workflow_rollback_on_commit_failure(cli_runner, mocker, mock_aws_config
     mock_base_agent_query.return_value = "feat(test): add new feature\n\nImplement new functionality."
 
     # Mock profile selection
-    mock_select_profile = mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
+    mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
 
     # ========== Step 1: Attempt Commit (Fails) ==========
 
@@ -911,7 +889,7 @@ def test_workflow_rollback_on_push_failure(cli_runner, mocker, mock_aws_config_d
     mock_base_agent_query.return_value = "feat(test): add new feature\n\nImplement new functionality."
 
     # Mock profile selection
-    mock_select_profile = mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
+    mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
 
     # ========== Step 1: Commit with Push (Push Fails) ==========
 
@@ -978,7 +956,7 @@ def test_workflow_rollback_preserves_user_input(cli_runner, mocker, mock_aws_con
     mock_subprocess.side_effect = subprocess_side_effect
 
     # Mock profile selection
-    mock_select_profile = mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
+    mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
 
     # ========== Step 1: First Attempt - Fails ==========
 

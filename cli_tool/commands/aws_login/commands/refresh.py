@@ -17,6 +17,47 @@ from cli_tool.commands.aws_login.core.credentials import (
 console = Console()
 
 
+def _refresh_session(session_key: str, session_profs: list) -> tuple:
+    """Login to an SSO session and verify all profiles in it.
+
+    Returns (success, verified_count, failed_count).
+    """
+    console.print(f"\n[blue]Refreshing session for {len(session_profs)} profile(s)...[/blue]")
+    first_profile = session_profs[0]
+    prof_config = get_profile_config(first_profile)
+
+    if prof_config and "sso_session" in prof_config:
+        login_cmd = ["aws", "sso", "login", "--sso-session", prof_config["sso_session"]]
+    else:
+        login_cmd = ["aws", "sso", "login", "--profile", first_profile]
+
+    try:
+        result = subprocess.run(login_cmd, timeout=120)
+        if result.returncode != 0:
+            console.print("[red]✗ Session refresh failed[/red]")
+            for prof in session_profs:
+                console.print(f"  ✗ {prof}")
+            return False, 0, len(session_profs)
+
+        console.print("[green]✓ Session refreshed successfully[/green]")
+        verified = failed = 0
+        for prof in session_profs:
+            if verify_credentials(prof):
+                console.print(f"  ✓ {prof}")
+                verified += 1
+            else:
+                console.print(f"  ✗ {prof} (verification failed)")
+                failed += 1
+        return True, verified, failed
+
+    except subprocess.TimeoutExpired:
+        console.print("[red]✗ Session refresh timed out[/red]")
+        return False, 0, len(session_profs)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Refresh cancelled[/yellow]")
+        sys.exit(1)
+
+
 def refresh_all_profiles():
     """Refresh all profiles that are expired or expiring soon."""
     profiles = list_aws_profiles()
@@ -89,46 +130,9 @@ def refresh_all_profiles():
     fail_count = 0
 
     for session_key, session_profs in session_profiles.items():
-        console.print(f"\n[blue]Refreshing session for {len(session_profs)} profile(s)...[/blue]")
-
-        # Login to the first profile (this refreshes the session)
-        first_profile = session_profs[0]
-        prof_config = get_profile_config(first_profile)
-
-        if prof_config and "sso_session" in prof_config:
-            # Use sso-session login
-            login_cmd = ["aws", "sso", "login", "--sso-session", prof_config["sso_session"]]
-        else:
-            # Use profile login
-            login_cmd = ["aws", "sso", "login", "--profile", first_profile]
-
-        try:
-            result = subprocess.run(login_cmd, timeout=120)
-
-            if result.returncode == 0:
-                console.print("[green]✓ Session refreshed successfully[/green]")
-
-                # Verify all profiles in this session
-                for prof in session_profs:
-                    identity = verify_credentials(prof)
-                    if identity:
-                        console.print(f"  ✓ {prof}")
-                        success_count += 1
-                    else:
-                        console.print(f"  ✗ {prof} (verification failed)")
-                        fail_count += 1
-            else:
-                console.print("[red]✗ Session refresh failed[/red]")
-                for prof in session_profs:
-                    console.print(f"  ✗ {prof}")
-                    fail_count += len(session_profs)
-
-        except subprocess.TimeoutExpired:
-            console.print("[red]✗ Session refresh timed out[/red]")
-            fail_count += len(session_profs)
-        except KeyboardInterrupt:
-            console.print("\n[yellow]Refresh cancelled[/yellow]")
-            sys.exit(1)
+        ok, verified, failed = _refresh_session(session_key, session_profs)
+        success_count += verified
+        fail_count += failed
 
     # Summary
     console.print("\n[blue]═══ Refresh Summary ═══[/blue]")

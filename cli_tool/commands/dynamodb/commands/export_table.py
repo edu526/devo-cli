@@ -3,8 +3,9 @@
 import json
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import click
 from botocore.exceptions import BotoCoreError, ClientError
@@ -21,596 +22,737 @@ from cli_tool.commands.dynamodb.utils import (
 
 console = Console()
 
+_RESERVED_KEYWORDS = {
+    "name",
+    "status",
+    "type",
+    "value",
+    "data",
+    "timestamp",
+    "date",
+    "time",
+    "year",
+    "month",
+    "day",
+    "hour",
+    "minute",
+    "second",
+    "order",
+    "group",
+    "size",
+    "key",
+    "index",
+    "count",
+    "range",
+    "hash",
+    "table",
+    "column",
+    "attribute",
+    "attributes",
+    "connection",
+    "percent",
+    "values",
+    "format",
+}
 
-def export_table_command(
-    profile: Optional[str],
-    table_name: str,
-    output: Optional[str],
-    format: str,
-    region: str,
-    limit: Optional[int],
-    attributes: Optional[str],
-    filter: Optional[str],
+
+def _apply_template(template: dict, args: dict) -> dict:
+    """Merge template values into args dict (CLI args take precedence)."""
+    defaults = {
+        "output": None,
+        "format": "csv",
+        "region": "us-east-1",
+        "mode": "strings",
+        "bool_format": "lowercase",
+    }
+    for key, default in defaults.items():
+        if args.get(key) == default or not args.get(key):
+            args[key] = template.get(key, default)
+
+    for key in ("limit", "attributes", "filter", "filter_values", "filter_names", "key_condition", "index", "compress"):
+        if not args.get(key):
+            args[key] = template.get(key)
+
+    return args
+
+
+def _build_projection_expression(attributes: str) -> Tuple[Optional[str], Optional[Dict[str, str]]]:
+    """Build projection expression, escaping DynamoDB reserved keywords.
+
+    Returns (projection_expression, expression_attribute_names).
+    """
+    attr_list = [a.strip() for a in attributes.split(",")]
+    needs_escaping = any(a.lower() in _RESERVED_KEYWORDS for a in attr_list)
+
+    if not needs_escaping:
+        return attributes.replace(",", ", "), None
+
+    expression_attribute_names: Dict[str, str] = {}
+    escaped_attrs = []
+    for attr in attr_list:
+        if attr.lower() in _RESERVED_KEYWORDS:
+            placeholder = f"#{attr}"
+            expression_attribute_names[placeholder] = attr
+            escaped_attrs.append(placeholder)
+        else:
+            escaped_attrs.append(attr)
+
+    return ", ".join(escaped_attrs), expression_attribute_names
+
+
+def _parse_filter_expressions(
+    filter_expr: Optional[str],
     filter_values: Optional[str],
     filter_names: Optional[str],
-    key_condition: Optional[str],
-    index: Optional[str],
-    mode: str,
-    null_value: str,
-    delimiter: str,
-    encoding: str,
-    compress: Optional[str],
-    metadata: bool,
-    pretty: bool,
-    parallel_scan: bool,
-    segments: int,
-    dry_run: bool,
-    yes: bool,
-    save_template: Optional[str],
-    use_template: Optional[str],
-    bool_format: str,
-) -> None:
+    expression_attribute_names: Optional[Dict[str, str]],
+) -> Tuple[Optional[str], Optional[Dict], Optional[Dict]]:
+    """Parse filter, filter_values, filter_names into DynamoDB expression components.
+
+    Returns (filter_expression, expression_attribute_values, expression_attribute_names).
+    """
+    expression_attribute_values = None
+
+    if filter_expr and not filter_values:
+        filter_builder = FilterBuilder()
+        try:
+            filter_expr, expression_attribute_values, expression_attribute_names = filter_builder.build_filter(filter_expr)
+        except Exception as e:
+            console.print(f"[red]✗ Invalid filter syntax: {e}[/red]")
+            sys.exit(1)
+    elif filter_values:
+        try:
+            expression_attribute_values = json.loads(filter_values)
+        except json.JSONDecodeError as e:
+            console.print(f"[red]✗ Invalid filter-values JSON: {e}[/red]")
+            sys.exit(1)
+
+    if filter_names and not expression_attribute_names:
+        try:
+            expression_attribute_names = json.loads(filter_names)
+        except json.JSONDecodeError as e:
+            console.print(f"[red]✗ Invalid filter-names JSON: {e}[/red]")
+            sys.exit(1)
+
+    return filter_expr, expression_attribute_values, expression_attribute_names
+
+
+def _build_item_key(item: Dict[str, Any], primary_key_attrs: List[str]) -> str:
+    """Create a unique string key from an item's primary key attributes."""
+    parts = [f"{k}={json.dumps(item[k], sort_keys=True, default=str)}" for k in primary_key_attrs if k in item]
+    return "|".join(parts)
+
+
+def _collect_names_from_expr(expr: Optional[str], expression_attribute_names: Dict[str, str]) -> Dict[str, str]:
+    """Return subset of expression_attribute_names whose keys appear in expr."""
+    if not expr:
+        return {}
+    return {k: v for k, v in expression_attribute_names.items() if k in expr}
+
+
+def _collect_query_names(
+    query_config: Dict[str, Any],
+    expression_attribute_names: Optional[Dict[str, str]],
+    projection_expression: Optional[str],
+) -> Dict[str, str]:
+    """Build expression_attribute_names dict for a single query."""
+    if not expression_attribute_names:
+        return {}
+
+    query_names: Dict[str, str] = {}
+    name_placeholder = query_config["key_condition"].split("=")[0].strip()
+
+    if name_placeholder in expression_attribute_names:
+        query_names[name_placeholder] = expression_attribute_names[name_placeholder]
+
+    query_names.update(_collect_names_from_expr(query_config.get("filter_expression"), expression_attribute_names))
+    query_names.update(_collect_names_from_expr(projection_expression, expression_attribute_names))
+
+    return query_names
+
+
+def _collect_query_values(
+    query_config: Dict[str, Any],
+    expression_attribute_values: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Build expression_attribute_values dict for a single query."""
+    if not expression_attribute_values:
+        return {}
+
+    query_values: Dict[str, Any] = {}
+    value_placeholder = query_config["key_condition"].split("=")[1].strip()
+
+    if value_placeholder in expression_attribute_values:
+        query_values[value_placeholder] = expression_attribute_values[value_placeholder]
+
+    if query_config.get("filter_expression"):
+        filter_expr = query_config["filter_expression"]
+        for val_key, val in expression_attribute_values.items():
+            if val_key in filter_expr:
+                query_values[val_key] = val
+
+    return query_values
+
+
+def _execute_query_with_retry(
+    exporter, query_config, projection_expression, expression_attribute_values, expression_attribute_names, limit_per_query
+):
+    """Execute a single query, retrying once on throughput exceeded."""
+    query_values = _collect_query_values(query_config, expression_attribute_values)
+    query_names = _collect_query_names(query_config, expression_attribute_names, projection_expression)
+
+    kwargs = {
+        "key_condition_expression": query_config["key_condition"],
+        "filter_expression": query_config.get("filter_expression"),
+        "projection_expression": projection_expression,
+        "index_name": query_config.get("index_name"),
+        "limit": limit_per_query,
+        "expression_attribute_values": query_values or None,
+        "expression_attribute_names": query_names or None,
+    }
+
+    try:
+        return exporter.query_table(**kwargs)
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ProvisionedThroughputExceededException":
+            console.print("[yellow]⚠ Rate limit exceeded, waiting 1 second...[/yellow]")
+            import time
+
+            time.sleep(1)
+            return exporter.query_table(**kwargs)
+        raise
+
+
+def _append_unique_items(all_items, seen_keys, query_items, primary_key_attrs, limit):
+    """Append deduplicated items; returns True if limit was reached."""
+    for item in query_items:
+        item_key = _build_item_key(item, primary_key_attrs)
+        if item_key not in seen_keys:
+            seen_keys.add(item_key)
+            all_items.append(item)
+            if limit and len(all_items) >= limit:
+                console.print(f"[cyan]Reached limit of {limit} items, stopping remaining queries[/cyan]")
+                return True
+    return False
+
+
+def _execute_multi_query(exporter, query_configs, projection_expression, expression_attribute_values, expression_attribute_names, limit, table_info):
+    """Execute multiple queries and combine results with deduplication."""
+    limit_per_query = None
+    if limit:
+        limit_per_query = int(limit * 1.5 / len(query_configs)) + 100
+        console.print(f"[cyan]  Limit per query: ~{limit_per_query} items (total limit: {limit})[/cyan]")
+
+    all_items: List[Dict[str, Any]] = []
+    seen_keys: set = set()  # noqa: C405
+    primary_key_attrs = [key["AttributeName"] for key in table_info.get("key_schema", [])]
+
+    for idx, query_config in enumerate(query_configs, 1):
+        console.print(f"\n[cyan]Executing query {idx}/{len(query_configs)}...[/cyan]")
+        query_items = _execute_query_with_retry(
+            exporter,
+            query_config,
+            projection_expression,
+            expression_attribute_values,
+            expression_attribute_names,
+            limit_per_query,
+        )
+        if _append_unique_items(all_items, seen_keys, query_items, primary_key_attrs, limit):
+            break
+
+    console.print(f"\n[green]✓ Combined {len(all_items)} unique items from {len(query_configs)} queries[/green]")
+
+    if limit and len(all_items) > limit:
+        all_items = all_items[:limit]
+        console.print(f"[cyan]Applied final limit: {limit} items[/cyan]")
+
+    return all_items
+
+
+def _auto_detect_query_strategy(exporter, filter_expr, index, key_condition, expression_attribute_names, expression_attribute_values):
+    """Auto-detect whether to use query, multi-query, or scan.
+
+    Returns (use_query, key_condition, filter_expr, index, multi_query_mode, query_configs).
+    """
+    use_query = key_condition is not None
+    multi_query_mode = False
+    query_configs = []
+
+    if use_query or not filter_expr or index:
+        return use_query, key_condition, filter_expr, index, multi_query_mode, query_configs
+
+    table_info = exporter.get_table_info()
+    auto_detected_index = detect_usable_index(filter_expr, expression_attribute_names, table_info)
+
+    if not auto_detected_index:
+        return use_query, key_condition, filter_expr, index, multi_query_mode, query_configs
+
+    if auto_detected_index.get("has_or"):
+        use_query, multi_query_mode, query_configs = _handle_or_detection(
+            auto_detected_index, filter_expr, expression_attribute_names, expression_attribute_values
+        )
+    else:
+        console.print(f"[green]✓ Auto-detected indexed attribute '{auto_detected_index['key_attribute']}' with equality filter[/green]")
+        console.print("[cyan]  Switching to Query for optimal performance[/cyan]")
+
+        if auto_detected_index.get("index_name"):
+            console.print(f"[cyan]  Using GSI: {auto_detected_index['index_name']}[/cyan]")
+            index = auto_detected_index["index_name"]
+
+        key_condition = auto_detected_index["key_condition"]
+        use_query = True
+        filter_expr = auto_detected_index["remaining_filter"]
+
+        if filter_expr:
+            console.print(f"[cyan]  Additional filter: {filter_expr}[/cyan]")
+        else:
+            console.print("[cyan]  No additional filters needed[/cyan]")
+
+    return use_query, key_condition, filter_expr, index, multi_query_mode, query_configs
+
+
+def _build_query_configs(indexed_attrs: list, remaining_filter: Optional[str]) -> list:
+    """Build query config list from indexed attributes."""
+    query_configs = []
+    for attr_info in indexed_attrs:
+        query_config = {
+            "key_condition": f"{attr_info['attr_ref']} = {attr_info['value_ref']}",
+            "index_name": attr_info.get("index_name"),
+            "key_attribute": attr_info["key_attribute"],
+            "filter_expression": remaining_filter,
+        }
+        query_configs.append(query_config)
+        index_display = f"GSI: {query_config['index_name']}" if query_config["index_name"] else "main table"
+        console.print(f"[cyan]    Query {len(query_configs)}: {attr_info['key_attribute']} ({index_display})[/cyan]")
+    return query_configs
+
+
+def _extract_remaining_filter(
+    filter_expr: str, expression_attribute_values: Optional[Dict], expression_attribute_names: Optional[Dict]
+) -> Optional[str]:
+    """Extract the AND portion of a parsed filter expression."""
+    if not (filter_expr and expression_attribute_values and expression_attribute_names):
+        return None
+    and_match = re.search(r"\)\s+AND\s+(.+)\)$", filter_expr, re.IGNORECASE)
+    if and_match:
+        remaining = and_match.group(1).strip()
+        console.print(f"[cyan]  Additional filter: {remaining}[/cyan]")
+        return remaining
+    return None
+
+
+def _handle_or_detection(auto_detected_index, filter_expr, expression_attribute_names, expression_attribute_values):
+    """Handle OR condition detection and build multi-query configs."""
+    indexed_attrs = auto_detected_index.get("indexed_attributes", [])
+    or_parts = re.split(r"\s+(?:OR|or)\s+", filter_expr)
+    can_multi_query = len(or_parts) == len(indexed_attrs) and len(or_parts) <= 5
+
+    if not (can_multi_query and len(indexed_attrs) >= 2):
+        _print_or_scan_warning(indexed_attrs)
+        return False, False, []
+
+    console.print(f"[green]✓ Detected OR condition with {len(indexed_attrs)} indexed attributes[/green]")
+    console.print("[cyan]  Using multiple queries for optimal performance[/cyan]")
+
+    remaining_filter = _extract_remaining_filter(filter_expr, expression_attribute_values, expression_attribute_names)
+    query_configs = _build_query_configs(indexed_attrs, remaining_filter)
+    return True, True, query_configs
+
+
+def _print_or_scan_warning(indexed_attrs):
+    """Print warning when OR condition cannot be optimized."""
+    console.print("[yellow]ℹ Filter contains OR condition with indexed attributes[/yellow]")
+    if indexed_attrs:
+        attr_names = ", ".join(a["key_attribute"] for a in indexed_attrs)
+        console.print(f"[yellow]  Detected indexed attributes: {attr_names}[/yellow]")
+        console.print("[yellow]  Tip: For better performance, run separate queries:[/yellow]")
+        for attr_info in indexed_attrs[:2]:
+            example_cmd = f"devo dynamodb export <table> --key-condition \"{attr_info['key_attribute']} = <value>\""
+            if attr_info.get("index_name"):
+                example_cmd += f" --index \"{attr_info['index_name']}\""
+            console.print(f"[yellow]    {example_cmd}[/yellow]")
+    console.print("[yellow]  Using Scan with full filter[/yellow]")
+
+
+def _auto_tune_parallel_scan(exporter, use_query, dry_run, use_parallel, segments):
+    """Auto-enable parallel scan for large tables. Returns (use_parallel, segments)."""
+    if use_query or dry_run or use_parallel:
+        return use_parallel, segments
+
+    table_info = exporter.get_table_info()
+    item_count = table_info.get("item_count", 0)
+
+    if item_count <= 100000:
+        return use_parallel, segments
+
+    console.print(f"[yellow]ℹ Table has {item_count:,} items. Auto-enabling parallel scan for better performance.[/yellow]")
+    if segments == 4:
+        if item_count > 1000000:
+            segments = 16
+        elif item_count > 500000:
+            segments = 12
+        else:
+            segments = 8
+        console.print(f"[yellow]ℹ Using {segments} parallel segments.[/yellow]")
+
+    return True, segments
+
+
+class _ScanContext:
+    """Groups all parameters needed to fetch items from DynamoDB."""
+
+    __slots__ = (
+        "exporter",
+        "dynamodb_client",
+        "table_name",
+        "use_query",
+        "use_parallel",
+        "multi_query_mode",
+        "query_configs",
+        "key_condition",
+        "filter_expr",
+        "projection_expression",
+        "index",
+        "limit",
+        "segments",
+        "expression_attribute_values",
+        "expression_attribute_names",
+        "table_info",
+        "dry_run",
+    )
+
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+
+def _fetch_items(ctx: "_ScanContext") -> list:
+    """Fetch items using the appropriate strategy."""
+    if ctx.multi_query_mode:
+        console.print(f"[cyan]Using Multiple Queries ({len(ctx.query_configs)} queries for OR optimization)[/cyan]")
+        return _execute_multi_query(
+            ctx.exporter,
+            ctx.query_configs,
+            ctx.projection_expression,
+            ctx.expression_attribute_values,
+            ctx.expression_attribute_names,
+            ctx.limit,
+            ctx.table_info,
+        )
+
+    if ctx.use_query:
+        console.print("[cyan]Using Query (efficient partition key lookup)[/cyan]")
+        return ctx.exporter.query_table(
+            key_condition_expression=ctx.key_condition,
+            filter_expression=ctx.filter_expr,
+            projection_expression=ctx.projection_expression,
+            index_name=ctx.index,
+            limit=ctx.limit,
+            expression_attribute_values=ctx.expression_attribute_values,
+            expression_attribute_names=ctx.expression_attribute_names,
+        )
+
+    if ctx.use_parallel and not ctx.dry_run:
+        console.print(f"[cyan]Using Parallel Scan ({ctx.segments} segments for faster export)[/cyan]")
+        scanner = ParallelScanner(dynamodb_client=ctx.dynamodb_client, table_name=ctx.table_name, total_segments=ctx.segments)
+        return scanner.parallel_scan(
+            filter_expression=ctx.filter_expr,
+            projection_expression=ctx.projection_expression,
+            index_name=ctx.index,
+            limit=ctx.limit,
+            expression_attribute_values=ctx.expression_attribute_values,
+            expression_attribute_names=ctx.expression_attribute_names,
+        )
+
+    console.print("[cyan]Using Regular Scan (reading entire table)[/cyan]")
+    return ctx.exporter.scan_table(
+        limit=ctx.limit,
+        filter_expression=ctx.filter_expr,
+        projection_expression=ctx.projection_expression,
+        index_name=ctx.index,
+        expression_attribute_values=ctx.expression_attribute_values,
+        expression_attribute_names=ctx.expression_attribute_names,
+    )
+
+
+def _print_dry_run_summary(multi_query_mode, query_configs, use_query, key_condition, filter, use_parallel, segments, format, mode, compress, limit):
+    """Print dry-run summary."""
+    console.print("\n[bold green]Dry run completed[/bold green]")
+
+    if multi_query_mode:
+        console.print(f"[cyan]Export strategy:[/cyan] Multiple Queries ({len(query_configs)} queries)")
+        for idx, qc in enumerate(query_configs, 1):
+            index_info = f"GSI: {qc['index_name']}" if qc.get("index_name") else "main table"
+            console.print(f"[cyan]  Query {idx}:[/cyan] {qc['key_attribute']} ({index_info})")
+    elif use_query:
+        console.print("[cyan]Export strategy:[/cyan] Query")
+        console.print(f"[cyan]  Key condition:[/cyan] {key_condition}")
+        if filter:
+            console.print(f"[cyan]  Filter:[/cyan] {filter}")
+    elif use_parallel:
+        console.print(f"[cyan]Export strategy:[/cyan] Parallel Scan ({segments} segments)")
+    else:
+        console.print("[cyan]Export strategy:[/cyan] Regular Scan")
+
+    console.print(f"[cyan]Format:[/cyan] {format.upper()}")
+    console.print(f"[cyan]Mode:[/cyan] {mode}")
+    if compress:
+        console.print(f"[cyan]Compression:[/cyan] {compress}")
+    if limit:
+        console.print(f"[cyan]Limit:[/cyan] {limit:,} items")
+
+
+def _resolve_output_path(output: Optional[str], table_name: str, format: str) -> Path:
+    """Determine the output file path."""
+    if output:
+        return Path(output)
+
+    from datetime import datetime
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ext_map = {"csv": "csv", "tsv": "tsv", "jsonl": "jsonl", "json": "json"}
+    extension = ext_map.get(format, "json")
+    return Path.cwd() / f"{table_name}_{timestamp}.{extension}"
+
+
+def _validate_write_permissions(output_path: Path) -> None:
+    """Check that the output directory is writable."""
+    try:
+        test_file = output_path.parent / f".{output_path.name}.test"
+        test_file.touch()
+        test_file.unlink()
+    except OSError as e:
+        console.print(f"[red]✗ Cannot write to {output_path}: {e}[/red]")
+        console.print("[yellow]Check directory permissions or choose a different output path[/yellow]")
+        sys.exit(1)
+
+
+def _warn_large_export(exporter, yes: bool, dry_run: bool, limit: Optional[int]) -> bool:
+    """Warn user about very large exports. Returns False if user cancels."""
+    if yes or dry_run or limit:
+        return True
+
+    table_info = exporter.get_table_info()
+    item_count = table_info.get("item_count", 0)
+
+    if item_count <= 1000000:
+        return True
+
+    estimated_minutes = item_count / 10000
+    console.print(f"[yellow]⚠ Warning: Exporting {item_count:,} items may take ~{estimated_minutes:.0f} minutes[/yellow]")
+    console.print("[yellow]  Consider using --limit to export a subset first[/yellow]")
+    return click.confirm("Continue with full export?", default=False)
+
+
+def _do_export(exporter, items, fmt, output_path, mode, null_value, delimiter, encoding, metadata, compress, pretty, bool_format):
+    """Write items to the output file in the requested format."""
+    if fmt in ("csv", "tsv"):
+        csv_delimiter = "\t" if fmt == "tsv" else delimiter
+        return exporter.export_to_csv(
+            items=items,
+            output_file=output_path,
+            mode=mode,
+            null_value=null_value,
+            delimiter=csv_delimiter,
+            encoding=encoding,
+            include_metadata=metadata,
+            compress=compress,
+            bool_format=bool_format,
+        )
+
+    return exporter.export_to_json(
+        items=items,
+        output_file=output_path,
+        jsonl=(fmt == "jsonl"),
+        pretty=pretty,
+        encoding=encoding,
+        compress=compress,
+    )
+
+
+@dataclass
+class ExportParams:
+    """Groups all export parameters to avoid long function signatures."""
+
+    profile: Optional[str]
+    table_name: str
+    output: Optional[str]
+    fmt: str
+    region: str
+    limit: Optional[int]
+    attributes: Optional[str]
+    filter_expr: Optional[str]
+    filter_values: Optional[str]
+    filter_names: Optional[str]
+    key_condition: Optional[str]
+    index: Optional[str]
+    mode: str
+    null_value: str
+    delimiter: str
+    encoding: str
+    compress: Optional[str]
+    metadata: bool
+    pretty: bool
+    parallel_scan: bool
+    segments: int
+    dry_run: bool
+    yes: bool
+    save_template: Optional[str]
+    bool_format: str
+
+
+def _run_export_core(p: ExportParams, config_manager: ExportConfigManager) -> None:
+    """Core export logic after template resolution."""
+    from cli_tool.core.utils.aws import create_aws_client
+
+    dynamodb_client = create_aws_client("dynamodb", profile_name=p.profile, region_name=p.region)
+
+    if not validate_table_exists(dynamodb_client, p.table_name):
+        sys.exit(1)
+
+    exporter = DynamoDBExporter(table_name=p.table_name, dynamodb_client=dynamodb_client, region=p.region, profile=p.profile)
+
+    if not p.yes and not p.dry_run:
+        estimate_export_size(exporter)
+
+    projection_expression, expression_attribute_names = None, None
+    if p.attributes:
+        projection_expression, expression_attribute_names = _build_projection_expression(p.attributes)
+
+    filter_expr, expression_attribute_values, expression_attribute_names = _parse_filter_expressions(
+        p.filter_expr, p.filter_values, p.filter_names, expression_attribute_names
+    )
+
+    use_query, key_condition, filter_expr, index, multi_query_mode, query_configs = _auto_detect_query_strategy(
+        exporter, filter_expr, p.index, p.key_condition, expression_attribute_names, expression_attribute_values
+    )
+
+    use_parallel, segments = _auto_tune_parallel_scan(exporter, use_query, p.dry_run, p.parallel_scan, p.segments)
+
+    console.print(f"\n[bold]Starting export of table '{p.table_name}'...[/bold]\n")
+
+    table_info = exporter.get_table_info()
+    ctx = _ScanContext(
+        exporter=exporter,
+        dynamodb_client=dynamodb_client,
+        table_name=p.table_name,
+        use_query=use_query,
+        use_parallel=use_parallel,
+        multi_query_mode=multi_query_mode,
+        query_configs=query_configs,
+        key_condition=key_condition,
+        filter_expr=filter_expr,
+        projection_expression=projection_expression,
+        index=index,
+        limit=p.limit,
+        segments=segments,
+        expression_attribute_values=expression_attribute_values,
+        expression_attribute_names=expression_attribute_names,
+        table_info=table_info,
+        dry_run=p.dry_run,
+    )
+    items = _fetch_items(ctx)
+
+    if not items:
+        console.print("[yellow]⚠ No items found matching criteria[/yellow]")
+        return
+
+    if p.dry_run:
+        _print_dry_run_summary(
+            multi_query_mode, query_configs, use_query, key_condition, filter_expr, use_parallel, segments, p.fmt, p.mode, p.compress, p.limit
+        )
+        return
+
+    if not p.yes and len(items) > 10000:
+        if not click.confirm(f"\n⚠ About to export {len(items):,} items. Continue?", default=True):
+            console.print("[yellow]Export cancelled[/yellow]")
+            return
+
+    output_path = _resolve_output_path(p.output, p.table_name, p.fmt)
+    _validate_write_permissions(output_path)
+
+    if not _warn_large_export(exporter, p.yes, p.dry_run, p.limit):
+        console.print("[yellow]Export cancelled[/yellow]")
+        return
+
+    actual_output_path = _do_export(
+        exporter, items, p.fmt, output_path, p.mode, p.null_value, p.delimiter, p.encoding, p.metadata, p.compress, p.pretty, p.bool_format
+    )
+    exporter.print_stats(actual_output_path)
+
+    if p.save_template:
+        template_config = create_template_from_args(
+            table_name=p.table_name,
+            output=p.output,
+            format=p.fmt,
+            region=p.region,
+            limit=p.limit,
+            attributes=p.attributes,
+            filter=filter_expr,
+            key_condition=key_condition,
+            index=index,
+            mode=p.mode,
+            null_value=p.null_value,
+            delimiter=p.delimiter,
+            encoding=p.encoding,
+            compress=p.compress,
+            metadata=p.metadata,
+            pretty=p.pretty,
+            parallel_scan=p.parallel_scan,
+            segments=segments,
+            bool_format=p.bool_format,
+        )
+        config_manager.save_template(p.save_template, template_config)
+
+
+def export_table_command(params: ExportParams, use_template: Optional[str]) -> None:  # noqa: PLR0913
     """Export DynamoDB table to CSV, JSON, or JSONL format."""
-    # Handle template operations
     config_manager = ExportConfigManager()
 
-    # Load template if specified
     if use_template:
         template = config_manager.get_template(use_template)
         if not template:
             console.print(f"[red]✗ Template '{use_template}' not found[/red]")
             sys.exit(1)
+        args = _apply_template(
+            template,
+            {
+                "output": params.output,
+                "format": params.fmt,
+                "region": params.region,
+                "limit": params.limit,
+                "attributes": params.attributes,
+                "filter": params.filter_expr,
+                "filter_values": params.filter_values,
+                "filter_names": params.filter_names,
+                "key_condition": params.key_condition,
+                "index": params.index,
+                "mode": params.mode,
+                "compress": params.compress,
+                "bool_format": params.bool_format,
+            },
+        )
+        from dataclasses import replace
 
-        # Apply template values (command line args override template)
-        if not output:
-            output = template.get("output")
-        if format == "csv":  # default value
-            format = template.get("format", "csv")
-        if region == "us-east-1":  # default value
-            region = template.get("region", "us-east-1")
-        if not limit:
-            limit = template.get("limit")
-        if not attributes:
-            attributes = template.get("attributes")
-        if not filter:
-            filter = template.get("filter")
-        if not filter_values:
-            filter_values = template.get("filter_values")
-        if not filter_names:
-            filter_names = template.get("filter_names")
-        if not key_condition:
-            key_condition = template.get("key_condition")
-        if not index:
-            index = template.get("index")
-        if mode == "strings":  # default value
-            mode = template.get("mode", "strings")
-        if not compress:
-            compress = template.get("compress")
-        if bool_format == "lowercase":  # default value
-            bool_format = template.get("bool_format", "lowercase")
-
+        params = replace(
+            params,
+            output=args["output"],
+            fmt=args["format"],
+            region=args["region"],
+            limit=args["limit"],
+            attributes=args["attributes"],
+            filter_expr=args["filter"],
+            filter_values=args["filter_values"],
+            filter_names=args["filter_names"],
+            key_condition=args["key_condition"],
+            index=args["index"],
+            mode=args["mode"],
+            compress=args["compress"],
+            bool_format=args["bool_format"],
+        )
         console.print(f"[green]✓ Using template '{use_template}'[/green]\n")
 
     try:
-        # Initialize AWS session
-        from cli_tool.core.utils.aws import create_aws_client
-
-        dynamodb_client = create_aws_client("dynamodb", profile_name=profile, region_name=region)
-
-        # Validate table exists
-        if not validate_table_exists(dynamodb_client, table_name):
-            sys.exit(1)
-
-        # Initialize exporter
-        exporter = DynamoDBExporter(
-            table_name=table_name,
-            dynamodb_client=dynamodb_client,
-            region=region,
-            profile=profile,
-        )
-
-        # Show table info before export
-        if not yes and not dry_run:
-            estimate_export_size(exporter)
-
-        # Initialize expression attribute names and values
-        expression_attribute_names = None
-        expression_attribute_values = None
-
-        # Prepare projection expression with reserved keyword handling
-        projection_expression = None
-        if attributes:
-            # DynamoDB reserved keywords that need to be escaped
-            RESERVED_KEYWORDS = {
-                "name",
-                "status",
-                "type",
-                "value",
-                "data",
-                "timestamp",
-                "date",
-                "time",
-                "year",
-                "month",
-                "day",
-                "hour",
-                "minute",
-                "second",
-                "order",
-                "group",
-                "size",
-                "key",
-                "index",
-                "count",
-                "range",
-                "hash",
-                "table",
-                "column",
-                "attribute",
-                "attributes",
-                "connection",
-                "percent",
-                "values",
-                "format",
-            }
-
-            attr_list = [attr.strip() for attr in attributes.split(",")]
-            needs_escaping = any(attr.lower() in RESERVED_KEYWORDS for attr in attr_list)
-
-            if needs_escaping:
-                # Use ExpressionAttributeNames for reserved keywords
-                if not expression_attribute_names:
-                    expression_attribute_names = {}
-
-                escaped_attrs = []
-                for attr in attr_list:
-                    if attr.lower() in RESERVED_KEYWORDS:
-                        placeholder = f"#{attr}"
-                        expression_attribute_names[placeholder] = attr
-                        escaped_attrs.append(placeholder)
-                    else:
-                        escaped_attrs.append(attr)
-
-                projection_expression = ", ".join(escaped_attrs)
-            else:
-                projection_expression = attributes.replace(",", ", ")
-
-        # Use FilterBuilder if simple filter syntax is provided
-        if filter and not filter_values:
-            filter_builder = FilterBuilder()
-            try:
-                filter, expression_attribute_values, expression_attribute_names = filter_builder.build_filter(filter)
-            except Exception as e:
-                console.print(f"[red]✗ Invalid filter syntax: {e}[/red]")
-                sys.exit(1)
-        elif filter_values:
-            # Manual mode: user provides filter-values
-            try:
-                expression_attribute_values = json.loads(filter_values)
-            except json.JSONDecodeError as e:
-                console.print(f"[red]✗ Invalid filter-values JSON: {e}[/red]")
-                sys.exit(1)
-
-        if filter_names and not expression_attribute_names:
-            try:
-                expression_attribute_names = json.loads(filter_names)
-            except json.JSONDecodeError as e:
-                console.print(f"[red]✗ Invalid filter-names JSON: {e}[/red]")
-                sys.exit(1)
-
-        # Smart detection: Auto-detect if we should use query or scan
-        use_query = key_condition is not None
-        use_parallel = parallel_scan
-        auto_detected_index = None
-        multi_query_mode = False
-        query_configs = []
-
-        # Auto-detect index if filtering by indexed attribute with equality
-        if not use_query and filter and not index:
-            table_info = exporter.get_table_info()
-
-            # Try to detect if filter uses an indexed attribute with equality
-            auto_detected_index = detect_usable_index(filter, expression_attribute_names, expression_attribute_values, table_info)
-
-            if auto_detected_index:
-                if auto_detected_index.get("has_or"):
-                    # Filter contains OR - check if we can do multiple queries
-                    indexed_attrs = auto_detected_index.get("indexed_attributes", [])
-
-                    # Check if it's a simple OR with only equality conditions on indexed attributes
-                    # Pattern: "attr1 = val1 OR attr2 = val2"
-                    or_parts = re.split(r"\s+(?:OR|or)\s+", filter)
-                    can_multi_query = len(or_parts) == len(indexed_attrs) and len(or_parts) <= 5  # Max 5 queries
-
-                    if can_multi_query and len(indexed_attrs) >= 2:
-                        # We can do multiple queries!
-                        console.print(f"[green]✓ Detected OR condition with {len(indexed_attrs)} indexed attributes[/green]")
-                        console.print("[cyan]  Using multiple queries for optimal performance[/cyan]")
-
-                        # Extract remaining filter from the already-parsed filter expression
-                        # The filter variable now contains the parsed expression like:
-                        # ((#attr0 = :val0 OR #attr1 = :val1) AND #attr2 >= :val2)
-                        # We need to extract "#attr2 >= :val2" as the remaining filter
-                        remaining_filter = None
-
-                        # Check if there's an AND in the parsed filter expression
-                        if filter and expression_attribute_values and expression_attribute_names:
-                            # Look for AND in the parsed expression
-                            and_match = re.search(r"\)\s+AND\s+(.+)\)$", filter, re.IGNORECASE)
-                            if and_match:
-                                remaining_filter = and_match.group(1).strip()
-                                console.print(f"[cyan]  Additional filter: {remaining_filter}[/cyan]")
-
-                        # Build query configs for each indexed attribute
-                        for attr_info in indexed_attrs:
-                            query_config = {
-                                "key_condition": f"{attr_info['attr_ref']} = {attr_info['value_ref']}",
-                                "index_name": attr_info.get("index_name"),
-                                "key_attribute": attr_info["key_attribute"],
-                                "filter_expression": remaining_filter,
-                            }
-                            query_configs.append(query_config)
-                            index_display = f"GSI: {query_config['index_name']}" if query_config["index_name"] else "main table"
-                            console.print(f"[cyan]    Query {len(query_configs)}: {attr_info['key_attribute']} ({index_display})[/cyan]")
-
-                        multi_query_mode = True
-                        use_query = True
-                    else:
-                        # Cannot optimize - use scan
-                        console.print("[yellow]ℹ Filter contains OR condition with indexed attributes[/yellow]")
-                        if indexed_attrs:
-                            console.print(f"[yellow]  Detected indexed attributes: {', '.join([a['key_attribute'] for a in indexed_attrs])}[/yellow]")
-                            console.print("[yellow]  Tip: For better performance, run separate queries:[/yellow]")
-                            for attr_info in indexed_attrs[:2]:  # Show max 2 examples
-                                example_cmd = f"devo dynamodb export {table_name} --key-condition \"{attr_info['key_attribute']} = <value>\""
-                                if attr_info.get("index_name"):
-                                    example_cmd += f" --index \"{attr_info['index_name']}\""
-                                console.print(f"[yellow]    {example_cmd}[/yellow]")
-                        console.print("[yellow]  Using Scan with full filter[/yellow]")
-                else:
-                    # No OR - can auto-optimize
-                    console.print(f"[green]✓ Auto-detected indexed attribute '{auto_detected_index['key_attribute']}' with equality filter[/green]")
-                    console.print("[cyan]  Switching to Query for optimal performance[/cyan]")
-
-                    if auto_detected_index.get("index_name"):
-                        console.print(f"[cyan]  Using GSI: {auto_detected_index['index_name']}[/cyan]")
-                        index = auto_detected_index["index_name"]
-
-                    # Use the detected key condition
-                    key_condition = auto_detected_index["key_condition"]
-                    use_query = True
-
-                    # Update filter to only remaining conditions
-                    if auto_detected_index["remaining_filter"]:
-                        filter = auto_detected_index["remaining_filter"]
-                        console.print(f"[cyan]  Additional filter: {filter}[/cyan]")
-                    else:
-                        filter = None
-                        console.print("[cyan]  No additional filters needed[/cyan]")
-        # Auto-enable parallel scan for large tables (>100k items) if not using query
-        if not use_query and not dry_run:
-            table_info = exporter.get_table_info()
-            item_count = table_info.get("item_count", 0)
-
-            if item_count > 100000 and not use_parallel:
-                console.print(f"[yellow]ℹ Table has {item_count:,} items. Auto-enabling parallel scan for better performance.[/yellow]")
-                use_parallel = True
-                if segments == 4:  # default value
-                    # Auto-adjust segments based on table size
-                    if item_count > 1000000:
-                        segments = 16
-                    elif item_count > 500000:
-                        segments = 12
-                    else:
-                        segments = 8
-                    console.print(f"[yellow]ℹ Using {segments} parallel segments.[/yellow]")
-
-        # Scan or query table
-        console.print(f"\n[bold]Starting export of table '{table_name}'...[/bold]\n")
-
-        if multi_query_mode:
-            # Execute multiple queries and combine results
-            console.print(f"[cyan]Using Multiple Queries ({len(query_configs)} queries for OR optimization)[/cyan]")
-
-            # Calculate limit per query to avoid reading too much data
-            limit_per_query = None
-            if limit:
-                # Distribute limit across queries with some buffer for deduplication
-                limit_per_query = int(limit * 1.5 / len(query_configs)) + 100
-                console.print(f"[cyan]  Limit per query: ~{limit_per_query} items (total limit: {limit})[/cyan]")
-
-            all_items = []
-            seen_keys = set()  # Track unique items to avoid duplicates
-
-            # Get table's primary key attributes for deduplication
-            table_info = exporter.get_table_info()
-            primary_key_attrs = [key["AttributeName"] for key in table_info.get("key_schema", [])]
-
-            for idx, query_config in enumerate(query_configs, 1):
-                console.print(f"\n[cyan]Executing query {idx}/{len(query_configs)}...[/cyan]")
-
-                # Extract only the values and names needed for this specific query
-                # Extract values and names needed for this specific query
-                query_values = {}
-                query_names = {}
-
-                # Add the key condition value
-                if expression_attribute_values:
-                    value_placeholder = query_config["key_condition"].split("=")[1].strip()
-                    if value_placeholder in expression_attribute_values:
-                        query_values[value_placeholder] = expression_attribute_values[value_placeholder]
-
-                # Add the key condition name
-                if expression_attribute_names:
-                    name_placeholder = query_config["key_condition"].split("=")[0].strip()
-                    if name_placeholder in expression_attribute_names:
-                        query_names[name_placeholder] = expression_attribute_names[name_placeholder]
-
-                # If there's a filter expression, include all values and names used in it
-                if query_config.get("filter_expression"):
-                    filter_expr = query_config["filter_expression"]
-
-                    # Find all value placeholders in the filter (:val0, :val1, etc.)
-                    if expression_attribute_values:
-                        for val_key in expression_attribute_values:
-                            if val_key in filter_expr:
-                                query_values[val_key] = expression_attribute_values[val_key]
-
-                    # Find all name placeholders in the filter (#attr0, #attr1, etc.)
-                    if expression_attribute_names:
-                        for name_key in expression_attribute_names:
-                            if name_key in filter_expr:
-                                query_names[name_key] = expression_attribute_names[name_key]
-
-                # Include names used in projection_expression
-                if projection_expression and expression_attribute_names:
-                    for name_key, name_value in expression_attribute_names.items():
-                        if name_key in projection_expression:
-                            query_names[name_key] = name_value
-
-                try:
-                    query_items = exporter.query_table(
-                        key_condition_expression=query_config["key_condition"],
-                        filter_expression=query_config.get("filter_expression"),
-                        projection_expression=projection_expression,
-                        index_name=query_config.get("index_name"),
-                        limit=limit_per_query,  # Apply per-query limit
-                        expression_attribute_values=query_values if query_values else None,
-                        expression_attribute_names=query_names if query_names else None,
-                    )
-
-                    # Deduplicate items using primary key attributes
-                    for item in query_items:
-                        # Create unique key from primary key attributes only
-                        key_parts = []
-                        for pk_attr in primary_key_attrs:
-                            if pk_attr in item:
-                                key_parts.append(f"{pk_attr}={json.dumps(item[pk_attr], sort_keys=True, default=str)}")
-                        item_key = "|".join(key_parts)
-
-                        if item_key not in seen_keys:
-                            seen_keys.add(item_key)
-                            all_items.append(item)
-
-                            # Stop if we've reached the total limit
-                            if limit and len(all_items) >= limit:
-                                break
-
-                    # Stop querying if we've reached the limit
-                    if limit and len(all_items) >= limit:
-                        console.print(f"[cyan]Reached limit of {limit} items, stopping remaining queries[/cyan]")
-                        break
-
-                except ClientError as e:
-                    error_code = e.response["Error"]["Code"]
-                    if error_code == "ProvisionedThroughputExceededException":
-                        console.print(f"[yellow]⚠ Rate limit exceeded on query {idx}, waiting 1 second...[/yellow]")
-                        import time
-
-                        time.sleep(1)
-                        # Retry this query
-                        query_items = exporter.query_table(
-                            key_condition_expression=query_config["key_condition"],
-                            filter_expression=query_config.get("filter_expression"),
-                            projection_expression=projection_expression,
-                            index_name=query_config.get("index_name"),
-                            limit=limit_per_query,
-                            expression_attribute_values=query_values,
-                            expression_attribute_names=query_names if query_names else None,
-                        )
-                        # Process items (same deduplication logic)
-                        for item in query_items:
-                            key_parts = []
-                            for pk_attr in primary_key_attrs:
-                                if pk_attr in item:
-                                    key_parts.append(f"{pk_attr}={json.dumps(item[pk_attr], sort_keys=True, default=str)}")
-                            item_key = "|".join(key_parts)
-                            if item_key not in seen_keys:
-                                seen_keys.add(item_key)
-                                all_items.append(item)
-                                if limit and len(all_items) >= limit:
-                                    break
-                    else:
-                        raise
-
-            console.print(f"\n[green]✓ Combined {len(all_items)} unique items from {len(query_configs)} queries[/green]")
-
-            # Apply final limit if needed
-            if limit and len(all_items) > limit:
-                all_items = all_items[:limit]
-                console.print(f"[cyan]Applied final limit: {limit} items[/cyan]")
-
-            items = all_items
-
-        elif use_query:
-            # Use query
-            console.print("[cyan]Using Query (efficient partition key lookup)[/cyan]")
-            items = exporter.query_table(
-                key_condition_expression=key_condition,
-                filter_expression=filter,
-                projection_expression=projection_expression,
-                index_name=index,
-                limit=limit,
-                expression_attribute_values=expression_attribute_values,
-                expression_attribute_names=expression_attribute_names,
-            )
-        elif use_parallel and not dry_run:
-            # Parallel scan
-            console.print(f"[cyan]Using Parallel Scan ({segments} segments for faster export)[/cyan]")
-            scanner = ParallelScanner(
-                dynamodb_client=dynamodb_client,
-                table_name=table_name,
-                total_segments=segments,
-            )
-            items = scanner.parallel_scan(
-                filter_expression=filter,
-                projection_expression=projection_expression,
-                index_name=index,
-                limit=limit,
-                expression_attribute_values=expression_attribute_values,
-                expression_attribute_names=expression_attribute_names,
-            )
-        else:
-            # Regular scan
-            console.print("[cyan]Using Regular Scan (reading entire table)[/cyan]")
-            items = exporter.scan_table(
-                limit=limit,
-                filter_expression=filter,
-                projection_expression=projection_expression,
-                index_name=index,
-                expression_attribute_values=expression_attribute_values,
-                expression_attribute_names=expression_attribute_names,
-            )
-
-        if not items:
-            console.print("[yellow]⚠ No items found matching criteria[/yellow]")
-            return
-
-        # Dry run - show what would be exported
-        if dry_run:
-            console.print("\n[bold green]Dry run completed[/bold green]")
-
-            if multi_query_mode:
-                console.print(f"[cyan]Export strategy:[/cyan] Multiple Queries ({len(query_configs)} queries)")
-                for idx, qc in enumerate(query_configs, 1):
-                    index_info = f"GSI: {qc['index_name']}" if qc.get("index_name") else "main table"
-                    console.print(f"[cyan]  Query {idx}:[/cyan] {qc['key_attribute']} ({index_info})")
-            elif use_query:
-                console.print("[cyan]Export strategy:[/cyan] Query")
-                console.print(f"[cyan]  Key condition:[/cyan] {key_condition}")
-                if filter:
-                    console.print(f"[cyan]  Filter:[/cyan] {filter}")
-            elif use_parallel:
-                console.print(f"[cyan]Export strategy:[/cyan] Parallel Scan ({segments} segments)")
-            else:
-                console.print("[cyan]Export strategy:[/cyan] Regular Scan")
-
-            console.print(f"[cyan]Format:[/cyan] {format.upper()}")
-            console.print(f"[cyan]Mode:[/cyan] {mode}")
-            if compress:
-                console.print(f"[cyan]Compression:[/cyan] {compress}")
-            if limit:
-                console.print(f"[cyan]Limit:[/cyan] {limit:,} items")
-            return
-
-        # Confirm for large exports
-        if not yes and len(items) > 10000:
-            if not click.confirm(
-                f"\n⚠ About to export {len(items):,} items. Continue?",
-                default=True,
-            ):
-                console.print("[yellow]Export cancelled[/yellow]")
-                return
-
-        # Determine output file
-        if not output:
-            from datetime import datetime
-
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            extension = "csv" if format == "csv" else "tsv" if format == "tsv" else "jsonl" if format == "jsonl" else "json"
-            output = f"{table_name}_{timestamp}.{extension}"
-            # Use current working directory for default filename
-            output_path = Path.cwd() / output
-        else:
-            output_path = Path(output)
-
-        # Validate write permissions before starting export
-        try:
-            # Try to create/open the file to check permissions
-            test_file = output_path.parent / f".{output_path.name}.test"
-            test_file.touch()
-            test_file.unlink()
-        except (PermissionError, OSError) as e:
-            console.print(f"[red]✗ Cannot write to {output_path}: {e}[/red]")
-            console.print("[yellow]Check directory permissions or choose a different output path[/yellow]")
-            sys.exit(1)
-
-        # Warn about long-running exports
-        if not yes and not dry_run and not limit:
-            table_info = exporter.get_table_info()
-            item_count = table_info.get("item_count", 0)
-            if item_count > 1000000:
-                estimated_minutes = item_count / 10000  # Rough estimate: 10k items/minute
-                console.print(f"[yellow]⚠ Warning: Exporting {item_count:,} items may take ~{estimated_minutes:.0f} minutes[/yellow]")
-                console.print("[yellow]  Consider using --limit to export a subset first[/yellow]")
-                if not click.confirm("Continue with full export?", default=False):
-                    console.print("[yellow]Export cancelled[/yellow]")
-                    return
-
-        # Export based on format
-        if format in ["csv", "tsv"]:
-            csv_delimiter = "\t" if format == "tsv" else delimiter
-
-            actual_output_path = exporter.export_to_csv(
-                items=items,
-                output_file=output_path,
-                mode=mode,
-                null_value=null_value,
-                delimiter=csv_delimiter,
-                encoding=encoding,
-                include_metadata=metadata,
-                compress=compress,
-                bool_format=bool_format,
-            )
-        else:
-            # JSON or JSONL
-            actual_output_path = exporter.export_to_json(
-                items=items,
-                output_file=output_path,
-                jsonl=(format == "jsonl"),
-                pretty=pretty,
-                encoding=encoding,
-                compress=compress,
-            )
-
-        # Print statistics
-        exporter.print_stats(actual_output_path)
-
-        # Save template if requested
-        if save_template:
-            template_config = create_template_from_args(
-                table_name=table_name,
-                output=output,
-                format=format,
-                region=region,
-                limit=limit,
-                attributes=attributes,
-                filter=filter,
-                key_condition=key_condition,
-                index=index,
-                mode=mode,
-                null_value=null_value,
-                delimiter=delimiter,
-                encoding=encoding,
-                compress=compress,
-                metadata=metadata,
-                pretty=pretty,
-                parallel_scan=parallel_scan,
-                segments=segments,
-                bool_format=bool_format,
-            )
-            config_manager.save_template(save_template, template_config)
-
+        _run_export_core(params, config_manager)
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         error_message = e.response["Error"]["Message"]

@@ -340,7 +340,6 @@ class TestCrossPlatformExecutablePath:
             # For onedir, should return parent directory
             # Just verify it's a valid Path and contains expected components
             result_str = str(result_path)
-            exe_path_obj = Path(exe_path)
             # Check if result is parent of exe_path or contains key components
             assert "devo" in result_str.lower() or result_path.name == "devo"
         else:

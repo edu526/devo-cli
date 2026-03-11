@@ -36,14 +36,14 @@ from click.testing import CliRunner
 
 
 @pytest.mark.integration
-def test_issue_XXX_cli_command_bug(cli_runner, temp_config_dir, mocker):
+def test_issue_nnn_cli_command_bug(cli_runner, temp_config_dir, mocker):
     """
-    Regression test for Issue #XXX: [CLI command bug description].
+    Regression test for Issue #NNN: [CLI command bug description].
 
     Bug: [What went wrong with the CLI command]
     Fix: [How the command was fixed]
 
-    Issue: https://github.com/org/repo/issues/XXX
+    Issue: https://github.com/org/repo/issues/NNN
     """
     # ARRANGE: Set up mocks and test environment
     # Mock file paths, AWS services, git operations, etc.
@@ -57,18 +57,16 @@ def test_issue_XXX_cli_command_bug(cli_runner, temp_config_dir, mocker):
     # assert "expected output" in result.output
 
     # Verify side effects (files created, config updated, etc.)
-    pass
 
 
 @pytest.mark.integration
-def test_issue_XXX_cli_command_error_handling(cli_runner):
+def test_issue_nnn_cli_command_error_handling(cli_runner):
     """
-    Regression test for Issue #XXX: [error handling aspect].
+    Regression test for Issue #NNN: [error handling aspect].
 
     Verify that the command handles errors gracefully.
     """
     # Test error conditions related to the bug
-    pass
 
 
 # ============================================================================
