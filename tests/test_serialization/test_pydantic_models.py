@@ -298,7 +298,7 @@ def test_ai_response_serialization_basic():
     # Serialize to dict
     response_dict = response.model_dump()
     assert response_dict["response"] == "This is an AI-generated response"
-    assert response_dict["confidence"] == 0.95
+    assert response_dict["confidence"] == pytest.approx(0.95)
     assert response_dict["metadata"]["model"] == "claude-3-7-sonnet"
 
     # Round-trip through JSON

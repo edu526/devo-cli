@@ -10,59 +10,30 @@ import zipfile
 import click
 
 
-def replace_binary(new_binary_path, target_path, archive_type=None):
-    """Replace current binary with new one"""
-    try:
-        system = platform.system().lower()
+def _extract_archive(new_binary_path, archive_type: str, temp_extract):
+    """Extract archive to temp_extract directory."""
+    if archive_type == "zip":
+        with zipfile.ZipFile(new_binary_path, "r") as zf:
+            zf.extractall(temp_extract)
+    elif archive_type == "tar.gz":
+        with tarfile.open(new_binary_path, "r:gz") as tf:
+            tf.extractall(temp_extract, filter="data")
 
-        # Handle archive extraction (Windows ZIP or macOS tarball)
-        if archive_type:
-            # Create backup of entire directory
-            backup_path = target_path.parent / f"{target_path.name}.backup"
-            if backup_path.exists():
-                try:
-                    shutil.rmtree(backup_path)
-                except OSError as e:
-                    click.echo(f"Warning: Could not remove old backup: {e}", err=True)
 
-            shutil.copytree(str(target_path), str(backup_path))
-            click.echo(f"Backup created: {backup_path}")
+def _find_extracted_dir(temp_extract):
+    """Return the extracted devo directory, or temp_extract itself if no subdir found."""
+    for item in temp_extract.iterdir():
+        if item.is_dir() and item.name.startswith("devo"):
+            return item
+    return temp_extract
 
-            # Extract archive to temporary location
-            temp_extract = target_path.parent / "devo_new"
-            if temp_extract.exists():
-                try:
-                    shutil.rmtree(temp_extract)
-                except OSError as e:
-                    click.echo(f"Warning: Could not remove old temp directory: {e}", err=True)
-            temp_extract.mkdir()
 
-            try:
-                # Extract based on archive type
-                if archive_type == "zip":
-                    with zipfile.ZipFile(new_binary_path, "r") as zf:
-                        zf.extractall(temp_extract)
-                elif archive_type == "tar.gz":
-                    with tarfile.open(new_binary_path, "r:gz") as tf:
-                        tf.extractall(temp_extract, filter="data")
-
-                # Find the extracted devo directory
-                extracted_dir = None
-                for item in temp_extract.iterdir():
-                    if item.is_dir() and item.name.startswith("devo"):
-                        extracted_dir = item
-                        break
-
-                if extracted_dir is None:
-                    # Archive contains files at the root
-                    extracted_dir = temp_extract
-
-                if system == "windows":
-                    # Windows: Use PowerShell script for replacement after exit
-                    script_path = target_path.parent / "upgrade_devo.ps1"
-                    script_content = f"""
+def _replace_windows_archive(extracted_dir, target_path, temp_extract, os_pid: int) -> bool:
+    """Schedule Windows replacement via a PowerShell script after process exit."""
+    script_path = target_path.parent / "upgrade_devo.ps1"
+    script_content = f"""
 # Wait for current process to exit
-$processId = {os.getpid()}
+$processId = {os_pid}
 Write-Host "Waiting for process $processId to exit..."
 Wait-Process -Id $processId -ErrorAction SilentlyContinue
 
@@ -89,50 +60,76 @@ Remove-Item -Path "{script_path}" -Force -ErrorAction SilentlyContinue
 Write-Host "Upgrade complete!"
 Write-Host "You can now run: devo --version"
 """
+    with open(script_path, "w", encoding="utf-8") as f:
+        f.write(script_content)
 
-                    with open(script_path, "w", encoding="utf-8") as f:
-                        f.write(script_content)
+    click.echo("\n✨ Upgrade prepared successfully!")
+    click.echo("\nThe upgrade will complete after this process exits.")
+    click.echo("Starting upgrade script...")
 
-                    click.echo("\n✨ Upgrade prepared successfully!")
-                    click.echo("\nThe upgrade will complete after this process exits.")
-                    click.echo("Starting upgrade script...")
+    subprocess.Popen(
+        ["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-File", str(script_path)],
+        creationflags=subprocess.CREATE_NEW_CONSOLE,
+    )
+    return True
 
-                    # Start the PowerShell script in a new window
-                    subprocess.Popen(
-                        ["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-File", str(script_path)],
-                        creationflags=subprocess.CREATE_NEW_CONSOLE,
-                    )
 
-                    return True
+def _replace_unix_archive(extracted_dir, target_path, backup_path, temp_extract) -> bool:
+    """Replace macOS/Linux directory-based binary in-place."""
+    shutil.rmtree(target_path)
+    shutil.move(str(extracted_dir), str(target_path))
+
+    exe_file = target_path / "devo"
+    os.chmod(exe_file, 0o755)
+
+    if temp_extract.exists():
+        try:
+            shutil.rmtree(temp_extract)
+        except OSError:
+            pass
+
+    click.echo(f"\nBackup location: {backup_path}")
+    click.echo("\nTo restore backup if needed:")
+    click.echo(f"  rm -rf {target_path}")
+    click.echo(f"  mv {backup_path} {target_path}")
+    return True
+
+
+def replace_binary(new_binary_path, target_path, archive_type=None):
+    """Replace current binary with new one"""
+    try:
+        system = platform.system().lower()
+
+        if archive_type:
+            backup_path = target_path.parent / f"{target_path.name}.backup"
+            if backup_path.exists():
+                try:
+                    shutil.rmtree(backup_path)
+                except OSError as e:
+                    click.echo(f"Warning: Could not remove old backup: {e}", err=True)
+
+            shutil.copytree(str(target_path), str(backup_path))
+            click.echo(f"Backup created: {backup_path}")
+
+            temp_extract = target_path.parent / "devo_new"
+            if temp_extract.exists():
+                try:
+                    shutil.rmtree(temp_extract)
+                except OSError as e:
+                    click.echo(f"Warning: Could not remove old temp directory: {e}", err=True)
+            temp_extract.mkdir()
+
+            try:
+                _extract_archive(new_binary_path, archive_type, temp_extract)
+                extracted_dir = _find_extracted_dir(temp_extract)
+
+                if system == "windows":
+                    return _replace_windows_archive(extracted_dir, target_path, temp_extract, os.getpid())
                 else:
-                    # macOS: Direct replacement (can replace while running)
-                    # Remove old directory
-                    shutil.rmtree(target_path)
-
-                    # Move new directory into place
-                    shutil.move(str(extracted_dir), str(target_path))
-
-                    # Make executable
-                    exe_file = target_path / "devo"
-                    os.chmod(exe_file, 0o755)
-
-                    # Clean up temp directory
-                    if temp_extract.exists():
-                        try:
-                            shutil.rmtree(temp_extract)
-                        except OSError:
-                            pass
-
-                    click.echo(f"\nBackup location: {backup_path}")
-                    click.echo("\nTo restore backup if needed:")
-                    click.echo(f"  rm -rf {target_path}")
-                    click.echo(f"  mv {backup_path} {target_path}")
-
-                    return True
+                    return _replace_unix_archive(extracted_dir, target_path, backup_path, temp_extract)
 
             except Exception as e:
                 click.echo(f"Error preparing upgrade: {e}", err=True)
-                # Clean up temp directory
                 if temp_extract.exists():
                     try:
                         shutil.rmtree(temp_extract)
@@ -141,19 +138,15 @@ Write-Host "You can now run: devo --version"
                 return False
 
         # Linux: single binary replacement (onefile mode)
-        # Make new binary executable
         os.chmod(new_binary_path, 0o755)
 
-        # Always create a backup
         backup_path = target_path.with_suffix(".backup")
         if backup_path.exists():
             backup_path.unlink()
 
-        # Copy current binary to backup
         shutil.copy2(str(target_path), str(backup_path))
         click.echo(f"Backup created: {backup_path}")
 
-        # Replace the file directly
         shutil.move(str(new_binary_path), str(target_path))
 
         click.echo("\nTo restore backup if needed:")

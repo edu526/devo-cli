@@ -4,7 +4,6 @@ Optimized file reading tool with concise documentation.
 
 import glob
 import json
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -36,7 +35,7 @@ def get_gitignore_excludes() -> List[str]:
 
     if gitignore_path.exists():
         try:
-            with open(gitignore_path, "r", encoding="utf-8") as f:
+            with gitignore_path.open("r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith("#"):
@@ -70,29 +69,30 @@ def find_files(pattern: str, recursive: bool = True, max_files: int = 1000) -> L
     matching_files = []
 
     try:
-        if os.path.isfile(pattern):
+        path_obj = Path(pattern)
+        if path_obj.is_file():
             if not should_exclude_path(pattern, excludes):
                 matching_files.append(pattern)
-        elif os.path.isdir(pattern):
+        elif path_obj.is_dir():
             pattern_path = Path(pattern)
             if recursive:
-                for file_path in pattern_path.rglob("*"):
-                    if file_path.is_file() and not should_exclude_path(str(file_path), excludes):
-                        matching_files.append(str(file_path))
+                for fp in pattern_path.rglob("*"):
+                    if fp.is_file() and not should_exclude_path(str(fp), excludes):
+                        matching_files.append(str(fp))
                         if len(matching_files) >= max_files:
                             break
             else:
-                for file_path in pattern_path.iterdir():
-                    if file_path.is_file() and not should_exclude_path(str(file_path), excludes):
-                        matching_files.append(str(file_path))
+                for fp in pattern_path.iterdir():
+                    if fp.is_file() and not should_exclude_path(str(fp), excludes):
+                        matching_files.append(str(fp))
                         if len(matching_files) >= max_files:
                             break
         else:
             if recursive and "**" not in pattern:
                 pattern = f"**/{pattern}"
-            for file_path in glob.glob(pattern, recursive=recursive):
-                if os.path.isfile(file_path) and not should_exclude_path(file_path, excludes):
-                    matching_files.append(file_path)
+            for fp in glob.glob(pattern, recursive=recursive):
+                if Path(fp).is_file() and not should_exclude_path(fp, excludes):
+                    matching_files.append(fp)
                     if len(matching_files) >= max_files:
                         break
     except Exception:
@@ -140,13 +140,13 @@ def detect_language_from_path(file_path: str) -> str:
 
 def read_file_lines(file_path: str, start_line: int = 1, end_line: Optional[int] = None) -> tuple[List[str], Dict[str, Any]]:
     """Read specific lines from file with metadata."""
-    file_path = os.path.expanduser(file_path)
-    if not os.path.exists(file_path):
+    file_path_obj = Path(file_path).expanduser()
+    if not file_path_obj.exists():
         raise FileNotFoundError(f"File not found: {file_path}")
-    if not os.path.isfile(file_path):
+    if not file_path_obj.is_file():
         raise ValueError(f"Path is not a file: {file_path}")
 
-    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+    with file_path_obj.open("r", encoding="utf-8", errors="ignore") as f:
         all_lines = f.readlines()
 
     total_lines = len(all_lines)
@@ -166,7 +166,7 @@ def read_file_lines(file_path: str, start_line: int = 1, end_line: Optional[int]
         "start_line": start_line,
         "end_line": end_line,
         "lines_read": len(lines),
-        "file_path": file_path,
+        "file_path": str(file_path_obj),
     }
     return lines, metadata
 
@@ -222,11 +222,11 @@ def search_in_file(file_path: str, pattern: str, context_lines: int = 2, search_
     """Search for a pattern in a file with context lines."""
     import re
 
-    file_path = os.path.expanduser(file_path)
-    if not os.path.exists(file_path):
+    file_path_obj = Path(file_path).expanduser()
+    if not file_path_obj.exists():
         raise FileNotFoundError(f"File not found: {file_path}")
 
-    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+    with file_path_obj.open("r", encoding="utf-8", errors="ignore") as f:
         lines = f.readlines()
 
     matches = []
@@ -261,7 +261,7 @@ def search_in_file(file_path: str, pattern: str, context_lines: int = 2, search_
 
 def generate_file_preview(file_path: str, max_lines: int = 20) -> str:
     """Generate file preview with specified number of lines."""
-    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+    with Path(file_path).open("r", encoding="utf-8", errors="ignore") as f:
         preview_lines = []
         for i, line in enumerate(f):
             if i >= max_lines:
@@ -272,13 +272,13 @@ def generate_file_preview(file_path: str, max_lines: int = 20) -> str:
 
 def get_file_stats(file_path: str, include_preview: bool = False, preview_lines: int = 20) -> Dict[str, Any]:
     """Get comprehensive file statistics."""
-    file_path = os.path.expanduser(file_path)
-    if not os.path.exists(file_path):
+    file_path_obj = Path(file_path).expanduser()
+    if not file_path_obj.exists():
         raise FileNotFoundError(f"File not found: {file_path}")
 
     stats = {
         "file_path": file_path,
-        "size_bytes": os.path.getsize(file_path),
+        "size_bytes": file_path_obj.stat().st_size,
         "line_count": 0,
         "non_empty_lines": 0,
         "comment_lines": 0,
@@ -288,7 +288,7 @@ def get_file_stats(file_path: str, include_preview: bool = False, preview_lines:
     }
 
     try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        with file_path_obj.open("r", encoding="utf-8", errors="ignore") as f:
             i = 0
             preview_content = []
             for i, line in enumerate(f, 1):
@@ -380,7 +380,7 @@ def get_file_content(
                 files = find_files(path_pattern, recursive=recursive, max_files=max_files)
                 all_files.extend(files)
             else:
-                if os.path.isfile(path_pattern):
+                if Path(path_pattern).is_file():
                     all_files.append(path_pattern)
                 else:
                     files = find_files(path_pattern, recursive=recursive, max_files=max_files)
@@ -396,12 +396,12 @@ def get_file_content(
         if mode == "find":
             if all_files:
                 result = f"Found {len(all_files)} files:\n\n"
-                dirs = {}
-                for file_path in all_files:
-                    dir_path = os.path.dirname(file_path) or "."
+                dirs: dict = {}
+                for fp in all_files:
+                    dir_path = str(Path(fp).parent)
                     if dir_path not in dirs:
                         dirs[dir_path] = []
-                    dirs[dir_path].append(os.path.basename(file_path))
+                    dirs[dir_path].append(Path(fp).name)
 
                 tree_text = "📁 File Tree:\n"
                 for dir_path, files in sorted(dirs.items()):
@@ -421,7 +421,7 @@ def get_file_content(
         for file_path in all_files[:max_files]:
             try:
                 if mode == "view":
-                    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                    with Path(file_path).open("r", encoding="utf-8", errors="ignore") as f:
                         content = f.read()
                     language = detect_language_from_path(file_path)
                     console_ui.show_code_content(file_path, content, 1, language)
@@ -488,7 +488,7 @@ Size: {stats['size_human']} ({stats['size_bytes']:,} bytes)
 Lines: {stats['line_count']:,} total, {stats['non_empty_lines']:,} non-empty
 Functions: {len(stats['function_lines'])} at lines {stats['function_lines'][:5]}
 Classes: {len(stats['class_lines'])} at lines {stats['class_lines'][:5]}"""
-                    console_ui.show_tool_output(f"File Statistics - {os.path.basename(file_path)}", stats_text)
+                    console_ui.show_tool_output(f"File Statistics - {Path(file_path).name}", stats_text)
                     results.append(json.dumps(stats, indent=2))
 
                 elif mode == "preview":

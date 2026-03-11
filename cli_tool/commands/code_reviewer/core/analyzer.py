@@ -4,6 +4,7 @@ Code Review Analyzer - Core functionality for analyzing code with AI agents.
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -21,6 +22,9 @@ from cli_tool.commands.code_reviewer.tools import (
 )
 from cli_tool.core.agents.base_agent import BaseAgent
 from cli_tool.core.ui.console_ui import console_ui
+
+# Pre-compiled regex for JSON block extraction (S5857)
+_JSON_BLOCK_RE = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
 
 
 class CodeReviewAnalyzer:
@@ -152,7 +156,7 @@ class CodeReviewAnalyzer:
     def _analyze_pr_diff_only(
         self,
         pr_context: Dict[str, any],
-        repo_path: Optional[str] = None,
+        _repo_path: Optional[str] = None,
         use_short_prompt: bool = True,
     ) -> Dict[str, any]:
         """
@@ -220,9 +224,7 @@ Diff:
                 return parsed_result
             else:
                 # If not JSON, look for JSON block in the response
-                import re
-
-                json_match = re.search(r"```json\s*(\{.*?\})\s*```", response_text, re.DOTALL)
+                json_match = _JSON_BLOCK_RE.search(response_text)
                 if json_match:
                     parsed_result = json.loads(json_match.group(1))
                     console_ui.show_analysis_complete(len(response_text))

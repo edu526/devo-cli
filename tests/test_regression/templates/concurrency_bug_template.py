@@ -39,25 +39,23 @@ import pytest
 
 
 @pytest.mark.unit
-def test_issue_XXX_race_condition_bug():
+def test_issue_nnn_race_condition_bug():
     """
-    Regression test for Issue #XXX: [race condition bug description].
+    Regression test for Issue #NNN: [race condition bug description].
 
     Bug: [Describe the race condition]
     Fix: [Describe the synchronization mechanism]
 
-    Issue: https://github.com/org/repo/issues/XXX
+    Issue: https://github.com/org/repo/issues/NNN
     """
     # ARRANGE: Set up shared state that triggers the race condition
-    shared_state = []
     errors = []
 
     def worker(worker_id):
         """Worker function that accesses shared state."""
         try:
             # This previously caused race conditions
-            # result = function_name(shared_state, worker_id)
-            # shared_state.append(result)
+            # result = function_name(worker_id)
             pass
         except Exception as e:
             errors.append((worker_id, str(e)))
@@ -71,43 +69,36 @@ def test_issue_XXX_race_condition_bug():
 
     # ASSERT: Verify no race conditions occurred
     assert len(errors) == 0, f"Race condition errors: {errors}"
-    # Verify data integrity
-    # assert len(shared_state) == 10
-    # assert len(set(shared_state)) == 10  # All unique
-    pass
 
 
 @pytest.mark.unit
-def test_issue_XXX_concurrent_writes():
+def test_issue_nnn_concurrent_writes():
     """
-    Regression test for Issue #XXX: [concurrent write safety].
+    Regression test for Issue #NNN: [concurrent write safety].
 
     Verify that concurrent writes don't corrupt data.
     """
     # Test multiple threads writing to the same resource
-    pass
 
 
 @pytest.mark.unit
-def test_issue_XXX_deadlock_prevention():
+def test_issue_nnn_deadlock_prevention():
     """
-    Regression test for Issue #XXX: [deadlock prevention].
+    Regression test for Issue #NNN: [deadlock prevention].
 
     Verify that the fix prevents deadlocks.
     """
     # Test scenarios that previously caused deadlocks
     # Use timeout to detect deadlocks
-    pass
 
 
 @pytest.mark.unit
-def test_issue_XXX_thread_pool_execution():
+def test_issue_nnn_thread_pool_execution():
     """
-    Regression test for Issue #XXX: [thread pool execution].
+    Regression test for Issue #NNN: [thread pool execution].
 
     Verify that operations work correctly with thread pool.
     """
-    results = []
     errors = []
 
     def task(task_id):
@@ -128,7 +119,6 @@ def test_issue_XXX_thread_pool_execution():
     # Verify all tasks completed successfully
     assert len(errors) == 0, f"Thread pool errors: {errors}"
     assert len(results) == 20
-    pass
 
 
 # ============================================================================

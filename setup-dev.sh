@@ -16,7 +16,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Check if virtual environment exists
-if [ ! -d "venv" ]; then
+if [[ ! -d "venv" ]]; then
     echo -e "${YELLOW}Creating virtual environment...${NC}"
     python3 -m venv venv
     echo -e "${GREEN}✓ Virtual environment created${NC}"
@@ -27,7 +27,7 @@ else
 fi
 
 # Check if venv is activated
-if [ -z "$VIRTUAL_ENV" ]; then
+if [[ -z "$VIRTUAL_ENV" ]]; then
     echo -e "${YELLOW}Activating virtual environment...${NC}"
     source venv/bin/activate
     echo -e "${GREEN}✓ Virtual environment activated${NC}"
@@ -59,7 +59,7 @@ echo ""
 echo -e "${YELLOW}Setting up shell completion...${NC}"
 SHELL_NAME=$(basename $SHELL)
 
-if [ "$SHELL_NAME" = "zsh" ]; then
+if [[ "$SHELL_NAME" = "zsh" ]]; then
     if ! grep -q "_DEVO_COMPLETE=zsh_source devo" ~/.zshrc 2>/dev/null; then
         echo 'eval "$(_DEVO_COMPLETE=zsh_source devo)"' >> ~/.zshrc
         echo -e "${GREEN}✓ Added completion to ~/.zshrc${NC}"
@@ -71,7 +71,7 @@ if [ "$SHELL_NAME" = "zsh" ]; then
     eval "$(_DEVO_COMPLETE=zsh_source devo)" 2>/dev/null || true
     echo -e "${GREEN}✓ Completion enabled in current session${NC}"
 
-elif [ "$SHELL_NAME" = "bash" ]; then
+elif [[ "$SHELL_NAME" = "bash" ]]; then
     if ! grep -q "_DEVO_COMPLETE=bash_source devo" ~/.bashrc 2>/dev/null; then
         echo 'eval "$(_DEVO_COMPLETE=bash_source devo)"' >> ~/.bashrc
         echo -e "${GREEN}✓ Added completion to ~/.bashrc${NC}"

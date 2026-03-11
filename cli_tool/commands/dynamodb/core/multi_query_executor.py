@@ -9,6 +9,57 @@ from rich.console import Console
 console = Console()
 
 
+def _execute_single_query(
+    exporter,
+    query_config: Dict[str, Any],
+    projection_expression: Optional[str],
+    expression_attribute_values: Optional[Dict[str, Any]],
+    expression_attribute_names: Optional[Dict[str, str]],
+    limit_per_query: Optional[int],
+) -> List[Dict[str, Any]]:
+    """Execute a single query with retry on throttling."""
+    query_values = _extract_query_values(query_config["key_condition"], expression_attribute_values)
+
+    kwargs = dict(
+        key_condition_expression=query_config["key_condition"],
+        filter_expression=None,
+        projection_expression=projection_expression,
+        index_name=query_config.get("index_name"),
+        limit=limit_per_query,
+        expression_attribute_values=query_values,
+        expression_attribute_names=expression_attribute_names,
+    )
+
+    try:
+        return exporter.query_table(**kwargs)
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ProvisionedThroughputExceededException":
+            console.print("[yellow]⚠ Rate limit exceeded, waiting 1 second...[/yellow]")
+            import time
+
+            time.sleep(1)
+            return exporter.query_table(**kwargs)
+        raise
+
+
+def _deduplicate_items(
+    new_items: List[Dict[str, Any]],
+    all_items: List[Dict[str, Any]],
+    seen_keys: set,
+    primary_key_attrs: List[str],
+    limit: Optional[int],
+) -> bool:
+    """Add new items to all_items with deduplication. Returns True if limit reached."""
+    for item in new_items:
+        item_key = _create_item_key(item, primary_key_attrs)
+        if item_key not in seen_keys:
+            seen_keys.add(item_key)
+            all_items.append(item)
+            if limit and len(all_items) >= limit:
+                return True
+    return False
+
+
 def execute_multi_query(
     exporter,
     query_configs: List[Dict[str, Any]],
@@ -35,86 +86,34 @@ def execute_multi_query(
     """
     console.print(f"[cyan]Using Multiple Queries ({len(query_configs)} queries for OR optimization)[/cyan]")
 
-    # Calculate limit per query
     limit_per_query = None
     if limit:
         limit_per_query = int(limit * 1.5 / len(query_configs)) + 100
         console.print(f"[cyan]  Limit per query: ~{limit_per_query} items (total limit: {limit})[/cyan]")
 
-    all_items = []
-    seen_keys = set()
-
-    # Get primary key attributes for deduplication
+    all_items: List[Dict[str, Any]] = []
+    seen_keys: set = set()
     primary_key_attrs = [key["AttributeName"] for key in table_info.get("key_schema", [])]
 
     for idx, query_config in enumerate(query_configs, 1):
         console.print(f"\n[cyan]Executing query {idx}/{len(query_configs)}...[/cyan]")
 
-        # Extract values for this specific query
-        query_values = _extract_query_values(
-            query_config["key_condition"],
+        query_items = _execute_single_query(
+            exporter,
+            query_config,
+            projection_expression,
             expression_attribute_values,
+            expression_attribute_names,
+            limit_per_query,
         )
 
-        try:
-            query_items = exporter.query_table(
-                key_condition_expression=query_config["key_condition"],
-                filter_expression=None,
-                projection_expression=projection_expression,
-                index_name=query_config.get("index_name"),
-                limit=limit_per_query,
-                expression_attribute_values=query_values,
-                expression_attribute_names=expression_attribute_names,
-            )
-
-            # Deduplicate items
-            for item in query_items:
-                item_key = _create_item_key(item, primary_key_attrs)
-
-                if item_key not in seen_keys:
-                    seen_keys.add(item_key)
-                    all_items.append(item)
-
-                    if limit and len(all_items) >= limit:
-                        break
-
-            # Stop if we've reached the limit
-            if limit and len(all_items) >= limit:
-                console.print(f"[cyan]Reached limit of {limit} items, stopping remaining queries[/cyan]")
-                break
-
-        except ClientError as e:
-            if e.response["Error"]["Code"] == "ProvisionedThroughputExceededException":
-                console.print(f"[yellow]⚠ Rate limit exceeded on query {idx}, waiting 1 second...[/yellow]")
-                import time
-
-                time.sleep(1)
-
-                # Retry
-                query_items = exporter.query_table(
-                    key_condition_expression=query_config["key_condition"],
-                    filter_expression=None,
-                    projection_expression=projection_expression,
-                    index_name=query_config.get("index_name"),
-                    limit=limit_per_query,
-                    expression_attribute_values=query_values,
-                    expression_attribute_names=expression_attribute_names,
-                )
-
-                # Deduplicate retry results
-                for item in query_items:
-                    item_key = _create_item_key(item, primary_key_attrs)
-                    if item_key not in seen_keys:
-                        seen_keys.add(item_key)
-                        all_items.append(item)
-                        if limit and len(all_items) >= limit:
-                            break
-            else:
-                raise
+        limit_reached = _deduplicate_items(query_items, all_items, seen_keys, primary_key_attrs, limit)
+        if limit_reached:
+            console.print(f"[cyan]Reached limit of {limit} items, stopping remaining queries[/cyan]")
+            break
 
     console.print(f"\n[green]✓ Combined {len(all_items)} unique items from {len(query_configs)} queries[/green]")
 
-    # Apply final limit
     if limit and len(all_items) > limit:
         all_items = all_items[:limit]
         console.print(f"[cyan]Applied final limit: {limit} items[/cyan]")

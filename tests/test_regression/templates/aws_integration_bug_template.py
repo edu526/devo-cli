@@ -38,14 +38,14 @@ from moto import mock_aws
 
 @pytest.mark.integration
 @mock_aws
-def test_issue_XXX_aws_integration_bug():
+def test_issue_nnn_aws_integration_bug():
     """
-    Regression test for Issue #XXX: [AWS integration bug description].
+    Regression test for Issue #NNN: [AWS integration bug description].
 
     Bug: [What went wrong with AWS integration]
     Fix: [How the AWS integration was fixed]
 
-    Issue: https://github.com/org/repo/issues/XXX
+    Issue: https://github.com/org/repo/issues/NNN
     """
     # ARRANGE: Set up mocked AWS resources
     # Create mock AWS clients, tables, resources, etc.
@@ -59,31 +59,28 @@ def test_issue_XXX_aws_integration_bug():
     # ASSERT: Verify AWS integration works correctly
     # Check that correct AWS API calls were made
     # Verify data was processed correctly
-    pass
 
 
 @pytest.mark.integration
 @mock_aws
-def test_issue_XXX_aws_error_handling():
+def test_issue_nnn_aws_error_handling():
     """
-    Regression test for Issue #XXX: [AWS error handling aspect].
+    Regression test for Issue #NNN: [AWS error handling aspect].
 
     Verify that AWS errors are handled gracefully.
     """
     # Test AWS error conditions (ResourceNotFound, AccessDenied, etc.)
-    pass
 
 
 @pytest.mark.integration
-def test_issue_XXX_aws_credential_handling(mocker):
+def test_issue_nnn_aws_credential_handling(mocker):
     """
-    Regression test for Issue #XXX: [credential handling aspect].
+    Regression test for Issue #NNN: [credential handling aspect].
 
     Verify that AWS credentials are handled correctly.
     """
     # Test credential refresh, expiration, caching, etc.
     # Mock boto3 credential providers
-    pass
 
 
 # ============================================================================

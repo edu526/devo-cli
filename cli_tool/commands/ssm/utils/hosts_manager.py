@@ -1,9 +1,14 @@
 """Manage /etc/hosts entries for SSM connections"""
 
+import ipaddress
 import platform
+import re
 import subprocess
 from pathlib import Path
 from typing import List, Tuple
+
+# Valid hostname pattern: labels separated by dots, no path traversal or special chars
+_HOSTNAME_RE = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$")
 
 
 class HostsManager:
@@ -53,8 +58,36 @@ class HostsManager:
 
         return entries
 
+    def _update_existing_entry(self, ip: str, hostname: str) -> bool:
+        """Check if entry exists and update if IP changed. Returns True if entry already correct."""
+        entries = self.get_managed_entries()
+        for existing_ip, existing_host in entries:
+            if existing_host == hostname:
+                if existing_ip == ip:
+                    return True  # Entry already exists with correct IP
+                # IP changed — remove old entry so caller can re-add
+                self.remove_entry(hostname)
+                return False
+        return False
+
+    @staticmethod
+    def _validate_ip(ip: str):
+        """Raise ValueError if ip is not a valid IP address."""
+        try:
+            ipaddress.ip_address(ip)
+        except ValueError:
+            raise ValueError(f"Invalid IP address: {ip!r}")
+
+    @staticmethod
+    def _validate_hostname(hostname: str):
+        """Raise ValueError if hostname contains unsafe characters."""
+        if not hostname or not _HOSTNAME_RE.match(hostname):
+            raise ValueError(f"Invalid or unsafe hostname: {hostname!r}")
+
     def add_entry(self, ip: str, hostname: str):
         """Add a hostname entry to /etc/hosts"""
+        self._validate_ip(ip)
+        self._validate_hostname(hostname)
         # On macOS, configure loopback alias if needed
         if platform.system() == "Darwin" and ip.startswith("127.0.0.") and ip != "127.0.0.1":
             self._configure_loopback_alias_macos(ip)
@@ -65,59 +98,51 @@ class HostsManager:
         if self.MARKER_START not in content:
             content += f"\n{self.MARKER_START}\n{self.MARKER_END}\n"
 
-        # Check if entry already exists
-        entries = self.get_managed_entries()
-        for existing_ip, existing_host in entries:
-            if existing_host == hostname:
-                if existing_ip == ip:
-                    return  # Entry already exists
-                else:
-                    # Update IP
-                    self.remove_entry(hostname)
-                    break
+        # Check if entry already exists (returns True if no change needed)
+        if self._update_existing_entry(ip, hostname):
+            return
+
+        # Re-read after potential remove_entry call
+        content = self._read_hosts()
+        if self.MARKER_START not in content:
+            content += f"\n{self.MARKER_START}\n{self.MARKER_END}\n"
 
         # Add new entry
         entry = f"{ip} {hostname}"
         new_content = content.replace(self.MARKER_END, f"{entry}\n{self.MARKER_END}")
-
         self._write_hosts(new_content)
 
-    def remove_entry(self, hostname: str):
-        """Remove a hostname entry from /etc/hosts"""
-        content = self._read_hosts()
-
-        if self.MARKER_START not in content:
-            return
-
-        # Track IPs being removed for cleanup
-        removed_ips = []
-        lines = content.split("\n")
+    def _filter_hostname_from_lines(self, lines: List[str], hostname: str) -> tuple:
+        """Filter hostname lines from managed section. Returns (filtered_lines, removed_ips)."""
         filtered_lines = []
+        removed_ips = []
         in_managed_section = False
 
         for line in lines:
             if self.MARKER_START in line:
                 in_managed_section = True
                 filtered_lines.append(line)
-                continue
-
-            if self.MARKER_END in line:
+            elif self.MARKER_END in line:
                 in_managed_section = False
                 filtered_lines.append(line)
-                continue
-
-            if in_managed_section:
-                # Skip lines containing the hostname
-                if hostname not in line or line.strip().startswith("#"):
-                    filtered_lines.append(line)
-                else:
-                    # Extract IP for cleanup
-                    parts = line.strip().split()
-                    if len(parts) >= 2:
-                        removed_ips.append(parts[0])
+            elif in_managed_section and hostname in line and not line.strip().startswith("#"):
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    removed_ips.append(parts[0])
             else:
                 filtered_lines.append(line)
 
+        return filtered_lines, removed_ips
+
+    def remove_entry(self, hostname: str):
+        """Remove a hostname entry from /etc/hosts"""
+        self._validate_hostname(hostname)
+        content = self._read_hosts()
+
+        if self.MARKER_START not in content:
+            return
+
+        filtered_lines, removed_ips = self._filter_hostname_from_lines(content.split("\n"), hostname)
         self._write_hosts("\n".join(filtered_lines))
 
         # On macOS, remove loopback aliases that are no longer used
@@ -162,30 +187,26 @@ class HostsManager:
         """Write to hosts file (requires elevated privileges)"""
         system = platform.system()
 
-        try:
-            if system == "Windows":
-                # Windows: Write directly (requires running as Administrator)
-                try:
-                    self.HOSTS_FILE.write_text(content, encoding="utf-8")
-                except PermissionError:
-                    raise Exception(
-                        "Permission denied. Please run your terminal as Administrator:\n"
-                        "  1. Right-click on Command Prompt or PowerShell\n"
-                        "  2. Select 'Run as administrator'\n"
-                        "  3. Run the command again"
-                    )
-            else:
-                # Linux/macOS: Use sudo tee
-                process = subprocess.Popen(
-                    ["sudo", "tee", str(self.HOSTS_FILE)], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
-                )
-                stdout, stderr = process.communicate(input=content.encode())
+        if system == "Windows":
+            # Windows: Write directly (requires running as Administrator)
+            try:
+                self.HOSTS_FILE.write_text(content, encoding="utf-8")
+            except PermissionError as e:
+                raise PermissionError(
+                    "Permission denied. Please run your terminal as Administrator:\n"
+                    "  1. Right-click on Command Prompt or PowerShell\n"
+                    "  2. Select 'Run as administrator'\n"
+                    "  3. Run the command again"
+                ) from e
+        else:
+            # Linux/macOS: Use sudo tee
+            process = subprocess.Popen(
+                ["sudo", "tee", str(self.HOSTS_FILE)], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+            )
+            _, stderr = process.communicate(input=content.encode())
 
-                if process.returncode != 0:
-                    raise Exception(f"Failed to write hosts file: {stderr.decode()}")
-
-        except Exception as e:
-            raise Exception(f"Error writing hosts file: {e}")
+            if process.returncode != 0:
+                raise OSError(f"Failed to write hosts file: {stderr.decode()}")
 
     def get_next_loopback_ip(self) -> str:
         """Get the next available loopback IP address"""
@@ -198,11 +219,15 @@ class HostsManager:
             if ip not in used_ips:
                 return ip
 
-        raise Exception("No available loopback IPs (127.0.0.2-254 all in use)")
+        raise RuntimeError("No available loopback IPs (127.0.0.2-254 all in use)")
 
     def _configure_loopback_alias_macos(self, ip: str):
         """Configure loopback alias on macOS using ifconfig"""
         from rich.console import Console
+
+        # Validate IP is a safe loopback address (127.0.0.x where x is 2-254)
+        if not re.match(r"^127\.0\.0\.(?:[2-9]|[1-9]\d|1\d{2}|2[0-4]\d|25[0-4])$", ip):
+            raise ValueError(f"Invalid loopback IP address: {ip}")
 
         console = Console()
 
@@ -220,7 +245,7 @@ class HostsManager:
             subprocess.run(["sudo", "ifconfig", "lo0", "alias", ip, "up"], capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError as e:
             stderr = e.stderr if e.stderr else ""
-            raise Exception(f"Failed to configure loopback alias {ip}: {stderr.strip() or 'Unknown error'}")
+            raise OSError(f"Failed to configure loopback alias {ip}: {stderr.strip() or 'Unknown error'}") from e
 
     def _remove_loopback_alias_macos(self, ip: str):
         """Remove loopback alias on macOS using ifconfig"""

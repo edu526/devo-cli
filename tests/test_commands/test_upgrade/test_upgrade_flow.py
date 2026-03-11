@@ -182,7 +182,7 @@ def test_binary_download_linux(cli_runner, mocker, mock_current_version, mock_gi
     mock_replace.return_value = True
 
     # Mock os._exit to prevent actual exit
-    mock_exit = mocker.patch("os._exit")
+    mocker.patch("os._exit")
 
     # Run upgrade command with --force flag
     result = cli_runner.invoke(upgrade, ["--force"])
@@ -235,7 +235,7 @@ def test_binary_download_macos(cli_runner, mocker, mock_current_version, mock_gi
     mock_replace.return_value = True
 
     # Mock os._exit
-    mock_exit = mocker.patch("os._exit")
+    mocker.patch("os._exit")
 
     # Run upgrade command with --force flag
     result = cli_runner.invoke(upgrade, ["--force"])
@@ -294,7 +294,7 @@ def test_binary_download_windows(cli_runner, mocker, mock_current_version, mock_
     mock_replace.return_value = True
 
     # Mock os._exit to prevent actual exit
-    mock_exit = mocker.patch("os._exit")
+    mocker.patch("os._exit")
 
     # Run upgrade command with --force flag
     result = cli_runner.invoke(upgrade, ["--force"])
@@ -355,7 +355,7 @@ def test_binary_verification_success(cli_runner, mocker, mock_current_version, m
     mock_replace.return_value = True
 
     # Mock os._exit
-    mock_exit = mocker.patch("os._exit")
+    mocker.patch("os._exit")
 
     # Run upgrade command with --force flag
     result = cli_runner.invoke(upgrade, ["--force"])
@@ -461,7 +461,7 @@ def test_binary_installation_linux(cli_runner, mocker, mock_current_version, moc
     mock_replace.return_value = True
 
     # Mock os._exit
-    mock_exit = mocker.patch("os._exit")
+    mocker.patch("os._exit")
 
     # Run upgrade command with --force flag
     result = cli_runner.invoke(upgrade, ["--force"])
@@ -515,7 +515,7 @@ def test_binary_installation_macos_tarball(cli_runner, mocker, mock_current_vers
     mock_replace.return_value = True
 
     # Mock os._exit
-    mock_exit = mocker.patch("os._exit")
+    mocker.patch("os._exit")
 
     # Run upgrade command with --force flag
     result = cli_runner.invoke(upgrade, ["--force"])
@@ -568,7 +568,7 @@ def test_binary_installation_windows_zip(cli_runner, mocker, mock_current_versio
     mock_replace.return_value = True
 
     # Mock os._exit to prevent actual exit
-    mock_exit = mocker.patch("os._exit")
+    mocker.patch("os._exit")
 
     # Run upgrade command with --force flag
     result = cli_runner.invoke(upgrade, ["--force"])
@@ -689,7 +689,7 @@ def test_upgrade_no_newer_version_with_force(cli_runner, mocker, mock_same_versi
     mock_replace.return_value = True
 
     # Mock os._exit
-    mock_exit = mocker.patch("os._exit")
+    mocker.patch("os._exit")
 
     # Run upgrade command with --force flag
     result = cli_runner.invoke(upgrade, ["--force"])
@@ -892,7 +892,7 @@ def test_upgrade_with_user_confirmation_yes(cli_runner, mocker, mock_current_ver
     mock_replace.return_value = True
 
     # Mock os._exit
-    mock_exit = mocker.patch("os._exit")
+    mocker.patch("os._exit")
 
     # Run upgrade command without --force flag, simulate user confirming
     result = cli_runner.invoke(upgrade, input="y\n")
@@ -1025,7 +1025,7 @@ def test_upgrade_with_unknown_current_version(cli_runner, mocker, mock_github_re
     mock_replace.return_value = True
 
     # Mock os._exit
-    mock_exit = mocker.patch("os._exit")
+    mocker.patch("os._exit")
 
     # Run upgrade command with --force flag
     result = cli_runner.invoke(upgrade, ["--force"])

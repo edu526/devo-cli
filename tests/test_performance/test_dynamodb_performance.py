@@ -10,6 +10,8 @@ Requirements tested:
 - 17.5: Use pytest-benchmark for performance regression detection
 """
 
+import os
+
 import boto3
 import pytest
 from moto import mock_aws
@@ -37,7 +39,7 @@ def test_parallel_scan_performance_1000_items(benchmark, mock_dynamodb_client):
     )
 
     # Add 1000 items
-    table = boto3.resource("dynamodb", region_name="us-east-1").Table(table_name)
+    table = boto3.resource("dynamodb", region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1")).Table(table_name)
     with table.batch_writer() as batch:
         for i in range(1000):
             batch.put_item(
@@ -80,7 +82,7 @@ def test_parallel_scan_with_different_segments(benchmark, mock_dynamodb_client, 
     )
 
     # Add 1000 items
-    table = boto3.resource("dynamodb", region_name="us-east-1").Table(table_name)
+    table = boto3.resource("dynamodb", region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1")).Table(table_name)
     with table.batch_writer() as batch:
         for i in range(1000):
             batch.put_item(
@@ -124,7 +126,7 @@ def test_parallel_scan_with_filter_performance(benchmark, mock_dynamodb_client):
     )
 
     # Add 1000 items with varying categories
-    table = boto3.resource("dynamodb", region_name="us-east-1").Table(table_name)
+    table = boto3.resource("dynamodb", region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1")).Table(table_name)
     with table.batch_writer() as batch:
         for i in range(1000):
             batch.put_item(
@@ -174,7 +176,7 @@ def test_parallel_scan_memory_usage(mock_dynamodb_client):
     )
 
     # Add 2000 items with larger data payloads
-    table = boto3.resource("dynamodb", region_name="us-east-1").Table(table_name)
+    table = boto3.resource("dynamodb", region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1")).Table(table_name)
     with table.batch_writer() as batch:
         for i in range(2000):
             batch.put_item(
@@ -195,7 +197,7 @@ def test_parallel_scan_memory_usage(mock_dynamodb_client):
     result = scanner.parallel_scan()
 
     # Get memory usage
-    current, peak = tracemalloc.get_traced_memory()
+    _, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
     # Verify results
@@ -227,7 +229,7 @@ def test_parallel_scan_with_projection(benchmark, mock_dynamodb_client):
     )
 
     # Add 1000 items with multiple attributes
-    table = boto3.resource("dynamodb", region_name="us-east-1").Table(table_name)
+    table = boto3.resource("dynamodb", region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1")).Table(table_name)
     with table.batch_writer() as batch:
         for i in range(1000):
             batch.put_item(
@@ -276,7 +278,7 @@ def test_parallel_scan_with_limit(benchmark, mock_dynamodb_client):
     )
 
     # Add 1000 items
-    table = boto3.resource("dynamodb", region_name="us-east-1").Table(table_name)
+    table = boto3.resource("dynamodb", region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1")).Table(table_name)
     with table.batch_writer() as batch:
         for i in range(1000):
             batch.put_item(

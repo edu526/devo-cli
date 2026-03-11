@@ -56,7 +56,7 @@ class PortForwarder:
         cmd = ["socat", f"TCP-LISTEN:{local_port},bind={local_address},reuseaddr,fork", f"TCP:127.0.0.1:{target_port}"]
 
         try:
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # noqa: S603
 
             # Give socat a moment to start and check if it failed immediately
             import time
@@ -65,8 +65,8 @@ class PortForwarder:
 
             if process.poll() is not None:
                 # Process died immediately, get error
-                _, stderr = process.communicate()
-                error_msg = stderr.decode() if stderr else "Unknown error"
+                _, stderr_bytes = process.communicate()
+                error_msg = stderr_bytes.decode() if stderr_bytes else "Unknown error"
                 raise Exception(f"socat failed to start: {error_msg}")
 
             self.processes[key] = process
