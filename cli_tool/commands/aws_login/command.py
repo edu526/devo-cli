@@ -22,6 +22,20 @@ _SET_DEFAULT_HINT = "[dim]  Run 'devo aws-login set-default' to refresh them.[/d
 console = Console()
 
 
+def _warn_expiry(expiry_str: str) -> None:
+    """Warn if credentials are expired or expiring soon."""
+    expiry_dt = datetime.fromisoformat(expiry_str.replace("Z", "+00:00"))
+    now = datetime.now(timezone.utc)
+    if expiry_dt <= now:
+        console.print("[yellow]⚠ Default credentials in ~/.aws/credentials have expired.[/yellow]")
+        console.print(_SET_DEFAULT_HINT)
+        return
+    minutes_left = int((expiry_dt - now).total_seconds() / 60)
+    if minutes_left < 30:
+        console.print(f"[yellow]⚠ Default credentials expire in {minutes_left} min.[/yellow]")
+        console.print(_SET_DEFAULT_HINT)
+
+
 def _check_credentials_via_cli(in_default: bool) -> None:
     """Check [default] credentials expiry via AWS CLI and warn if needed."""
     import subprocess
@@ -36,16 +50,7 @@ def _check_credentials_via_cli(in_default: bool) -> None:
         creds = json.loads(result.stdout)
         expiry_str = creds.get("Expiration")
         if expiry_str:
-            expiry_dt = datetime.fromisoformat(expiry_str.replace("Z", "+00:00"))
-            now = datetime.now(timezone.utc)
-            if expiry_dt <= now:
-                console.print("[yellow]⚠ Default credentials in ~/.aws/credentials have expired.[/yellow]")
-                console.print(_SET_DEFAULT_HINT)
-            else:
-                minutes_left = int((expiry_dt - now).total_seconds() / 60)
-                if minutes_left < 30:
-                    console.print(f"[yellow]⚠ Default credentials expire in {minutes_left} min.[/yellow]")
-                    console.print(_SET_DEFAULT_HINT)
+            _warn_expiry(expiry_str)
     elif in_default:
         console.print("[yellow]⚠ Default credentials in ~/.aws/credentials may be expired.[/yellow]")
         console.print(_SET_DEFAULT_HINT)
