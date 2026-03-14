@@ -120,8 +120,20 @@ def _parse_filter_expressions(
             console.print(f"[red]✗ Invalid filter syntax: {e}[/red]")
             sys.exit(1)
     elif filter_values:
+        from boto3.dynamodb.types import TypeSerializer
+
         try:
-            expression_attribute_values = json.loads(filter_values)
+            parsed_values = json.loads(filter_values)
+            # Convert Python values to DynamoDB typed format
+            serializer = TypeSerializer()
+            expression_attribute_values = {}
+            for key, value in parsed_values.items():
+                # If value is already in DynamoDB format (has type keys like 'S', 'N', 'BOOL'), keep it
+                if isinstance(value, dict) and len(value) == 1 and list(value.keys())[0] in ("S", "N", "BOOL", "NULL", "M", "L", "SS", "NS", "BS"):
+                    expression_attribute_values[key] = value
+                else:
+                    # Otherwise, serialize Python value to DynamoDB format
+                    expression_attribute_values[key] = serializer.serialize(value)
         except json.JSONDecodeError as e:
             console.print(f"[red]✗ Invalid filter-values JSON: {e}[/red]")
             sys.exit(1)
