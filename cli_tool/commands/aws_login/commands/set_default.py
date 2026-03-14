@@ -17,12 +17,6 @@ console = Console()
 # AWS profile names: alphanumeric, hyphens, underscores, dots only
 _SAFE_PROFILE_RE = re.compile(r"^[a-zA-Z0-9._-]{1,128}$")
 
-_SHELL_CONFIG = {
-    "zsh": {"file": ".zshrc", "export": "export AWS_PROFILE={profile}"},
-    "fish": {"file": ".config/fish/config.fish", "export": "set -gx AWS_PROFILE {profile}"},
-    "bash": {"file": ".bashrc", "export": "export AWS_PROFILE={profile}"},
-}
-
 
 def _format_source_label(source: str) -> str:
     """Format profile source with Rich color markup."""
@@ -48,14 +42,21 @@ def _select_profile_interactively(profiles: list) -> str:
 
 
 def _get_shell_config(shell_name: str, profile_name: str) -> tuple:
-    """Return (config_file_path, export_line) for the given shell."""
+    """Return (config_file_path, export_line) for the given shell.
+
+    Path components are hardcoded literals — never derived from shell_name —
+    so that static analysis can confirm there is no path injection.
+    """
     home = Path.home()
-    # Only allow known shell names — never use shell_name directly in path construction
-    safe_shell = shell_name if shell_name in _SHELL_CONFIG else "bash"
-    cfg = _SHELL_CONFIG[safe_shell]
-    # Config file path is derived solely from the hardcoded _SHELL_CONFIG dict
-    config_file = home / cfg["file"]
-    export_line = cfg["export"].format(profile=profile_name)
+    if shell_name == "fish":
+        config_file = home / ".config" / "fish" / "config.fish"
+        export_line = f"set -gx AWS_PROFILE {profile_name}"
+    elif shell_name == "zsh":
+        config_file = home / ".zshrc"
+        export_line = f"export AWS_PROFILE={profile_name}"
+    else:
+        config_file = home / ".bashrc"
+        export_line = f"export AWS_PROFILE={profile_name}"
     return config_file, export_line
 
 
