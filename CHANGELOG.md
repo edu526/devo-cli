@@ -2,6 +2,43 @@
 
 <!-- version list -->
 
+## v3.4.0 (2026-03-14)
+
+### Bug Fixes
+
+- **aws_login**: Harden profile name validation and refactor set_default
+  ([`2155a0b`](https://github.com/edu526/devo-cli/commit/2155a0b3df7b673c0c9417c20701b98228db8f62))
+
+- **core**: Replace generic exceptions with specific error types
+  ([`2a56f51`](https://github.com/edu526/devo-cli/commit/2a56f5146cd3207fc5bce7d57389e1838d0dae35))
+
+- **security**: Fix path injection in hosts_manager and harden CI/CD permissions
+  ([`b97d2a0`](https://github.com/edu526/devo-cli/commit/b97d2a0f40c100b9e8063c8058b01a40be1c259b))
+
+### Chores
+
+- Migrate to pyproject.toml and remove chardet dependency
+  ([`e47a88d`](https://github.com/edu526/devo-cli/commit/e47a88d76c35745feda326ba104b4b2a55339a53))
+
+### Continuous Integration
+
+- Add SonarCloud analysis workflow and configuration
+  ([`7baff2a`](https://github.com/edu526/devo-cli/commit/7baff2a0ab553bb0c5b2ce93cfb6d849597973a4))
+
+- **sonar**: Update SonarCloud action to sonarqube-scan-action v6
+  ([`fdb925d`](https://github.com/edu526/devo-cli/commit/fdb925d6d08e6500bea2d1d631652b7264b68aba))
+
+### Features
+
+- **dynamodb**: Auto-serialize Python values to DynamoDB format in filter-values
+  ([`5ec0fa7`](https://github.com/edu526/devo-cli/commit/5ec0fa7cace4f0ad68eac01c669f260321474d0a))
+
+### Refactoring
+
+- **codeartifact**: Extract credential verification and authentication logic
+  ([`b1419a2`](https://github.com/edu526/devo-cli/commit/b1419a24bd88589a8dbbde0c8791527369378678))
+
+
 ## v3.3.0 (2026-03-10)
 
 ### Chores
