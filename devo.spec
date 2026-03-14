@@ -107,7 +107,7 @@ hidden_imports = [
     # Third-party dependencies
     'click',
     'requests',
-    'chardet',
+    'charset_normalizer',
     'rich',
     'rich.console',
     'rich.live',

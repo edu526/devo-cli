@@ -12,7 +12,6 @@ REM Install dependencies
 echo Installing dependencies...
 pip install -q -r requirements.txt
 pip install -q --no-binary charset-normalizer charset-normalizer
-pip install -q chardet
 pip install -q -e .
 
 REM Install PyInstaller if not present

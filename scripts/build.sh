@@ -69,8 +69,6 @@ if [[ "$CI_MODE" = true ]]; then
   # Install charset-normalizer as pure Python (no binary wheel) to avoid mypyc-compiled
   # modules with hash-based names that PyInstaller cannot bundle on some platforms
   python -m pip install --quiet --no-binary charset-normalizer "charset-normalizer>=3.3.2,<4.0.0"
-  # chardet is the pure-Python fallback for requests — always bundles reliably
-  python -m pip install --quiet chardet
   python -m pip install --quiet .
   python -m pip install --quiet pyinstaller
 else
