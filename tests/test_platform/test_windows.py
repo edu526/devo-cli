@@ -1,18 +1,16 @@
 """Windows platform-specific tests.
 
 Tests Windows-specific functionality including:
-- Path separator handling with pathlib
-- PowerShell completion installation
-- CMD completion installation
-- Windows binary format (ZIP)
-- ZIP extraction on Windows
+- PE binary verification
+- ZIP extraction
+- ZIP format handling
+- PowerShell completion
 
-Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 10.5
+Requirements: 5.1, 5.2, 5.4, 5.5, 10.5
 """
 
 import sys
 import zipfile
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -20,131 +18,8 @@ import pytest
 
 @pytest.mark.platform
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
-class TestWindowsPathHandling:
-    """Test Windows path separator handling."""
-
-    def test_windows_path_separators_with_pathlib(self):
-        """Test that Windows path separators are handled correctly with pathlib.
-
-        Validates: Requirements 5.1, 5.3
-        """
-        # Test Windows-style path using pathlib
-        windows_path = Path("C:/Users/Developer/.devo/config.json")
-
-        # Verify Path object handles it correctly
-        assert isinstance(windows_path, Path)
-        # On Windows, pathlib normalizes to backslashes
-        assert windows_path.parts[0] in ("C:", "C:\\")
-
-    def test_windows_config_path_handling(self, temp_config_dir):
-        """Test that config paths work correctly on Windows.
-
-        Validates: Requirements 5.1, 5.3
-        """
-        # Create a config file path in temp directory
-        config_path = temp_config_dir / "config.json"
-
-        # Write and read to verify path handling
-        config_path.write_text('{"test": "value"}')
-        content = config_path.read_text()
-
-        assert content == '{"test": "value"}'
-        assert config_path.exists()
-
-    def test_windows_nested_path_creation(self, temp_config_dir):
-        """Test creating nested directories on Windows.
-
-        Validates: Requirements 5.1, 5.3
-        """
-        # Create nested path
-        nested_path = temp_config_dir / "aws" / "sso" / "profiles" / "dev"
-        nested_path.mkdir(parents=True, exist_ok=True)
-
-        # Verify directory was created
-        assert nested_path.exists()
-        assert nested_path.is_dir()
-
-
-@pytest.mark.platform
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
-class TestWindowsShellCompletion:
-    """Test Windows shell completion installation."""
-
-    def test_powershell_completion_installation(self, cli_runner, temp_config_dir, mocker):
-        """Test PowerShell completion installation on Windows.
-
-        Validates: Requirements 5.2, 5.4, 10.5
-        """
-        from cli_tool.commands.autocomplete.commands.autocomplete import autocomplete
-
-        # Mock PowerShell profile path
-        ps_profile = temp_config_dir / "Microsoft.PowerShell_profile.ps1"
-        ps_profile.parent.mkdir(parents=True, exist_ok=True)
-
-        # Mock the installer methods directly
-        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_supported_shell", return_value=True)
-        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_already_configured", return_value=False)
-        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.get_config_file", return_value=ps_profile)
-        mocker.patch(
-            "cli_tool.commands.autocomplete.core.installer.CompletionInstaller.install",
-            return_value=(True, f"Shell completion configured in {ps_profile}"),
-        )
-
-        # Mock SHELL environment variable (PowerShell on Windows)
-        mocker.patch.dict("os.environ", {"SHELL": "powershell"})
-
-        # Run installation
-        result = cli_runner.invoke(autocomplete, ["--install", "--yes"])
-
-        # Verify success
-        assert result.exit_code == 0
-        assert "configured" in result.output.lower() or "success" in result.output.lower() or "✅" in result.output
-
-    def test_cmd_completion_not_supported(self, cli_runner):
-        """Test that CMD completion shows appropriate message.
-
-        Note: CMD doesn't support the same completion mechanism as PowerShell.
-
-        Validates: Requirements 5.2, 10.5
-        """
-        from cli_tool.commands.autocomplete.commands.autocomplete import autocomplete
-
-        # Try to install for CMD (not supported)
-        result = cli_runner.invoke(autocomplete, ["--install", "cmd", "--yes"])
-
-        # Should indicate CMD is not supported or provide alternative instructions
-        assert result.exit_code != 0 or "not supported" in result.output.lower() or "unsupported" in result.output.lower()
-
-    def test_powershell_completion_already_configured(self, cli_runner, temp_config_dir, mocker):
-        """Test PowerShell completion when already configured.
-
-        Validates: Requirements 5.2, 10.5
-        """
-        from cli_tool.commands.autocomplete.commands.autocomplete import autocomplete
-
-        # Mock PowerShell profile path
-        ps_profile = temp_config_dir / "Microsoft.PowerShell_profile.ps1"
-
-        # Mock that completion is already configured
-        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_supported_shell", return_value=True)
-        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_already_configured", return_value=True)
-        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.get_config_file", return_value=ps_profile)
-
-        # Mock SHELL environment variable
-        mocker.patch.dict("os.environ", {"SHELL": "powershell"})
-
-        # Run installation
-        result = cli_runner.invoke(autocomplete, ["--install", "--yes"])
-
-        # Should indicate already configured
-        assert result.exit_code == 0
-        assert "already" in result.output.lower()
-
-
-@pytest.mark.platform
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
 class TestWindowsBinaryFormat:
-    """Test Windows binary format and handling."""
+    """Test Windows-specific binary format and handling."""
 
     def test_windows_binary_format_is_zip(self):
         """Test that Windows binary is in ZIP format.
@@ -177,7 +52,7 @@ class TestWindowsBinaryFormat:
         assert "arm64" in binary_name.lower()
 
     def test_windows_zip_verification(self, temp_config_dir):
-        """Test ZIP file verification on Windows.
+        """Test ZIP file verification on Windows (PE header).
 
         Validates: Requirements 5.5
         """
@@ -280,7 +155,7 @@ class TestWindowsZipExtraction:
 
         # Create new version ZIP
         with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("devo/devo.exe", b"MZ" + b"\x00" * 100)  # Larger = newer
+            zf.writestr("devo/devo.exe", b"MZ" + b"\x00" * 100)
             zf.writestr("devo/_internal/base_library.zip", b"PK\x03\x04")
 
         # Mock subprocess.Popen to avoid actually running PowerShell
@@ -307,81 +182,78 @@ class TestWindowsZipExtraction:
         assert "Remove-Item" in script_content
         assert "Move-Item" in script_content
 
-    def test_windows_executable_path_detection(self, mocker):
-        """Test executable path detection on Windows.
-
-        Validates: Requirements 5.1, 5.4
-        """
-        from cli_tool.commands.upgrade.core.platform import get_executable_path
-
-        # Mock sys.frozen to simulate PyInstaller bundle
-        mocker.patch("sys.frozen", True, create=True)
-
-        # Mock sys.executable to return Windows path
-        mock_exe_path = Path("C:/Program Files/Devo/devo/devo.exe")
-        mocker.patch("sys.executable", str(mock_exe_path))
-
-        # Mock platform.system to return Windows
-        mocker.patch("platform.system", return_value="Windows")
-
-        # Get executable path
-        exe_path = get_executable_path()
-
-        # Should return parent directory (onedir mode)
-        assert exe_path == mock_exe_path.parent
-
-    def test_windows_path_with_spaces(self, temp_config_dir):
-        """Test handling paths with spaces on Windows.
-
-        Validates: Requirements 5.1, 5.3
-        """
-        # Create path with spaces
-        path_with_spaces = temp_config_dir / "Program Files" / "Devo CLI" / "config.json"
-        path_with_spaces.parent.mkdir(parents=True, exist_ok=True)
-
-        # Write and read
-        path_with_spaces.write_text('{"test": "value"}')
-        content = path_with_spaces.read_text()
-
-        assert content == '{"test": "value"}'
-        assert path_with_spaces.exists()
-
 
 @pytest.mark.platform
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
-class TestWindowsPlatformDetection:
-    """Test platform detection on Windows."""
+class TestWindowsShellCompletion:
+    """Test Windows-specific shell completion (PowerShell)."""
 
-    def test_detect_windows_platform(self, mocker):
-        """Test platform detection returns Windows.
+    def test_powershell_completion_installation(self, cli_runner, temp_config_dir, mocker):
+        """Test PowerShell completion installation on Windows.
 
-        Validates: Requirements 5.1, 5.4
+        Validates: Requirements 5.2, 5.4, 10.5
         """
-        from cli_tool.commands.upgrade.core.platform import detect_platform
+        from cli_tool.commands.autocomplete.commands.autocomplete import autocomplete
 
-        # Mock platform.system and platform.machine
-        mocker.patch("platform.system", return_value="Windows")
-        mocker.patch("platform.machine", return_value="AMD64")
+        # Mock PowerShell profile path
+        ps_profile = temp_config_dir / "Microsoft.PowerShell_profile.ps1"
+        ps_profile.parent.mkdir(parents=True, exist_ok=True)
 
-        # Detect platform
-        result = detect_platform()
+        # Mock the installer methods directly
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_supported_shell", return_value=True)
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_already_configured", return_value=False)
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.get_config_file", return_value=ps_profile)
+        mocker.patch(
+            "cli_tool.commands.autocomplete.core.installer.CompletionInstaller.install",
+            return_value=(True, f"Shell completion configured in {ps_profile}"),
+        )
 
-        # Should return windows, amd64
-        assert result == ("windows", "amd64")
+        # Mock SHELL environment variable (PowerShell on Windows)
+        mocker.patch.dict("os.environ", {"SHELL": "powershell"})
 
-    def test_detect_windows_arm64(self, mocker):
-        """Test platform detection for Windows ARM64.
+        # Run installation
+        result = cli_runner.invoke(autocomplete, ["--install", "--yes"])
 
-        Validates: Requirements 5.1, 5.4
+        # Verify success
+        assert result.exit_code == 0
+        assert "configured" in result.output.lower() or "success" in result.output.lower() or "✅" in result.output
+
+    def test_cmd_completion_not_supported(self, cli_runner):
+        """Test that CMD completion shows appropriate message.
+
+        Note: CMD doesn't support the same completion mechanism as PowerShell.
+
+        Validates: Requirements 5.2, 10.5
         """
-        from cli_tool.commands.upgrade.core.platform import detect_platform
+        from cli_tool.commands.autocomplete.commands.autocomplete import autocomplete
 
-        # Mock platform.system and platform.machine
-        mocker.patch("platform.system", return_value="Windows")
-        mocker.patch("platform.machine", return_value="ARM64")
+        # Try to install for CMD (not supported)
+        result = cli_runner.invoke(autocomplete, ["--install", "cmd", "--yes"])
 
-        # Detect platform
-        result = detect_platform()
+        # Should indicate CMD is not supported or provide alternative instructions
+        assert result.exit_code != 0 or "not supported" in result.output.lower() or "unsupported" in result.output.lower()
 
-        # Should return windows, arm64
-        assert result == ("windows", "arm64")
+    def test_powershell_completion_already_configured(self, cli_runner, temp_config_dir, mocker):
+        """Test PowerShell completion when already configured.
+
+        Validates: Requirements 5.2, 10.5
+        """
+        from cli_tool.commands.autocomplete.commands.autocomplete import autocomplete
+
+        # Mock PowerShell profile path
+        ps_profile = temp_config_dir / "Microsoft.PowerShell_profile.ps1"
+
+        # Mock that completion is already configured
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_supported_shell", return_value=True)
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.is_already_configured", return_value=True)
+        mocker.patch("cli_tool.commands.autocomplete.core.installer.CompletionInstaller.get_config_file", return_value=ps_profile)
+
+        # Mock SHELL environment variable
+        mocker.patch.dict("os.environ", {"SHELL": "powershell"})
+
+        # Run installation
+        result = cli_runner.invoke(autocomplete, ["--install", "--yes"])
+
+        # Should indicate already configured
+        assert result.exit_code == 0
+        assert "already" in result.output.lower()

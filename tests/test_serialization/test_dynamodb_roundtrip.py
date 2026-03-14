@@ -643,7 +643,7 @@ def test_roundtrip_number_sets(mock_dynamodb_client, tmp_path):
     # Could be a list or a string representation of a set
     if isinstance(scores_value, list):
         # Numbers in sets might be strings or numbers
-        assert set(str(s) for s in scores_value) == {"10", "20", "30"}
+        assert {str(s) for s in scores_value} == {"10", "20", "30"}
     elif isinstance(scores_value, str):
         # If serialized as string, verify all scores are present
         assert "10" in scores_value

@@ -57,6 +57,104 @@ class StreamingDisplayManager:
                 self.live_display.update(Group(*self.event_panels.values()), refresh=True)
 
 
+_ISSUE_TYPE_INFO = {
+    # Dependencies
+    "dependencies": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
+    "dependency": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
+    "import": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
+    "imports": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
+    "missingimport": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
+    "unusedimport": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
+    "invalidimport": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
+    "package": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
+    "packages": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
+    # Broken references
+    "brokenreferences": {"icon": "🔗", "name": "Broken References", "color": "red"},
+    "brokenreference": {"icon": "🔗", "name": "Broken References", "color": "red"},
+    "reference": {"icon": "🔗", "name": "Broken References", "color": "red"},
+    "references": {"icon": "🔗", "name": "Broken References", "color": "red"},
+    "undefined": {"icon": "🔗", "name": "Broken References", "color": "red"},
+    "notfound": {"icon": "🔗", "name": "Broken References", "color": "red"},
+    "missing": {"icon": "🔗", "name": "Broken References", "color": "red"},
+    # Code quality
+    "codequality": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
+    "quality": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
+    "unused": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
+    "unusedvariable": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
+    "redundant": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
+    "errorhandling": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
+    "asyncawait": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
+    "async": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
+    # Security
+    "security": {"icon": "🔒", "name": "Security", "color": "red"},
+    "securityissue": {"icon": "🔒", "name": "Security", "color": "red"},
+    "secret": {"icon": "🔒", "name": "Security", "color": "red"},
+    "secrets": {"icon": "🔒", "name": "Security", "color": "red"},
+    "eval": {"icon": "🔒", "name": "Security", "color": "red"},
+    "injection": {"icon": "🔒", "name": "Security", "color": "red"},
+    "validation": {"icon": "🔒", "name": "Security", "color": "red"},
+    "unsafe": {"icon": "🔒", "name": "Security", "color": "red"},
+    # Best practices
+    "bestpractices": {"icon": "📋", "name": "Best Practices", "color": "blue"},
+    "bestpractice": {"icon": "📋", "name": "Best Practices", "color": "blue"},
+    "maintainability": {"icon": "📋", "name": "Best Practices", "color": "blue"},
+    "readability": {"icon": "📋", "name": "Best Practices", "color": "blue"},
+    "naming": {"icon": "📋", "name": "Best Practices", "color": "blue"},
+    "namingconvention": {"icon": "📋", "name": "Best Practices", "color": "blue"},
+    "consistency": {"icon": "📋", "name": "Best Practices", "color": "blue"},
+    "convention": {"icon": "📋", "name": "Best Practices", "color": "blue"},
+    # Performance
+    "performance": {"icon": "⚡", "name": "Performance", "color": "yellow"},
+    "perf": {"icon": "⚡", "name": "Performance", "color": "yellow"},
+    "loop": {"icon": "⚡", "name": "Performance", "color": "yellow"},
+    "loops": {"icon": "⚡", "name": "Performance", "color": "yellow"},
+    "duplicate": {"icon": "⚡", "name": "Performance", "color": "yellow"},
+    "query": {"icon": "⚡", "name": "Performance", "color": "yellow"},
+    "expensive": {"icon": "⚡", "name": "Performance", "color": "yellow"},
+    "optimization": {"icon": "⚡", "name": "Performance", "color": "yellow"},
+    # Configuration
+    "configuration": {"icon": "⚙️", "name": "Configuration", "color": "cyan"},
+    "config": {"icon": "⚙️", "name": "Configuration", "color": "cyan"},
+    "syntax": {"icon": "⚙️", "name": "Configuration", "color": "cyan"},
+    "syntaxerror": {"icon": "⚙️", "name": "Configuration", "color": "cyan"},
+    "deprecated": {"icon": "⚙️", "name": "Configuration", "color": "cyan"},
+    "settings": {"icon": "⚙️", "name": "Configuration", "color": "cyan"},
+    # Documentation
+    "documentation": {"icon": "📚", "name": "Documentation", "color": "blue"},
+    "docs": {"icon": "📚", "name": "Documentation", "color": "blue"},
+    "doc": {"icon": "📚", "name": "Documentation", "color": "blue"},
+    "accuracy": {"icon": "📚", "name": "Documentation", "color": "blue"},
+    "clarity": {"icon": "📚", "name": "Documentation", "color": "blue"},
+    "completeness": {"icon": "📚", "name": "Documentation", "color": "blue"},
+    # Breaking changes
+    "breaking": {"icon": "💥", "name": "Breaking Change", "color": "red"},
+    "breakingchange": {"icon": "💥", "name": "Breaking Change", "color": "red"},
+    "breakingchanges": {"icon": "💥", "name": "Breaking Change", "color": "red"},
+    "rename": {"icon": "💥", "name": "Breaking Change", "color": "red"},
+    "deletion": {"icon": "💥", "name": "Breaking Change", "color": "red"},
+    "signature": {"icon": "💥", "name": "Breaking Change", "color": "red"},
+    "signaturechange": {"icon": "💥", "name": "Breaking Change", "color": "red"},
+    # General
+    "bug": {"icon": "🐛", "name": "Bug", "color": "red"},
+    "error": {"icon": "🐛", "name": "Bug", "color": "red"},
+    "logic": {"icon": "🧠", "name": "Logic", "color": "magenta"},
+    "logicalerror": {"icon": "🧠", "name": "Logic", "color": "magenta"},
+    "style": {"icon": "🎨", "name": "Style", "color": "blue"},
+    "styleguide": {"icon": "🎨", "name": "Style", "color": "blue"},
+    "codestyle": {"icon": "🎨", "name": "Style", "color": "blue"},
+}
+
+_SEVERITY_INFO = {
+    "critical": {"color": "bold red", "icon": "🔴", "text": "CRITICAL"},
+    "high": {"color": "red", "icon": "🟠", "text": "HIGH"},
+    "medium": {"color": "yellow", "icon": "🟡", "text": "MEDIUM"},
+    "low": {"color": "green", "icon": "🟢", "text": "LOW"},
+    "info": {"color": "blue", "icon": "🔵", "text": "INFO"},
+}
+
+_SEVERITY_BORDER = {"critical": "red", "high": "red", "medium": "yellow", "low": "green", "info": "blue"}
+
+
 class ConsoleUI:
     """Handles Rich-based UI components for tool interactions."""
 
@@ -453,280 +551,62 @@ class ConsoleUI:
         self.console.print(f"\n[bold magenta]🚨 Issues Found ({len(issues)} total)[/bold magenta]\n")
 
         for i, issue in enumerate(issues, 1):
-            # Get severity color and style
             severity = issue.get("severity", "unknown").lower()
-            severity_info = {
-                "critical": {"color": "bold red", "icon": "🔴", "text": "CRITICAL"},
-                "high": {"color": "red", "icon": "🟠", "text": "HIGH"},
-                "medium": {"color": "yellow", "icon": "🟡", "text": "MEDIUM"},
-                "low": {"color": "green", "icon": "🟢", "text": "LOW"},
-                "info": {"color": "blue", "icon": "🔵", "text": "INFO"},
-            }.get(severity, {"color": "white", "icon": "⚪", "text": severity.upper()})
+            severity_info = _SEVERITY_INFO.get(severity, {"color": "white", "icon": "⚪", "text": severity.upper()})
 
-            # Get issue type with icon - normalize the type for better matching
             issue_type = issue.get("type", "unknown").lower()
             issue_type_normalized = issue_type.replace(" ", "").replace("_", "").replace("-", "")
+            type_info = _ISSUE_TYPE_INFO.get(issue_type_normalized, {"icon": "⚠️", "name": issue_type.title(), "color": "white"})
 
-            type_info = {
-                # Dependencies
-                "dependencies": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
-                "dependency": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
-                "import": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
-                "imports": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
-                "missingimport": {
-                    "icon": "📦",
-                    "name": "Dependencies",
-                    "color": "cyan",
-                },
-                "unusedimport": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
-                "invalidimport": {
-                    "icon": "📦",
-                    "name": "Dependencies",
-                    "color": "cyan",
-                },
-                "package": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
-                "packages": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
-                # Broken references
-                "brokenreferences": {
-                    "icon": "🔗",
-                    "name": "Broken References",
-                    "color": "red",
-                },
-                "brokenreference": {
-                    "icon": "🔗",
-                    "name": "Broken References",
-                    "color": "red",
-                },
-                "reference": {
-                    "icon": "🔗",
-                    "name": "Broken References",
-                    "color": "red",
-                },
-                "references": {
-                    "icon": "🔗",
-                    "name": "Broken References",
-                    "color": "red",
-                },
-                "undefined": {
-                    "icon": "🔗",
-                    "name": "Broken References",
-                    "color": "red",
-                },
-                "notfound": {"icon": "🔗", "name": "Broken References", "color": "red"},
-                "missing": {"icon": "🔗", "name": "Broken References", "color": "red"},
-                # Code quality
-                "codequality": {
-                    "icon": "✨",
-                    "name": "Code Quality",
-                    "color": "magenta",
-                },
-                "quality": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
-                "unused": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
-                "unusedvariable": {
-                    "icon": "✨",
-                    "name": "Code Quality",
-                    "color": "magenta",
-                },
-                "redundant": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
-                "errorhandling": {
-                    "icon": "✨",
-                    "name": "Code Quality",
-                    "color": "magenta",
-                },
-                "asyncawait": {
-                    "icon": "✨",
-                    "name": "Code Quality",
-                    "color": "magenta",
-                },
-                "async": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
-                # Security
-                "security": {"icon": "🔒", "name": "Security", "color": "red"},
-                "securityissue": {"icon": "🔒", "name": "Security", "color": "red"},
-                "secret": {"icon": "🔒", "name": "Security", "color": "red"},
-                "secrets": {"icon": "🔒", "name": "Security", "color": "red"},
-                "eval": {"icon": "🔒", "name": "Security", "color": "red"},
-                "injection": {"icon": "🔒", "name": "Security", "color": "red"},
-                "validation": {"icon": "🔒", "name": "Security", "color": "red"},
-                "unsafe": {"icon": "🔒", "name": "Security", "color": "red"},
-                # Best practices
-                "bestpractices": {
-                    "icon": "📋",
-                    "name": "Best Practices",
-                    "color": "blue",
-                },
-                "bestpractice": {
-                    "icon": "📋",
-                    "name": "Best Practices",
-                    "color": "blue",
-                },
-                "maintainability": {
-                    "icon": "📋",
-                    "name": "Best Practices",
-                    "color": "blue",
-                },
-                "readability": {
-                    "icon": "📋",
-                    "name": "Best Practices",
-                    "color": "blue",
-                },
-                "naming": {"icon": "📋", "name": "Best Practices", "color": "blue"},
-                "namingconvention": {
-                    "icon": "📋",
-                    "name": "Best Practices",
-                    "color": "blue",
-                },
-                "consistency": {
-                    "icon": "📋",
-                    "name": "Best Practices",
-                    "color": "blue",
-                },
-                "convention": {"icon": "📋", "name": "Best Practices", "color": "blue"},
-                # Performance
-                "performance": {"icon": "⚡", "name": "Performance", "color": "yellow"},
-                "perf": {"icon": "⚡", "name": "Performance", "color": "yellow"},
-                "loop": {"icon": "⚡", "name": "Performance", "color": "yellow"},
-                "loops": {"icon": "⚡", "name": "Performance", "color": "yellow"},
-                "duplicate": {"icon": "⚡", "name": "Performance", "color": "yellow"},
-                "query": {"icon": "⚡", "name": "Performance", "color": "yellow"},
-                "expensive": {"icon": "⚡", "name": "Performance", "color": "yellow"},
-                "optimization": {
-                    "icon": "⚡",
-                    "name": "Performance",
-                    "color": "yellow",
-                },
-                # Configuration
-                "configuration": {
-                    "icon": "⚙️",
-                    "name": "Configuration",
-                    "color": "cyan",
-                },
-                "config": {"icon": "⚙️", "name": "Configuration", "color": "cyan"},
-                "syntax": {"icon": "⚙️", "name": "Configuration", "color": "cyan"},
-                "syntaxerror": {"icon": "⚙️", "name": "Configuration", "color": "cyan"},
-                "deprecated": {"icon": "⚙️", "name": "Configuration", "color": "cyan"},
-                "settings": {"icon": "⚙️", "name": "Configuration", "color": "cyan"},
-                # Documentation
-                "documentation": {
-                    "icon": "📚",
-                    "name": "Documentation",
-                    "color": "blue",
-                },
-                "docs": {"icon": "📚", "name": "Documentation", "color": "blue"},
-                "doc": {"icon": "📚", "name": "Documentation", "color": "blue"},
-                "accuracy": {"icon": "📚", "name": "Documentation", "color": "blue"},
-                "clarity": {"icon": "📚", "name": "Documentation", "color": "blue"},
-                "completeness": {
-                    "icon": "📚",
-                    "name": "Documentation",
-                    "color": "blue",
-                },
-                # Breaking changes
-                "breaking": {"icon": "💥", "name": "Breaking Change", "color": "red"},
-                "breakingchange": {
-                    "icon": "💥",
-                    "name": "Breaking Change",
-                    "color": "red",
-                },
-                "breakingchanges": {
-                    "icon": "💥",
-                    "name": "Breaking Change",
-                    "color": "red",
-                },
-                "rename": {"icon": "💥", "name": "Breaking Change", "color": "red"},
-                "deletion": {"icon": "💥", "name": "Breaking Change", "color": "red"},
-                "signature": {"icon": "💥", "name": "Breaking Change", "color": "red"},
-                "signaturechange": {
-                    "icon": "💥",
-                    "name": "Breaking Change",
-                    "color": "red",
-                },
-                # General categories
-                "bug": {"icon": "🐛", "name": "Bug", "color": "red"},
-                "error": {"icon": "🐛", "name": "Bug", "color": "red"},
-                "logic": {"icon": "🧠", "name": "Logic", "color": "magenta"},
-                "logicalerror": {"icon": "🧠", "name": "Logic", "color": "magenta"},
-                "style": {"icon": "🎨", "name": "Style", "color": "blue"},
-                "styleguide": {"icon": "🎨", "name": "Style", "color": "blue"},
-                "codestyle": {"icon": "🎨", "name": "Style", "color": "blue"},
-            }.get(
-                issue_type_normalized,
-                {"icon": "⚠️", "name": issue_type.title(), "color": "white"},
-            )
-
-            # Build the card content
             file_path = issue.get("file", "N/A")
             line_number = issue.get("line", "-")
             description = issue.get("description", "No description provided")
             suggestion = issue.get("suggestion", "No suggestion provided")
             impact = issue.get("impact", None)
 
-            # Create the card content
             card_content = []
 
-            # Header with issue number, type, and severity
             header = f"[bold]{type_info['icon']} Issue #{i}: [{type_info['color']}]{type_info['name']}[/{type_info['color']}][/bold]"
             header += f"   {severity_info['icon']} [{severity_info['color']}]{severity_info['text']}[/{severity_info['color']}]"
             card_content.append(header)
             card_content.append("")
 
-            # File and line information
             card_content.append(f"📍 [cyan]Location:[/cyan] {file_path}")
             if line_number != "-":
                 card_content.append(f"📏 [cyan]Line:[/cyan] {line_number}")
             card_content.append("")
 
-            # Description
             card_content.append("📝 [cyan]Description:[/cyan]")
-            description_lines = self._format_multiline_text(description)
-            card_content.extend(description_lines)
+            card_content.extend(self._format_multiline_text(description))
             card_content.append("")
 
-            # Impact (if available)
             if impact and impact.strip():
                 card_content.append("💥 [cyan]Impact:[/cyan]")
-                impact_lines = self._format_multiline_text(impact)
-                card_content.extend(impact_lines)
+                card_content.extend(self._format_multiline_text(impact))
                 card_content.append("")
 
-            # Suggestion
             card_content.append("💡 [cyan]Suggestion:[/cyan]")
-            suggestion_lines = self._format_multiline_text(suggestion)
-            card_content.extend(suggestion_lines)
+            card_content.extend(self._format_multiline_text(suggestion))
 
-            # Affected references (if available)
             affected_references = issue.get("affected_references", None)
             if affected_references:
                 card_content.append("")
                 card_content.append("🔗 [cyan]Affected References:[/cyan]")
                 if isinstance(affected_references, list):
-                    for ref in affected_references:  # Show all references
+                    for ref in affected_references:
                         card_content.append(f"   • {ref}")
                 else:
-                    ref_lines = self._format_multiline_text(str(affected_references))
-                    card_content.extend(ref_lines)
+                    card_content.extend(self._format_multiline_text(str(affected_references)))
 
-            # Security reference (if available)
             security_reference = issue.get("security_reference", None)
             if security_reference and security_reference.strip():
                 card_content.append("")
                 card_content.append("🔒 [cyan]Security Reference:[/cyan]")
-                security_ref_lines = self._format_multiline_text(security_reference)
-                card_content.extend(security_ref_lines)
+                card_content.extend(self._format_multiline_text(security_reference))
 
-            # Determine border style based on severity
-            border_style = {
-                "critical": "red",
-                "high": "red",
-                "medium": "yellow",
-                "low": "green",
-                "info": "blue",
-            }.get(severity, "white")
+            border_style = _SEVERITY_BORDER.get(severity, "white")
+            self.console.print(Panel("\n".join(card_content), border_style=border_style, padding=(0, 1), expand=False))
 
-            # Create and show the card
-            card_text = "\n".join(card_content)
-            self.console.print(Panel(card_text, border_style=border_style, padding=(0, 1), expand=False))
-
-            # Add separator between cards (except for the last one)
             if i < len(issues):
                 self.console.print("")
 

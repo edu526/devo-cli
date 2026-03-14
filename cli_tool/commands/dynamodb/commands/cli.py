@@ -1,7 +1,5 @@
 """DynamoDB CLI command group."""
 
-from typing import Optional
-
 import click
 
 from cli_tool.commands.dynamodb.commands import (
@@ -178,34 +176,7 @@ def describe_table(ctx, table_name: str, region: str):
     help="Use saved template configuration",
 )
 @click.pass_context
-def export_table(
-    ctx,
-    table_name: str,
-    output: Optional[str],
-    format: str,
-    region: str,
-    limit: Optional[int],
-    attributes: Optional[str],
-    filter: Optional[str],
-    filter_values: Optional[str],
-    filter_names: Optional[str],
-    key_condition: Optional[str],
-    index: Optional[str],
-    mode: str,
-    null_value: str,
-    delimiter: str,
-    encoding: str,
-    bool_format: str,
-    compress: Optional[str],
-    metadata: bool,
-    pretty: bool,
-    parallel_scan: bool,
-    segments: int,
-    dry_run: bool,
-    yes: bool,
-    save_template: Optional[str],
-    use_template: Optional[str],
-):
+def export_table(ctx, **kwargs):  # noqa: PLR0913
     """
     Export DynamoDB table to CSV, JSON, or JSONL format.
 
@@ -226,37 +197,38 @@ def export_table(
       # Advanced: Manual key condition (rarely needed, auto-detected from --filter)
       devo dynamodb export my-table --key-condition "userId = :uid" --filter-values '{":uid": {"S": "user123"}}'
     """
+    from cli_tool.commands.dynamodb.commands.export_table import ExportParams
     from cli_tool.core.utils.aws import select_profile
 
     profile = select_profile(ctx.obj.get("profile"))
-    export_table_command(
+    params = ExportParams(
         profile=profile,
-        table_name=table_name,
-        output=output,
-        format=format,
-        region=region,
-        limit=limit,
-        attributes=attributes,
-        filter=filter,
-        filter_values=filter_values,
-        filter_names=filter_names,
-        key_condition=key_condition,
-        index=index,
-        mode=mode,
-        null_value=null_value,
-        delimiter=delimiter,
-        encoding=encoding,
-        bool_format=bool_format,
-        compress=compress,
-        metadata=metadata,
-        pretty=pretty,
-        parallel_scan=parallel_scan,
-        segments=segments,
-        dry_run=dry_run,
-        yes=yes,
-        save_template=save_template,
-        use_template=use_template,
+        table_name=kwargs["table_name"],
+        output=kwargs.get("output"),
+        fmt=kwargs["format"],
+        region=kwargs["region"],
+        limit=kwargs.get("limit"),
+        attributes=kwargs.get("attributes"),
+        filter_expr=kwargs.get("filter"),
+        filter_values=kwargs.get("filter_values"),
+        filter_names=kwargs.get("filter_names"),
+        key_condition=kwargs.get("key_condition"),
+        index=kwargs.get("index"),
+        mode=kwargs["mode"],
+        null_value=kwargs["null_value"],
+        delimiter=kwargs["delimiter"],
+        encoding=kwargs["encoding"],
+        bool_format=kwargs["bool_format"],
+        compress=kwargs.get("compress"),
+        metadata=kwargs["metadata"],
+        pretty=kwargs["pretty"],
+        parallel_scan=kwargs["parallel_scan"],
+        segments=kwargs["segments"],
+        dry_run=kwargs["dry_run"],
+        yes=kwargs["yes"],
+        save_template=kwargs.get("save_template"),
     )
+    export_table_command(params, kwargs.get("use_template"))
 
 
 @dynamodb.command(name="list-templates")

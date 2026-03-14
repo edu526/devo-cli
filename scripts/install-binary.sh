@@ -33,8 +33,8 @@ case "${ARCH}" in
     ARCH="arm64"
     ;;
   *)
-    echo -e "${RED}❌ Unsupported architecture: ${ARCH}${NC}"
-    echo "Supported: x86_64, aarch64, arm64"
+    echo -e "${RED}❌ Unsupported architecture: ${ARCH}${NC}" >&2
+    echo "Supported: x86_64, aarch64, arm64" >&2
     exit 1
     ;;
 esac
@@ -43,9 +43,9 @@ case "${PLATFORM}" in
   linux|darwin)
     ;;
   *)
-    echo -e "${RED}❌ Unsupported platform: ${PLATFORM}${NC}"
-    echo "Supported: Linux, macOS (Darwin)"
-    echo "For Windows, download manually from: ${BASE_URL}"
+    echo -e "${RED}❌ Unsupported platform: ${PLATFORM}${NC}" >&2
+    echo "Supported: Linux, macOS (Darwin)" >&2
+    echo "For Windows, download manually from: ${BASE_URL}" >&2
     exit 1
     ;;
 esac
@@ -60,18 +60,18 @@ echo ""
 
 # Check if curl is available
 if ! command -v curl &> /dev/null; then
-  echo -e "${RED}❌ curl is required but not installed${NC}"
+  echo -e "${RED}❌ curl is required but not installed${NC}" >&2
   exit 1
 fi
 
 # Download binary
 echo -e "${BLUE}📥 Downloading Devo CLI...${NC}"
 if ! curl -fL "${DOWNLOAD_URL}" -o devo; then
-  echo -e "${RED}❌ Download failed${NC}"
-  echo "Please check:"
-  echo "  1. The URL is correct: ${DOWNLOAD_URL}"
-  echo "  2. You have internet connection"
-  echo "  3. The version exists"
+  echo -e "${RED}❌ Download failed${NC}" >&2
+  echo "Please check:" >&2
+  echo "  1. The URL is correct: ${DOWNLOAD_URL}" >&2
+  echo "  2. You have internet connection" >&2
+  echo "  3. The version exists" >&2
   exit 1
 fi
 
@@ -82,7 +82,7 @@ chmod +x devo
 echo ""
 echo -e "${BLUE}🧪 Testing binary...${NC}"
 if ! ./devo --version; then
-  echo -e "${RED}❌ Binary test failed${NC}"
+  echo -e "${RED}❌ Binary test failed${NC}" >&2
   rm -f devo
   exit 1
 fi
@@ -127,7 +127,7 @@ case $choice in
       echo ""
       echo "Add this to your shell configuration file:"
       echo ""
-      if [ -n "$ZSH_VERSION" ]; then
+      if [[ -n "$ZSH_VERSION" ]]; then
         echo "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc"
         echo "  source ~/.zshrc"
       else

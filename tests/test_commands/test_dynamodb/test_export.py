@@ -1126,3 +1126,68 @@ def test_export_with_nested_attribute_filter(cli_runner, mock_dynamodb_client, t
     assert len(data) == 1
     assert data[0]["id"] == "item-1"
     assert data[0]["metadata"]["status"] == "active"
+
+
+@pytest.mark.integration
+def test_export_with_filter_values_auto_serialization(cli_runner, mock_dynamodb_client, mocker, tmp_path):
+    """Test that --filter-values auto-serializes Python values to DynamoDB format."""
+    # Create table with boolean attribute
+    mock_dynamodb_client.create_table(
+        TableName="test-table-bool",
+        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    # Add items with boolean values
+    mock_dynamodb_client.put_item(
+        TableName="test-table-bool",
+        Item={"id": {"S": "item-1"}, "isActive": {"BOOL": True}},
+    )
+    mock_dynamodb_client.put_item(
+        TableName="test-table-bool",
+        Item={"id": {"S": "item-2"}, "isActive": {"BOOL": False}},
+    )
+    mock_dynamodb_client.put_item(
+        TableName="test-table-bool",
+        Item={"id": {"S": "item-3"}, "isActive": {"BOOL": True}},
+    )
+
+    mocker.patch("cli_tool.core.utils.aws.create_aws_client", return_value=mock_dynamodb_client)
+
+    output_file = tmp_path / "export.json"
+
+    # Test: Boolean value (Python true should be auto-serialized to {"BOOL": true})
+    result = cli_runner.invoke(
+        export_table,
+        [
+            "test-table-bool",
+            "--output",
+            str(output_file),
+            "--format",
+            "json",
+            "--filter",
+            "isActive = :active",
+            "--filter-values",
+            '{":active": true}',
+            "--yes",
+        ],
+        obj={},
+    )
+
+    if result.exit_code != 0:
+        print(f"Exit code: {result.exit_code}")
+        print(f"Output: {result.output}")
+        if result.exception:
+            import traceback
+
+            traceback.print_exception(type(result.exception), result.exception, result.exception.__traceback__)
+
+    assert result.exit_code == 0
+    assert output_file.exists()
+
+    with open(output_file) as f:
+        data = json.load(f)
+
+    assert len(data) == 2
+    assert all(item["isActive"] is True for item in data)

@@ -127,7 +127,7 @@ def _get_credentials_from_cli(profile_name: Optional[str] = None):
                 "expiry_time": creds.get("Expiration"),
             }
     except Exception:
-        pass
+        return None
 
     return None
 

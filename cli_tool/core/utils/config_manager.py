@@ -251,6 +251,20 @@ def export_config(sections: Optional[List[str]] = None, output_path: Optional[st
     return exported
 
 
+def _import_sections(current_config: Dict, imported_config: Dict, sections: list, merge: bool) -> None:
+    """Apply selected sections from imported_config into current_config in-place."""
+    for section in sections:
+        if section not in imported_config:
+            continue
+        if merge and section in current_config:
+            if isinstance(current_config[section], dict) and isinstance(imported_config[section], dict):
+                current_config[section] = _deep_merge(current_config[section], imported_config[section])
+            else:
+                current_config[section] = imported_config[section]
+        else:
+            current_config[section] = imported_config[section]
+
+
 def import_config(input_path: str, sections: Optional[List[str]] = None, merge: bool = True):
     """
     Import configuration from file.
@@ -281,26 +295,22 @@ def import_config(input_path: str, sections: Optional[List[str]] = None, merge: 
     current_config = load_config()
 
     if sections:
-        # Import only specified sections
-        for section in sections:
-            if section in imported_config:
-                if merge and section in current_config:
-                    # Merge section
-                    if isinstance(current_config[section], dict) and isinstance(imported_config[section], dict):
-                        current_config[section] = _deep_merge(current_config[section], imported_config[section])
-                    else:
-                        current_config[section] = imported_config[section]
-                else:
-                    # Replace section
-                    current_config[section] = imported_config[section]
+        _import_sections(current_config, imported_config, sections, merge)
+    elif merge:
+        current_config = _deep_merge(current_config, imported_config)
     else:
-        # Import all sections
-        if merge:
-            current_config = _deep_merge(current_config, imported_config)
-        else:
-            current_config = imported_config
+        current_config = imported_config
 
     save_config(current_config)
+
+
+def _backup_legacy_file(legacy_path, backup_dir, backup_name: str, console) -> None:
+    """Move a legacy config file to the backup directory."""
+    import shutil
+
+    backup_path = backup_dir / backup_name
+    shutil.move(str(legacy_path), str(backup_path))
+    console.print(f"[dim]Backed up to {backup_path}[/dim]")
 
 
 def migrate_legacy_configs(backup: bool = True) -> Dict[str, bool]:
@@ -321,61 +331,46 @@ def migrate_legacy_configs(backup: bool = True) -> Dict[str, bool]:
     legacy_ssm = get_legacy_ssm_config_file()
     legacy_dynamodb = get_legacy_dynamodb_config_file()
 
-    status = {"ssm": False, "dynamodb": False, "already_migrated": config_file.exists() and not (legacy_ssm.exists() or legacy_dynamodb.exists())}
+    already_migrated = config_file.exists() and not (legacy_ssm.exists() or legacy_dynamodb.exists())
+    status = {"ssm": False, "dynamodb": False, "already_migrated": already_migrated}
 
-    if status["already_migrated"]:
+    if already_migrated:
         console.print("[yellow]Configuration already consolidated[/yellow]")
         return status
 
-    # Load or create base config
-    if config_file.exists():
-        new_config = load_config()
-    else:
-        new_config = get_default_config()
+    new_config = load_config() if config_file.exists() else get_default_config()
 
-    # Migrate SSM config
     if legacy_ssm.exists():
         try:
             with open(legacy_ssm, "r", encoding="utf-8") as f:
-                ssm_config = json.load(f)
-                new_config["ssm"] = ssm_config
-                status["ssm"] = True
-                console.print(f"[green]✓ Migrated SSM config from {legacy_ssm}[/green]")
+                new_config["ssm"] = json.load(f)
+            status["ssm"] = True
+            console.print(f"[green]✓ Migrated SSM config from {legacy_ssm}[/green]")
         except Exception as e:
             console.print(f"[red]✗ Failed to migrate SSM config: {e}[/red]")
 
-    # Migrate DynamoDB config
     if legacy_dynamodb.exists():
         try:
             with open(legacy_dynamodb, "r", encoding="utf-8") as f:
-                dynamodb_templates = json.load(f)
-                new_config["dynamodb"]["export_templates"] = dynamodb_templates
-                status["dynamodb"] = True
-                console.print(f"[green]✓ Migrated DynamoDB config from {legacy_dynamodb}[/green]")
+                new_config["dynamodb"]["export_templates"] = json.load(f)
+            status["dynamodb"] = True
+            console.print(f"[green]✓ Migrated DynamoDB config from {legacy_dynamodb}[/green]")
         except Exception as e:
             console.print(f"[red]✗ Failed to migrate DynamoDB config: {e}[/red]")
 
-    # Save consolidated config
     if status["ssm"] or status["dynamodb"]:
         save_config(new_config)
         console.print(f"\n[green]✓ Consolidated config saved to {config_file}[/green]")
 
-        # Backup and remove legacy files
         if backup:
             backup_dir = get_config_dir() / "backup"
             backup_dir.mkdir(exist_ok=True)
 
-            import shutil
-
             if legacy_ssm.exists() and status["ssm"]:
-                backup_path = backup_dir / "ssm-config.json.bak"
-                shutil.move(str(legacy_ssm), str(backup_path))
-                console.print(f"[dim]Backed up to {backup_path}[/dim]")
+                _backup_legacy_file(legacy_ssm, backup_dir, "ssm-config.json.bak", console)
 
             if legacy_dynamodb.exists() and status["dynamodb"]:
-                backup_path = backup_dir / "export_templates.json.bak"
-                shutil.move(str(legacy_dynamodb), str(backup_path))
-                console.print(f"[dim]Backed up to {backup_path}[/dim]")
+                _backup_legacy_file(legacy_dynamodb, backup_dir, "export_templates.json.bak", console)
 
     return status
 

@@ -30,8 +30,8 @@ case "${ARCH}" in
     ARCH="arm64"
     ;;
   *)
-    echo -e "${RED}❌ Unsupported architecture: ${ARCH}${NC}"
-    echo "Supported: x86_64, aarch64, arm64"
+    echo -e "${RED}❌ Unsupported architecture: ${ARCH}${NC}" >&2
+    echo "Supported: x86_64, aarch64, arm64" >&2
     exit 1
     ;;
 esac
@@ -40,9 +40,9 @@ case "${PLATFORM}" in
   linux|darwin)
     ;;
   *)
-    echo -e "${RED}❌ Unsupported platform: ${PLATFORM}${NC}"
-    echo "Supported: Linux, macOS"
-    echo "For Windows, download from: https://github.com/${REPO}/releases"
+    echo -e "${RED}❌ Unsupported platform: ${PLATFORM}${NC}" >&2
+    echo "Supported: Linux, macOS" >&2
+    echo "For Windows, download from: https://github.com/${REPO}/releases" >&2
     exit 1
     ;;
 esac
@@ -60,7 +60,7 @@ case "${PLATFORM}" in
     ARCHIVE_FORMAT="tarball"
     ;;
   *)
-    echo -e "${RED}❌ Unsupported platform: ${PLATFORM}${NC}"
+    echo -e "${RED}❌ Unsupported platform: ${PLATFORM}${NC}" >&2
     exit 1
     ;;
 esac
@@ -78,39 +78,39 @@ echo ""
 
 # Check if curl and tar are available
 if ! command -v curl &> /dev/null; then
-  echo -e "${RED}❌ curl is required but not installed${NC}"
+  echo -e "${RED}❌ curl is required but not installed${NC}" >&2
   exit 1
 fi
 
-if [ "${ARCHIVE_FORMAT}" = "tarball" ] && ! command -v tar &> /dev/null; then
-  echo -e "${RED}❌ tar is required but not installed${NC}"
+if [[ "${ARCHIVE_FORMAT}" = "tarball" ]] && ! command -v tar &> /dev/null; then
+  echo -e "${RED}❌ tar is required but not installed${NC}" >&2
   exit 1
 fi
 
 # Download binary
 echo -e "${BLUE}📥 Downloading Devo CLI...${NC}"
 if ! curl -fsSL "${DOWNLOAD_URL}" -o "${DOWNLOAD_FILE}"; then
-  echo -e "${RED}❌ Download failed${NC}"
-  echo "Please check:"
-  echo "  1. The URL is correct: ${DOWNLOAD_URL}"
-  echo "  2. You have internet connection"
-  echo "  3. The version exists"
+  echo -e "${RED}❌ Download failed${NC}" >&2
+  echo "Please check:" >&2
+  echo "  1. The URL is correct: ${DOWNLOAD_URL}" >&2
+  echo "  2. You have internet connection" >&2
+  echo "  3. The version exists" >&2
   exit 1
 fi
 
 # Extract if needed
-if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
+if [[ "${ARCHIVE_FORMAT}" = "tarball" ]]; then
   echo -e "${BLUE}📦 Extracting archive...${NC}"
   if ! tar -xzf "${DOWNLOAD_FILE}"; then
-    echo -e "${RED}❌ Extraction failed${NC}"
+    echo -e "${RED}❌ Extraction failed${NC}" >&2
     rm -f "${DOWNLOAD_FILE}"
     exit 1
   fi
   rm -f "${DOWNLOAD_FILE}"
 
   # The tarball contains a directory with the binary and _internal folder
-  if [ ! -f "${BINARY_NAME}/devo" ]; then
-    echo -e "${RED}❌ Binary not found in archive${NC}"
+  if [[ ! -f "${BINARY_NAME}/devo" ]]; then
+    echo -e "${RED}❌ Binary not found in archive${NC}" >&2
     exit 1
   fi
 
@@ -121,7 +121,7 @@ if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
   echo ""
   echo -e "${BLUE}🧪 Testing binary...${NC}"
   if ! "${BINARY_NAME}/devo" --version; then
-    echo -e "${RED}❌ Binary test failed${NC}"
+    echo -e "${RED}❌ Binary test failed${NC}" >&2
     rm -rf "${BINARY_NAME}"
     exit 1
   fi
@@ -139,7 +139,7 @@ else
   echo ""
   echo -e "${BLUE}🧪 Testing binary...${NC}"
   if ! ./devo --version; then
-    echo -e "${RED}❌ Binary test failed${NC}"
+    echo -e "${RED}❌ Binary test failed${NC}" >&2
     rm -f devo
     exit 1
   fi
@@ -154,9 +154,9 @@ echo ""
 # Determine installation mode
 INSTALL_DIR="${DEVO_INSTALL_DIR:-}"
 
-if [ -z "$INSTALL_DIR" ]; then
+if [[ -z "$INSTALL_DIR" ]]; then
   # Check if running interactively
-  if [ -t 0 ] && [ -t 1 ]; then
+  if [[ -t 0 ]] && [[ -t 1 ]]; then
     # Interactive mode - ask user
     echo "Where would you like to install Devo CLI?"
     echo "  1) /usr/local/bin (system-wide, requires sudo)"
@@ -185,7 +185,7 @@ case $choice in
     echo -e "${BLUE}Installing to ${INSTALL_DIR}...${NC}"
     mkdir -p "$INSTALL_DIR"
 
-    if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
+    if [[ "${ARCHIVE_FORMAT}" = "tarball" ]]; then
       # macOS: move entire directory
       mv "${BINARY_PATH}" "$INSTALL_DIR/"
       echo -e "${GREEN}✅ Installed to ${INSTALL_DIR}/${BINARY_NAME}${NC}"
@@ -201,14 +201,14 @@ case $choice in
     echo ""
     echo -e "${BLUE}Installing to /usr/local/bin...${NC}"
 
-    if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
+    if [[ "${ARCHIVE_FORMAT}" = "tarball" ]]; then
       # macOS: move directory and create symlink
       if sudo mv "${BINARY_PATH}" /usr/local/lib/; then
         sudo ln -sf "/usr/local/lib/${BINARY_NAME}/devo" /usr/local/bin/devo
         echo -e "${GREEN}✅ Installed to /usr/local/lib/${BINARY_NAME}${NC}"
         echo -e "${GREEN}✅ Symlink created at /usr/local/bin/devo${NC}"
       else
-        echo -e "${RED}❌ Installation failed${NC}"
+        echo -e "${RED}❌ Installation failed${NC}" >&2
         exit 1
       fi
     else
@@ -216,7 +216,7 @@ case $choice in
       if sudo mv "${BINARY_PATH}" /usr/local/bin/; then
         echo -e "${GREEN}✅ Installed to /usr/local/bin/devo${NC}"
       else
-        echo -e "${RED}❌ Installation failed${NC}"
+        echo -e "${RED}❌ Installation failed${NC}" >&2
         exit 1
       fi
     fi
@@ -226,7 +226,7 @@ case $choice in
     echo -e "${BLUE}Installing to ~/.local/bin...${NC}"
     mkdir -p ~/.local/bin
 
-    if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
+    if [[ "${ARCHIVE_FORMAT}" = "tarball" ]]; then
       # macOS: move directory and create symlink
       mkdir -p ~/.local/lib
       mv "${BINARY_PATH}" ~/.local/lib/
@@ -246,7 +246,7 @@ case $choice in
       echo ""
       echo "Add this to your shell configuration file:"
       echo ""
-      if [ -n "$ZSH_VERSION" ]; then
+      if [[ -n "$ZSH_VERSION" ]]; then
         echo "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc"
         echo "  source ~/.zshrc"
       else
@@ -259,7 +259,7 @@ case $choice in
   3)
     echo ""
 
-    if [ "${ARCHIVE_FORMAT}" = "tarball" ]; then
+    if [[ "${ARCHIVE_FORMAT}" = "tarball" ]]; then
       echo -e "${GREEN}✅ Binary ready in ${BINARY_PATH}${NC}"
       echo ""
       echo -e "${YELLOW}To use: ./${BINARY_PATH}/devo${NC}"
@@ -271,7 +271,7 @@ case $choice in
     fi
     ;;
   *)
-    echo -e "${RED}Invalid choice${NC}"
+    echo -e "${RED}Invalid choice${NC}" >&2
     exit 1
     ;;
 esac

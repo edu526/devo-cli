@@ -6,6 +6,7 @@ git operations, and file system interactions. All fixtures follow pytest best
 practices with appropriate scoping for test isolation.
 """
 
+import os
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -103,7 +104,7 @@ def mock_dynamodb_client(monkeypatch):
     monkeypatch.delenv("AWS_PROFILE", raising=False)
 
     with mock_aws():
-        yield boto3.client("dynamodb", region_name="us-east-1")
+        yield boto3.client("dynamodb", region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
 
 
 @pytest.fixture

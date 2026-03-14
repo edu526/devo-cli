@@ -382,7 +382,7 @@ def search_function_definition(function_name: str, file_extensions: str = "py,js
 
 
 @tool
-def analyze_import_usage(symbol_name: str, file_path: str, show_context: bool = True) -> str:
+def analyze_import_usage(symbol_name: str, file_path: str, show_context: bool = True) -> str:  # noqa: ARG001
     """
     Analyze symbol imports and usage in a file.
 
@@ -421,7 +421,6 @@ def analyze_import_usage(symbol_name: str, file_path: str, show_context: bool = 
 
         imports = []
         usages = []
-        import re
 
         escaped_symbol = re.escape(symbol_name)
 

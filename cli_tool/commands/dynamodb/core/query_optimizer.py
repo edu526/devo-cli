@@ -7,7 +7,6 @@ from typing import Any, Dict, Optional
 def detect_usable_index(
     filter_expression: str,
     expression_attribute_names: Optional[Dict[str, str]],
-    expression_attribute_values: Optional[Dict[str, Any]],
     table_info: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
     """
@@ -221,15 +220,21 @@ def should_use_parallel_scan(item_count: int, use_parallel: bool) -> tuple[bool,
       Tuple of (should_use_parallel, segments)
     """
     if use_parallel:
-        return True, 4  # User explicitly requested
-
-    # Auto-enable for large tables
-    if item_count > 100000:
+        # User explicitly requested — auto-tune segments based on table size
         if item_count > 1000000:
             return True, 16
-        elif item_count > 500000:
+        if item_count > 500000:
             return True, 12
-        else:
+        if item_count > 100000:
             return True, 8
+        return True, 4
+
+    # Auto-enable for large tables
+    if item_count > 1000000:
+        return True, 16
+    if item_count > 500000:
+        return True, 12
+    if item_count > 100000:
+        return True, 8
 
     return False, 4

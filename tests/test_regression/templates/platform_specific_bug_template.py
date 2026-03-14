@@ -43,14 +43,14 @@ import pytest
 
 @pytest.mark.platform
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows-specific bug")
-def test_issue_XXX_windows_specific_bug():
+def test_issue_nnn_windows_specific_bug():
     """
-    Regression test for Issue #XXX: [Windows-specific bug description].
+    Regression test for Issue #NNN: [Windows-specific bug description].
 
     Bug: [What went wrong on Windows]
     Fix: [How it was fixed for Windows]
 
-    Issue: https://github.com/org/repo/issues/XXX
+    Issue: https://github.com/org/repo/issues/NNN
     """
     # ARRANGE: Set up Windows-specific test conditions
     # Use Windows-style paths, environment variables, etc.
@@ -58,45 +58,42 @@ def test_issue_XXX_windows_specific_bug():
     # ACT: Execute the code that previously failed on Windows
 
     # ASSERT: Verify it now works correctly on Windows
-    pass
 
 
 @pytest.mark.platform
 @pytest.mark.skipif(sys.platform != "darwin", reason="macOS-specific bug")
-def test_issue_XXX_macos_specific_bug():
+def test_issue_nnn_macos_specific_bug():
     """
-    Regression test for Issue #XXX: [macOS-specific bug description].
+    Regression test for Issue #NNN: [macOS-specific bug description].
 
     Bug: [What went wrong on macOS]
     Fix: [How it was fixed for macOS]
 
-    Issue: https://github.com/org/repo/issues/XXX
+    Issue: https://github.com/org/repo/issues/NNN
     """
     # ARRANGE: Set up macOS-specific test conditions
 
     # ACT: Execute the code that previously failed on macOS
 
     # ASSERT: Verify it now works correctly on macOS
-    pass
 
 
 @pytest.mark.platform
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux-specific bug")
-def test_issue_XXX_linux_specific_bug():
+def test_issue_nnn_linux_specific_bug():
     """
-    Regression test for Issue #XXX: [Linux-specific bug description].
+    Regression test for Issue #NNN: [Linux-specific bug description].
 
     Bug: [What went wrong on Linux]
     Fix: [How it was fixed for Linux]
 
-    Issue: https://github.com/org/repo/issues/XXX
+    Issue: https://github.com/org/repo/issues/NNN
     """
     # ARRANGE: Set up Linux-specific test conditions
 
     # ACT: Execute the code that previously failed on Linux
 
     # ASSERT: Verify it now works correctly on Linux
-    pass
 
 
 @pytest.mark.platform
@@ -108,9 +105,9 @@ def test_issue_XXX_linux_specific_bug():
         ("linux", "expected_linux_behavior"),
     ],
 )
-def test_issue_XXX_cross_platform_consistency(platform, expected_behavior, mocker):
+def test_issue_nnn_cross_platform_consistency(platform, expected_behavior, mocker):
     """
-    Regression test for Issue #XXX: [cross-platform consistency].
+    Regression test for Issue #NNN: [cross-platform consistency].
 
     Verify that the fix works correctly on all platforms.
     """
@@ -118,7 +115,6 @@ def test_issue_XXX_cross_platform_consistency(platform, expected_behavior, mocke
     mocker.patch("sys.platform", platform)
 
     # Test that behavior is correct for each platform
-    pass
 
 
 # ============================================================================

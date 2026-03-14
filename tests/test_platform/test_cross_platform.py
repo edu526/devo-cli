@@ -7,6 +7,9 @@ Tests include:
 - Path separator handling across Windows/Linux/macOS
 - Shell detection across bash/zsh/fish/powershell/cmd
 - Binary format detection (single file, tarball, zip)
+- Platform detection and normalization
+- Executable path detection
+- Config directory handling
 
 Requirements: 5.1, 5.3, 23.5
 """
@@ -18,8 +21,8 @@ import pytest
 
 
 @pytest.mark.platform
-class TestCrossPlatformPathSeparators:
-    """Test path separator handling across all platforms."""
+class TestCrossPlatformPathHandling:
+    """Test path handling across all platforms."""
 
     @pytest.mark.parametrize(
         "platform_name,expected_separator",
@@ -35,7 +38,6 @@ class TestCrossPlatformPathSeparators:
         Validates: Requirements 5.1, 5.3, 23.5
         """
         import os
-        from pathlib import Path
 
         # Mock platform.system to simulate different platforms
         mocker.patch("platform.system", return_value=platform_name)
@@ -107,6 +109,76 @@ class TestCrossPlatformPathSeparators:
         assert "sso" in str(nested_path)
         assert "config.json" in str(nested_path)
 
+    @pytest.mark.parametrize("platform_name", ["Windows", "Darwin", "Linux"])
+    def test_config_path_handling(self, platform_name, mocker, temp_config_dir):
+        """Test that config paths work correctly on all platforms.
+
+        Validates: Requirements 5.1, 5.3
+        """
+        # Mock platform.system
+        mocker.patch("platform.system", return_value=platform_name)
+
+        # Create a config file path in temp directory
+        config_path = temp_config_dir / "config.json"
+
+        # Write and read to verify path handling
+        config_path.write_text('{"test": "value"}')
+        content = config_path.read_text()
+
+        assert content == '{"test": "value"}'
+        assert config_path.exists()
+
+    @pytest.mark.parametrize("platform_name", ["Windows", "Darwin", "Linux"])
+    def test_nested_path_creation(self, platform_name, mocker, temp_config_dir):
+        """Test creating nested directories on all platforms.
+
+        Validates: Requirements 5.1, 5.3
+        """
+        # Mock platform.system
+        mocker.patch("platform.system", return_value=platform_name)
+
+        # Create nested path
+        nested_path = temp_config_dir / "aws" / "sso" / "profiles" / "dev"
+        nested_path.mkdir(parents=True, exist_ok=True)
+
+        # Verify directory was created
+        assert nested_path.exists()
+        assert nested_path.is_dir()
+
+    @pytest.mark.parametrize(
+        "platform_name,path_with_spaces",
+        [
+            ("Windows", "Program Files/Devo CLI/config.json"),
+            ("Darwin", "Library/Application Support/Devo CLI/config.json"),
+            ("Linux", "My Documents/Devo CLI/config.json"),
+        ],
+    )
+    def test_paths_with_spaces_handling(self, platform_name, path_with_spaces, mocker, temp_config_dir):
+        """Test that paths with spaces are handled correctly on all platforms.
+
+        Validates: Requirements 5.1, 5.3, 23.5
+        """
+        from pathlib import Path
+
+        # Mock platform.system
+        mocker.patch("platform.system", return_value=platform_name)
+
+        # Create path with spaces in temp directory
+        path_parts = path_with_spaces.split("/")
+        test_path = temp_config_dir
+        for part in path_parts[:-1]:
+            test_path = test_path / part
+        test_path.mkdir(parents=True, exist_ok=True)
+        test_path = test_path / path_parts[-1]
+
+        # Write and read
+        test_path.write_text('{"test": "value"}')
+        content = test_path.read_text()
+
+        # Verify handling
+        assert content == '{"test": "value"}'
+        assert test_path.exists()
+
 
 @pytest.mark.platform
 class TestCrossPlatformShellDetection:
@@ -120,8 +192,6 @@ class TestCrossPlatformShellDetection:
             ("zsh", "/bin/zsh"),
             ("zsh", "/usr/bin/zsh"),
             ("fish", "/usr/bin/fish"),
-            ("bash", "/bin/bash"),
-            ("zsh", "/bin/zsh"),
             ("fish", "/usr/local/bin/fish"),
         ],
     )
@@ -263,18 +333,26 @@ class TestCrossPlatformBinaryFormat:
             assert not binary_name.endswith(".zip")
             assert not binary_name.endswith(".tar.gz")
 
+
+@pytest.mark.platform
+class TestCrossPlatformPlatformDetection:
+    """Test platform detection and normalization across all platforms."""
+
     @pytest.mark.parametrize(
-        "platform_name,arch,expected_platform_lower",
+        "platform_name,arch,expected_platform_lower,expected_arch",
         [
-            ("Windows", "AMD64", "windows"),
-            ("Darwin", "x86_64", "darwin"),
-            ("Darwin", "arm64", "darwin"),
-            ("Linux", "x86_64", "linux"),
-            ("Linux", "aarch64", "linux"),
+            ("Windows", "AMD64", "windows", "amd64"),
+            ("Windows", "ARM64", "windows", "arm64"),
+            ("Darwin", "x86_64", "darwin", "amd64"),
+            ("Darwin", "arm64", "darwin", "arm64"),
+            ("Darwin", "aarch64", "darwin", "arm64"),
+            ("Linux", "x86_64", "linux", "amd64"),
+            ("Linux", "aarch64", "linux", "arm64"),
+            ("Linux", "arm64", "linux", "arm64"),
         ],
     )
-    def test_platform_normalization(self, platform_name, arch, expected_platform_lower, mocker):
-        """Test that platform names are normalized correctly.
+    def test_platform_normalization(self, platform_name, arch, expected_platform_lower, expected_arch, mocker):
+        """Test that platform names and architectures are normalized correctly.
 
         Validates: Requirements 5.1, 5.3, 23.5
         """
@@ -289,12 +367,7 @@ class TestCrossPlatformBinaryFormat:
 
         # Verify normalization
         assert detected_platform == expected_platform_lower
-
-        # Verify arch normalization
-        if arch in ("x86_64", "AMD64"):
-            assert detected_arch == "amd64"
-        elif arch in ("aarch64", "arm64"):
-            assert detected_arch == "arm64"
+        assert detected_arch == expected_arch
 
 
 @pytest.mark.platform
@@ -334,96 +407,14 @@ class TestCrossPlatformExecutablePath:
         assert isinstance(result_path, Path)
 
         # Verify mode-specific behavior
-        # Note: Path objects will use the OS's native separator
-        # On Windows running tests, Unix paths will be converted to Windows paths
         if expected_mode == "onedir":
             # For onedir, should return parent directory
             # Just verify it's a valid Path and contains expected components
             result_str = str(result_path)
-            exe_path_obj = Path(exe_path)
-            # Check if result is parent of exe_path or contains key components
             assert "devo" in result_str.lower() or result_path.name == "devo"
         else:
             # For onefile, should return the executable itself
-            # Just verify it's a Path object
             assert isinstance(result_path, Path)
-
-    @pytest.mark.parametrize(
-        "platform_name,path_with_spaces",
-        [
-            ("Windows", "C:\\Program Files\\Devo CLI\\config.json"),
-            ("Darwin", "/Users/Developer/Library/Application Support/Devo CLI/config.json"),
-            ("Linux", "/home/developer/My Documents/Devo CLI/config.json"),
-        ],
-    )
-    def test_paths_with_spaces_handling(self, platform_name, path_with_spaces, mocker, temp_config_dir):
-        """Test that paths with spaces are handled correctly on all platforms.
-
-        Validates: Requirements 5.1, 5.3, 23.5
-        """
-        from pathlib import Path
-
-        # Mock platform.system
-        mocker.patch("platform.system", return_value=platform_name)
-
-        # Create path with spaces in temp directory
-        # Use relative path to avoid platform-specific absolute path issues
-        path_parts = ["Program Files", "Devo CLI", "config.json"]
-        test_path = temp_config_dir
-        for part in path_parts[:-1]:
-            test_path = test_path / part
-        test_path.mkdir(parents=True, exist_ok=True)
-        test_path = test_path / path_parts[-1]
-
-        # Write and read
-        test_path.write_text('{"test": "value"}')
-        content = test_path.read_text()
-
-        # Verify handling
-        assert content == '{"test": "value"}'
-        assert test_path.exists()
-        assert "Program Files" in str(test_path) or "Devo CLI" in str(test_path)
-
-
-@pytest.mark.platform
-class TestCrossPlatformBinaryVerification:
-    """Test binary verification across all platforms."""
-
-    @pytest.mark.parametrize(
-        "platform_name,binary_header,is_valid",
-        [
-            ("Linux", b"\x7fELF", True),  # ELF header
-            ("Linux", b"invalid", False),
-        ],
-    )
-    @pytest.mark.skipif(sys.platform != "linux", reason="Binary verification is platform-specific")
-    def test_binary_header_verification(self, platform_name, binary_header, is_valid, mocker, temp_config_dir):
-        """Test that binary headers are correctly verified for each platform.
-
-        Note: This test only runs on Linux since verify_binary checks sys.platform.
-        For cross-platform testing, we would need to mock sys.platform which is complex.
-
-        Validates: Requirements 5.1, 5.3, 23.5
-        """
-        from cli_tool.commands.upgrade.core.downloader import verify_binary
-
-        # Create test binary with header
-        binary_path = temp_config_dir / "test_binary"
-
-        # For valid binaries, add sufficient size (>10MB for Linux)
-        if is_valid:
-            binary_content = binary_header + b"\x00" * (10 * 1024 * 1024)
-        else:
-            binary_content = binary_header + b"\x00" * 100
-
-        binary_path.write_bytes(binary_content)
-
-        # Verify binary (single file, not archive)
-        # Note: verify_binary checks sys.platform internally, so we can only test Linux on Linux
-        result = verify_binary(binary_path, is_archive=False)
-
-        # Verify result
-        assert result == is_valid
 
 
 @pytest.mark.platform

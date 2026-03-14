@@ -219,9 +219,9 @@ def test_json_roundtrip_numeric_values(temp_config_dir, mocker):
     assert restored["numbers"]["integer"] == 42
     assert restored["numbers"]["zero"] == 0
     assert restored["numbers"]["negative"] == -100
-    assert restored["numbers"]["float"] == 3.14159
+    assert restored["numbers"]["float"] == pytest.approx(3.14159)
     assert restored["numbers"]["large"] == 9999999999
-    assert restored["numbers"]["scientific"] == 1.23e10
+    assert restored["numbers"]["scientific"] == pytest.approx(1.23e10)
 
 
 @pytest.mark.unit
@@ -345,7 +345,7 @@ def test_json_roundtrip_mixed_types(temp_config_dir, mocker):
     restored = load_config()
     assert restored["mixed"]["string"] == "text"
     assert restored["mixed"]["number"] == 42
-    assert restored["mixed"]["float"] == 3.14
+    assert restored["mixed"]["float"] == pytest.approx(3.14)
     assert restored["mixed"]["boolean"] is True
     assert restored["mixed"]["null"] is None
     assert restored["mixed"]["array"] == [1, 2, 3]

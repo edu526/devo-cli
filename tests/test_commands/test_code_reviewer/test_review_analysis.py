@@ -42,7 +42,7 @@ def mock_select_profile(mocker):
 def mock_console_ui(mocker):
     """Mock console_ui to avoid terminal output during tests."""
     # Mock in both analyzer and analyze modules
-    mock_analyzer_ui = mocker.patch("cli_tool.commands.code_reviewer.core.analyzer.console_ui")
+    mocker.patch("cli_tool.commands.code_reviewer.core.analyzer.console_ui")
     mock_analyze_ui = mocker.patch("cli_tool.commands.code_reviewer.commands.analyze.console_ui")
     return mock_analyze_ui  # Return the one used in the command
 
@@ -399,7 +399,7 @@ def test_code_review_with_metrics_enabled(
     # Verify metrics are included
     assert "metrics" in output_data
     assert output_data["metrics"]["accumulated_usage"]["totalTokens"] == 1500
-    assert output_data["metrics"]["total_duration"] == 2.5
+    assert output_data["metrics"]["total_duration"] == pytest.approx(2.5)
 
 
 @pytest.mark.integration

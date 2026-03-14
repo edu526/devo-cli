@@ -378,7 +378,7 @@ class DynamoDBExporter:
 
             file_handle = io.TextIOWrapper(file_handle, encoding=encoding, newline="")
         else:
-            file_handle = open(actual_output_file, "w", encoding=encoding, newline="")
+            file_handle = actual_output_file.open("w", encoding=encoding, newline="")
 
         try:
             writer = csv.DictWriter(
@@ -394,7 +394,7 @@ class DynamoDBExporter:
             if include_metadata:
                 if compress:
                     meta_file = actual_output_file.with_suffix(".meta")
-                    with open(meta_file, "w", encoding="utf-8") as mf:
+                    with meta_file.open("w", encoding="utf-8") as mf:
                         mf.write(f"Export Date: {datetime.now().isoformat()}\n")
                         mf.write(f"Table: {self.table_name}\n")
                         mf.write(f"Region: {self.region}\n")
@@ -493,7 +493,7 @@ class DynamoDBExporter:
 
             file_handle = io.TextIOWrapper(file_handle, encoding=encoding, newline="")
         else:
-            file_handle = open(actual_output_file, "w", encoding=encoding, newline="")
+            file_handle = actual_output_file.open("w", encoding=encoding, newline="")
 
         try:
             writer = csv.DictWriter(
@@ -509,7 +509,7 @@ class DynamoDBExporter:
             if include_metadata:
                 if compress:
                     meta_file = actual_output_file.with_suffix(".meta")
-                    with open(meta_file, "w", encoding="utf-8") as mf:
+                    with meta_file.open("w", encoding="utf-8") as mf:
                         mf.write(f"Export Date: {datetime.now().isoformat()}\n")
                         mf.write(f"Table: {self.table_name}\n")
                         mf.write(f"Region: {self.region}\n")
@@ -629,7 +629,7 @@ class DynamoDBExporter:
 
             file_handle = io.TextIOWrapper(file_handle, encoding=encoding)
         else:
-            file_handle = open(actual_output_file, "w", encoding=encoding)
+            file_handle = actual_output_file.open("w", encoding=encoding)
 
         try:
             if jsonl:
