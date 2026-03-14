@@ -70,7 +70,7 @@ def _update_shell_config_file(config_file: Path, export_line: str):
         if not str(resolved).startswith(str(Path.home().resolve())):
             raise ValueError(f"Refusing to write outside home directory: {resolved}")
 
-        lines = config_file.read_text().splitlines(keepends=True)
+        lines = resolved.read_text().splitlines(keepends=True)
         new_lines = []
         found = False
         for line in lines:
@@ -81,13 +81,13 @@ def _update_shell_config_file(config_file: Path, export_line: str):
                 new_lines.append(line)
 
         if found:
-            config_file.write_text("".join(new_lines))
-            console.print(f"\n[green]✓ Updated AWS_PROFILE in {config_file}[/green]")
+            resolved.write_text("".join(new_lines))
+            console.print(f"\n[green]✓ Updated AWS_PROFILE in {resolved}[/green]")
         else:
-            with open(config_file, "a") as f:
+            with open(resolved, "a") as f:
                 f.write("\n# AWS default profile (added by devo-cli)\n")
                 f.write(f"{export_line}\n")
-            console.print(f"\n[green]✓ Added to {config_file}[/green]")
+            console.print(f"\n[green]✓ Added to {resolved}[/green]")
     except Exception as e:
         console.print(f"\n[yellow]Could not update {config_file}: {e}[/yellow]")
 

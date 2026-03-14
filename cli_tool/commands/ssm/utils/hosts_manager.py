@@ -211,7 +211,7 @@ class HostsManager:
             # Use the class-level constant directly — never a variable derived
             # from user input — so the subprocess call is safe from injection.
             process = subprocess.Popen(
-                ["sudo", "tee", self.UNIX_HOSTS_FILE],
+                ["sudo", "tee", HostsManager.UNIX_HOSTS_FILE],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
