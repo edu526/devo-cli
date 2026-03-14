@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.4.1 (2026-03-14)
+
+### Bug Fixes
+
+- **security**: Harden path injection and ReDoS vulnerabilities
+  ([`d5b9b88`](https://github.com/edu526/devo-cli/commit/d5b9b8888a4ff31056d906fa58e47d3c26b41809))
+
+### Continuous Integration
+
+- **sonar**: Add main branch to SonarCloud analysis workflow
+  ([`1a889a7`](https://github.com/edu526/devo-cli/commit/1a889a72b8370ca3a30aff7e1a65cd9c7d6cc734))
+
+
 ## v3.4.0 (2026-03-14)
 
 ### Bug Fixes
