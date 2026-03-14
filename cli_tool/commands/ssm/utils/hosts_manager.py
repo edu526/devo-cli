@@ -29,6 +29,8 @@ class HostsManager:
             return Path(HostsManager.UNIX_HOSTS_FILE)
 
     def __init__(self):
+        # Kept for backward compatibility in get_managed_entries / _filter_hostname_from_lines,
+        # but _read_hosts and _write_hosts always resolve the path from the class constants.
         self.HOSTS_FILE = self.get_hosts_file_path()
 
     def get_managed_entries(self) -> List[Tuple[str, str]]:
@@ -180,19 +182,24 @@ class HostsManager:
                     self._remove_loopback_alias_macos(ip)
 
     def _read_hosts(self) -> str:
-        """Read /etc/hosts file"""
-        if not self.HOSTS_FILE.exists():
+        """Read /etc/hosts file using the validated, constant path."""
+        hosts_path = self.get_hosts_file_path()
+        if not hosts_path.exists():
             return ""
-        return self.HOSTS_FILE.read_text()
+        return hosts_path.read_text()
 
     def _write_hosts(self, content: str):
-        """Write to hosts file (requires elevated privileges)"""
+        """Write to hosts file (requires elevated privileges).
+
+        Always resolves the path from the static constant to prevent
+        any path-manipulation attack via the mutable instance attribute.
+        """
         system = platform.system()
 
         if system == "Windows":
-            # Windows: Write directly (requires running as Administrator)
+            hosts_path = Path(self.WINDOWS_HOSTS_FILE)
             try:
-                self.HOSTS_FILE.write_text(content, encoding="utf-8")
+                hosts_path.write_text(content, encoding="utf-8")
             except PermissionError as e:
                 raise PermissionError(
                     "Permission denied. Please run your terminal as Administrator:\n"
@@ -201,12 +208,13 @@ class HostsManager:
                     "  3. Run the command again"
                 ) from e
         else:
-            # Linux/macOS: Use sudo tee with a fixed, validated path (not user-controlled)
-            hosts_path = self.get_hosts_file_path()
-            if hosts_path != Path(self.UNIX_HOSTS_FILE):
-                raise ValueError(f"Unexpected hosts file path: {hosts_path}")
+            # Use the class-level constant directly — never a variable derived
+            # from user input — so the subprocess call is safe from injection.
             process = subprocess.Popen(
-                ["sudo", "tee", self.UNIX_HOSTS_FILE], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+                ["sudo", "tee", self.UNIX_HOSTS_FILE],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
             )
             _, stderr = process.communicate(input=content.encode())
 
