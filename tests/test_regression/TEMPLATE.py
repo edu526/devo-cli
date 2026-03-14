@@ -29,7 +29,7 @@ import pytest
 
 
 @pytest.mark.unit  # or @pytest.mark.integration, @pytest.mark.platform
-def test_issue_XXX_brief_description():
+def test_issue_nnn_brief_description():
     """
     Regression test for Issue #XXX: [one-line description].
 
@@ -50,9 +50,9 @@ def test_issue_XXX_brief_description():
 
 # Optional: Add additional test cases for edge cases related to the bug
 @pytest.mark.unit
-def test_issue_XXX_edge_case_1():
+def test_issue_nnn_edge_case_1():
     """
-    Regression test for Issue #XXX: [edge case description].
+    Regression test for Issue #NNN: [edge case description].
 
     Verify that the fix also handles [specific edge case].
     """
@@ -60,9 +60,9 @@ def test_issue_XXX_edge_case_1():
 
 
 @pytest.mark.unit
-def test_issue_XXX_edge_case_2():
+def test_issue_nnn_edge_case_2():
     """
-    Regression test for Issue #XXX: [another edge case description].
+    Regression test for Issue #NNN: [another edge case description].
 
     Verify that the fix doesn't break [related functionality].
     """

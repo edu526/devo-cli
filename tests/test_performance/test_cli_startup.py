@@ -218,7 +218,7 @@ def test_cli_startup_memory_footprint():
     result = runner.invoke(cli, ["--version"])
 
     # Get memory usage
-    current, peak = tracemalloc.get_traced_memory()
+    _, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
     # Verify success

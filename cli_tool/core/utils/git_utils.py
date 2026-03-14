@@ -1,6 +1,8 @@
 import re
 import subprocess
 
+_SSH_URL_PATTERN = re.compile(r"//.*@")
+
 
 def get_staged_diff() -> str:
     result = subprocess.run(["git", "diff", "--staged"], capture_output=True, text=True, encoding="utf-8")
@@ -28,7 +30,7 @@ def get_remote_url() -> str:
         )
         url = result.stdout.strip()
         # Remove username from URL, e.g., https://user@github.com -> https://github.com
-        url = re.sub(r"//.*@", "//", url)
+        url = _SSH_URL_PATTERN.sub("//", url)
         if url.startswith("git@"):
             # Convert SSH URL to HTTPS URL: git@github.com:user/repo.git -> https://github.com/user/repo
             url = url.replace(":", "/", 1).replace("git@", "https://")

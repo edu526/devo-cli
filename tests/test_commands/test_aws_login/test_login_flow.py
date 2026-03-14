@@ -130,7 +130,7 @@ def test_aws_sso_login_flow_success(cli_runner, mocker, mock_aws_config_dir, moc
     mocker.patch("pathlib.Path.home", return_value=mock_aws_config_dir["aws_dir"].parent)
 
     # Mock webbrowser.open to prevent actual browser opening
-    mock_browser = mocker.patch("webbrowser.open")
+    mocker.patch("webbrowser.open")
 
     # Mock subprocess.run for AWS CLI SSO login
     mock_subprocess = mocker.patch("subprocess.run")
@@ -520,7 +520,7 @@ def test_browser_not_opened_during_test(cli_runner, mocker, mock_aws_config_dir,
 
     # Mock webbrowser.open and verify it's not called
     # (AWS CLI handles browser opening internally, not our code)
-    mock_browser = mocker.patch("webbrowser.open")
+    mocker.patch("webbrowser.open")
 
     # Mock subprocess.run for AWS CLI SSO login
     mock_subprocess = mocker.patch("subprocess.run")

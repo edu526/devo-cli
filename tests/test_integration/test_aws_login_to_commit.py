@@ -137,7 +137,7 @@ def test_aws_login_to_commit_workflow_success(cli_runner, mocker, mock_aws_confi
     )
 
     # Mock profile selection to use the authenticated profile
-    mock_select_profile = mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
+    mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
 
     # Run commit command (should use authenticated AWS credentials)
     commit_result = cli_runner.invoke(commit, input="y\n")
@@ -205,7 +205,7 @@ def test_commit_without_prior_login_fails(cli_runner, mocker, mock_aws_config_di
     mock_base_agent_query.side_effect = Exception("Unable to locate credentials")
 
     # Mock profile selection to return None (no profile available)
-    mock_select_profile = mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=None)
+    mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=None)
 
     # Run commit command (should fail due to missing credentials)
     result = cli_runner.invoke(commit)
@@ -288,7 +288,7 @@ def test_aws_login_to_commit_with_expired_credentials(cli_runner, mocker, mock_a
     mock_base_agent_query.side_effect = Exception("The security token included in the request is expired")
 
     # Mock profile selection
-    mock_select_profile = mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
+    mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
 
     # Run commit command (should fail due to expired credentials)
     commit_result = cli_runner.invoke(commit)
@@ -473,7 +473,7 @@ def test_aws_login_to_commit_with_bedrock_error(cli_runner, mocker, mock_aws_con
     mock_base_agent_query.side_effect = Exception("Bedrock API rate limit exceeded")
 
     # Mock profile selection
-    mock_select_profile = mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
+    mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
 
     # Run commit command (should handle Bedrock error gracefully)
     commit_result = cli_runner.invoke(commit)
@@ -555,7 +555,7 @@ def test_aws_login_to_commit_state_persistence(cli_runner, mocker, mock_aws_conf
     mock_base_agent_query.return_value = "feat(test): first commit"
 
     # Mock profile selection
-    mock_select_profile = mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
+    mocker.patch("cli_tool.commands.commit.commands.generate.select_profile", return_value=mock_sso_profile)
 
     # Run first commit
     commit_result_1 = cli_runner.invoke(commit, input="y\n")

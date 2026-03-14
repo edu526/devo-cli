@@ -996,7 +996,7 @@ def test_concurrent_read_write_simulation(temp_config_dir, mocker):
     mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
 
     # Simulate interleaved read/write operations
-    for i in range(10):
+    for _ in range(10):
         # Read
         config = load_config()
         current_value = config.get("counter", 0)

@@ -22,12 +22,12 @@ dependencies = [
     "click>=8.1.0,<9.0.0",
     "requests>=2.32.0,<3.0.0",
     "charset-normalizer>=3.3.2,<4.0.0",
-    "chardet>=3.0.0,<6.0.0",
     "rich>=13.0.0,<15.0.0",
     "tzdata>=2025.2",
     "strands-agents>=1.7.0,<2.0.0",
     "gitpython>=3.1.0,<4.0.0",
     "pydantic>=2.0.0,<3.0.0",
+    "boto3>=1.35.0,<2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -37,7 +37,9 @@ dev = [
     "pytest>=7.0.0",
     "pytest-mock>=3.0.0",
     "pytest-cov>=4.0.0",
-    "moto>=5.0.0",
+    "pytest-benchmark>=4.0.0",
+    "pytest-xdist>=3.0.0",
+    "moto[dynamodb,iam,events,ssm]>=5.0.0",
     "build>=1.0.0",
     "flake8>=6.0.0",
     "black>=24.0.0",

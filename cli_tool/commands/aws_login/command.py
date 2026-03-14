@@ -17,7 +17,43 @@ from cli_tool.commands.aws_login.commands import (
 )
 from cli_tool.core.utils.aws import check_aws_cli
 
+_SET_DEFAULT_HINT = "[dim]  Run 'devo aws-login set-default' to refresh them.[/dim]\n"
+
 console = Console()
+
+
+def _warn_expiry(expiry_str: str) -> None:
+    """Warn if credentials are expired or expiring soon."""
+    expiry_dt = datetime.fromisoformat(expiry_str.replace("Z", "+00:00"))
+    now = datetime.now(timezone.utc)
+    if expiry_dt <= now:
+        console.print("[yellow]⚠ Default credentials in ~/.aws/credentials have expired.[/yellow]")
+        console.print(_SET_DEFAULT_HINT)
+        return
+    minutes_left = int((expiry_dt - now).total_seconds() / 60)
+    if minutes_left < 30:
+        console.print(f"[yellow]⚠ Default credentials expire in {minutes_left} min.[/yellow]")
+        console.print(_SET_DEFAULT_HINT)
+
+
+def _check_credentials_via_cli(in_default: bool) -> None:
+    """Check [default] credentials expiry via AWS CLI and warn if needed."""
+    import subprocess
+
+    result = subprocess.run(
+        ["aws", "configure", "export-credentials", "--profile", "default"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if result.returncode == 0:
+        creds = json.loads(result.stdout)
+        expiry_str = creds.get("Expiration")
+        if expiry_str:
+            _warn_expiry(expiry_str)
+    elif in_default:
+        console.print("[yellow]⚠ Default credentials in ~/.aws/credentials may be expired.[/yellow]")
+        console.print(_SET_DEFAULT_HINT)
 
 
 def _check_default_credentials_expiry():
@@ -27,7 +63,6 @@ def _check_default_credentials_expiry():
         return
 
     in_default = False
-    expiry_str = None
 
     try:
         with open(credentials_path, "r") as f:
@@ -37,37 +72,8 @@ def _check_default_credentials_expiry():
                     in_default = True
                 elif stripped.startswith("[") and in_default:
                     break
-                elif in_default and stripped.startswith("aws_access_key_id"):
-                    # Default section exists — keep scanning for expiry hint
-                    pass
 
-        # Use AWS CLI to check actual expiry of [default]
-        import subprocess
-
-        result = subprocess.run(
-            ["aws", "configure", "export-credentials", "--profile", "default"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0:
-            creds = json.loads(result.stdout)
-            expiry_str = creds.get("Expiration")
-            if expiry_str:
-                expiry_dt = datetime.fromisoformat(expiry_str.replace("Z", "+00:00"))
-                now = datetime.now(timezone.utc)
-                if expiry_dt <= now:
-                    console.print("[yellow]⚠ Default credentials in ~/.aws/credentials have expired.[/yellow]")
-                    console.print("[dim]  Run 'devo aws-login set-default' to refresh them.[/dim]\n")
-                else:
-                    minutes_left = int((expiry_dt - now).total_seconds() / 60)
-                    if minutes_left < 30:
-                        console.print(f"[yellow]⚠ Default credentials expire in {minutes_left} min.[/yellow]")
-                        console.print("[dim]  Run 'devo aws-login set-default' to refresh them.[/dim]\n")
-        elif in_default:
-            # Section exists but export-credentials failed — likely expired
-            console.print("[yellow]⚠ Default credentials in ~/.aws/credentials may be expired.[/yellow]")
-            console.print("[dim]  Run 'devo aws-login set-default' to refresh them.[/dim]\n")
+        _check_credentials_via_cli(in_default)
     except Exception:
         pass
 

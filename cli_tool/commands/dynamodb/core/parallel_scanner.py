@@ -62,6 +62,20 @@ class ParallelScanner:
 
         return items
 
+    def _cancel_remaining_futures(self, futures: dict) -> None:
+        """Cancel all futures that haven't completed yet."""
+        for f in futures:
+            if not f.done():
+                f.cancel()
+
+    def _handle_segment_failure(self, segment: int, error: Exception, failed_segments: list) -> None:
+        """Record a failed segment and raise if too many have failed."""
+        failed_segments.append(segment)
+        console.print(f"[red]✗ Error scanning segment {segment}: {error}[/red]")
+        if len(failed_segments) > self.total_segments / 2:
+            console.print(f"[red]✗ Too many segment failures ({len(failed_segments)}), aborting[/red]")
+            raise RuntimeError(f"Parallel scan failed: {len(failed_segments)} segments failed")
+
     def parallel_scan(
         self,
         filter_expression: Optional[str] = None,
@@ -121,22 +135,13 @@ class ParallelScanner:
                         all_items.extend(items)
                         progress.update(task, advance=1)
 
-                        # Stop early if we've reached the limit
                         if limit and len(all_items) >= limit:
                             console.print(f"[cyan]Reached limit of {limit} items, cancelling remaining segments[/cyan]")
-                            # Cancel remaining futures
-                            for f in futures:
-                                if not f.done():
-                                    f.cancel()
+                            self._cancel_remaining_futures(futures)
                             break
 
                     except Exception as e:
-                        failed_segments.append(segment)
-                        console.print(f"[red]✗ Error scanning segment {segment}: {e}[/red]")
-                        # Don't continue if too many segments fail
-                        if len(failed_segments) > self.total_segments / 2:
-                            console.print(f"[red]✗ Too many segment failures ({len(failed_segments)}), aborting[/red]")
-                            raise RuntimeError(f"Parallel scan failed: {len(failed_segments)} segments failed")
+                        self._handle_segment_failure(segment, e, failed_segments)
 
             if failed_segments:
                 console.print(f"[yellow]⚠ Warning: {len(failed_segments)} segment(s) failed, data may be incomplete[/yellow]")

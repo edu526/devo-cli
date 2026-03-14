@@ -98,10 +98,7 @@ def test_commit_with_no_staged_changes(cli_runner, mock_subprocess, mock_select_
         result = MagicMock()
         result.returncode = 0
 
-        if cmd == ["git", "diff", "--staged"]:
-            result.stdout = ""
-        else:
-            result.stdout = ""
+        result.stdout = ""
 
         return result
 

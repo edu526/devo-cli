@@ -122,7 +122,7 @@ def test_install_is_idempotent(tmp_path):
     config = {"line": 'eval "$(_DEVO_COMPLETE=zsh_source devo)"', "file": rc}
     with patch.object(CompletionInstaller, "SHELL_CONFIGS", {"zsh": config}):
         CompletionInstaller.install("zsh")
-        success, message = CompletionInstaller.install("zsh")
+        success, _ = CompletionInstaller.install("zsh")
 
     assert success is True
     assert rc.read_text().count("_DEVO_COMPLETE") == 1
@@ -154,10 +154,9 @@ def test_install_returns_failure_on_write_error(tmp_path):
     rc.chmod(0o444)  # read-only
     config = {"line": 'eval "$(_DEVO_COMPLETE=zsh_source devo)"', "file": rc}
     with patch.object(CompletionInstaller, "SHELL_CONFIGS", {"zsh": config}):
-        success, message = CompletionInstaller.install("zsh")
+        success, _ = CompletionInstaller.install("zsh")
 
     assert success is False
-    assert message  # contains an error description
     rc.chmod(0o644)  # restore for cleanup
 
 

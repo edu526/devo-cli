@@ -606,18 +606,11 @@ class FilterBuilder:
             parts = attr_name.split(".")
             placeholders = []
             for part in parts:
-                # Check if this part needs escaping
-                if part.lower() in self.RESERVED_KEYWORDS or "-" in part:
-                    placeholder = f"#attr{self.name_counter}"
-                    self.name_counter += 1
-                    self.expression_attribute_names[placeholder] = part
-                    placeholders.append(placeholder)
-                else:
-                    # Still create a placeholder for consistency in nested paths
-                    placeholder = f"#attr{self.name_counter}"
-                    self.name_counter += 1
-                    self.expression_attribute_names[placeholder] = part
-                    placeholders.append(placeholder)
+                # Always create a placeholder for nested path parts (reserved or not)
+                placeholder = f"#attr{self.name_counter}"
+                self.name_counter += 1
+                self.expression_attribute_names[placeholder] = part
+                placeholders.append(placeholder)
             return ".".join(placeholders)
 
         # Check if attribute name needs escaping
@@ -731,9 +724,7 @@ class FilterBuilder:
 
         # Handle parentheses first
         if expr.startswith("(") and expr.endswith(")"):
-            # Remove outer parentheses and process inner expression
             inner = expr[1:-1].strip()
-            # Only remove if they're balanced outer parentheses
             if self._count_parentheses(inner) == 0:
                 return self._process_expression(inner)
 
@@ -741,37 +732,33 @@ class FilterBuilder:
         if " BETWEEN " in expr or " between " in expr:
             return self._process_between(expr)
 
-        # Handle logical operators (AND, OR) before processing other expressions
-        # Split by AND/OR at the top level (not inside parentheses)
+        # Handle logical operators at top level before other expressions
         and_split = self._split_by_operator(expr, "AND")
         if and_split:
-            left = self._process_expression(and_split[0])
-            right = self._process_expression(and_split[1])
-            return f"({left} AND {right})"
+            return f"({self._process_expression(and_split[0])} AND {self._process_expression(and_split[1])})"
 
         or_split = self._split_by_operator(expr, "OR")
         if or_split:
-            left = self._process_expression(or_split[0])
-            right = self._process_expression(or_split[1])
-            return f"({left} OR {right})"
+            return f"({self._process_expression(or_split[0])} OR {self._process_expression(or_split[1])})"
 
-        # Handle function calls
-        if "attribute_exists(" in expr:
-            return self._process_function(expr, "attribute_exists")
-        if "attribute_not_exists(" in expr:
-            return self._process_function(expr, "attribute_not_exists")
-        if "begins_with(" in expr:
-            return self._process_function_with_value(expr, "begins_with")
-        if "contains(" in expr:
-            return self._process_function_with_value(expr, "contains")
-        if "size(" in expr:
-            return self._process_size_function(expr)
+        return self._process_leaf_expression(expr)
 
-        # Handle IN
+    def _process_leaf_expression(self, expr: str) -> str:
+        """Process a leaf (non-logical) expression."""
+        _FUNCTION_DISPATCH = {
+            "attribute_exists(": ("attribute_exists", self._process_function),
+            "attribute_not_exists(": ("attribute_not_exists", self._process_function),
+            "begins_with(": ("begins_with", self._process_function_with_value),
+            "contains(": ("contains", self._process_function_with_value),
+            "size(": (None, lambda e, _: self._process_size_function(e)),
+        }
+        for prefix, (func_name, handler) in _FUNCTION_DISPATCH.items():
+            if prefix in expr:
+                return handler(expr, func_name) if func_name else handler(expr, None)
+
         if " IN " in expr or " in " in expr:
             return self._process_in(expr)
 
-        # Handle comparison operators
         for op in ["!=", ">=", "<=", "=", ">", "<"]:
             if f" {op} " in expr:
                 return self._process_comparison(expr, op)

@@ -37,17 +37,16 @@ import pytest
 
 
 @pytest.mark.unit
-def test_issue_XXX_data_corruption_bug():
+def test_issue_nnn_data_corruption_bug():
     """
-    Regression test for Issue #XXX: [data corruption bug description].
+    Regression test for Issue #NNN: [data corruption bug description].
 
     Bug: [How data was corrupted]
     Fix: [How data integrity was restored]
 
-    Issue: https://github.com/org/repo/issues/XXX
+    Issue: https://github.com/org/repo/issues/NNN
     """
     # ARRANGE: Create test data that triggers the corruption
-    original_data = {}  # The data before processing
 
     # ACT: Process the data through the function that previously corrupted it
     # processed_data = function_name(original_data)
@@ -57,29 +56,26 @@ def test_issue_XXX_data_corruption_bug():
     # Verify no data loss
     # Verify no data corruption
     # Verify data types are preserved
-    pass
 
 
 @pytest.mark.unit
-def test_issue_XXX_round_trip_data_integrity():
+def test_issue_nnn_round_trip_data_integrity():
     """
-    Regression test for Issue #XXX: [round-trip data integrity].
+    Regression test for Issue #NNN: [round-trip data integrity].
 
     Verify that data survives round-trip transformations without corruption.
     """
     # Test: original -> transform -> inverse_transform -> should equal original
-    pass
 
 
 @pytest.mark.unit
-def test_issue_XXX_edge_case_data_values():
+def test_issue_nnn_edge_case_data_values():
     """
-    Regression test for Issue #XXX: [edge case data values].
+    Regression test for Issue #NNN: [edge case data values].
 
     Verify that edge case values don't cause corruption.
     """
     # Test with: empty strings, None, zero, max values, special characters, etc.
-    pass
 
 
 # ============================================================================

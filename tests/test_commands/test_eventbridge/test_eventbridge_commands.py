@@ -10,11 +10,14 @@ Tests the complete EventBridge rule listing workflow including:
 """
 
 import json
+import os
 
 import pytest
 from click.testing import CliRunner
 
 from cli_tool.commands.eventbridge.commands import register_eventbridge_commands
+
+AWS_TEST_REGION = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 
 
 def extract_json_from_output(output):
@@ -47,11 +50,11 @@ def mock_eventbridge_client(monkeypatch):
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
     monkeypatch.setenv("AWS_SECURITY_TOKEN", "testing")
     monkeypatch.setenv("AWS_SESSION_TOKEN", "testing")
-    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", AWS_TEST_REGION)
     monkeypatch.delenv("AWS_PROFILE", raising=False)
 
     with mock_aws():
-        yield boto3.client("events", region_name="us-east-1")
+        yield boto3.client("events", region_name=AWS_TEST_REGION)
 
 
 @pytest.fixture
@@ -65,7 +68,7 @@ def mock_eventbridge_rules(mock_eventbridge_client):
             "state": "ENABLED",
             "description": "Development environment scheduler",
             "tags": {"Env": "dev", "Team": "backend"},
-            "target_arn": "arn:aws:lambda:us-east-1:123456789012:function:service-dev-processor",
+            "target_arn": f"arn:aws:lambda:{AWS_TEST_REGION}:123456789012:function:service-dev-processor",
         },
         {
             "name": "staging-data-sync",
@@ -73,7 +76,7 @@ def mock_eventbridge_rules(mock_eventbridge_client):
             "state": "ENABLED",
             "description": "Staging data synchronization",
             "tags": {"Environment": "staging", "Team": "data"},
-            "target_arn": "arn:aws:lambda:us-east-1:123456789012:function:data-staging-sync",
+            "target_arn": f"arn:aws:lambda:{AWS_TEST_REGION}:123456789012:function:data-staging-sync",
         },
         {
             "name": "prod-backup-job",
@@ -81,7 +84,7 @@ def mock_eventbridge_rules(mock_eventbridge_client):
             "state": "ENABLED",
             "description": "Production backup job",
             "tags": {"Env": "prod", "Team": "ops"},
-            "target_arn": "arn:aws:lambda:us-east-1:123456789012:function:backup-prod-handler",
+            "target_arn": f"arn:aws:lambda:{AWS_TEST_REGION}:123456789012:function:backup-prod-handler",
         },
         {
             "name": "dev-cleanup-disabled",
@@ -89,7 +92,7 @@ def mock_eventbridge_rules(mock_eventbridge_client):
             "state": "DISABLED",
             "description": "Disabled cleanup job",
             "tags": {"Env": "dev", "Team": "backend"},
-            "target_arn": "arn:aws:lambda:us-east-1:123456789012:function:cleanup-dev-job",
+            "target_arn": f"arn:aws:lambda:{AWS_TEST_REGION}:123456789012:function:cleanup-dev-job",
         },
         {
             "name": "prod-monitoring",
@@ -97,7 +100,7 @@ def mock_eventbridge_rules(mock_eventbridge_client):
             "state": "DISABLED",
             "description": "Disabled monitoring rule",
             "tags": {"Env": "prod", "Team": "monitoring"},
-            "target_arn": "arn:aws:lambda:us-east-1:123456789012:function:monitor-prod-service",
+            "target_arn": f"arn:aws:lambda:{AWS_TEST_REGION}:123456789012:function:monitor-prod-service",
         },
     ]
 
@@ -718,11 +721,11 @@ def test_list_rules_empty_result_shows_message(cli_runner, monkeypatch, mocker):
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
     monkeypatch.setenv("AWS_SECURITY_TOKEN", "testing")
     monkeypatch.setenv("AWS_SESSION_TOKEN", "testing")
-    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", AWS_TEST_REGION)
     monkeypatch.delenv("AWS_PROFILE", raising=False)
 
     with mock_aws():
-        empty_client = boto3.client("events", region_name="us-east-1")
+        empty_client = boto3.client("events", region_name=AWS_TEST_REGION)
         mocker.patch("cli_tool.commands.eventbridge.core.rules_manager.create_aws_client", return_value=empty_client)
 
         eventbridge_cmd = register_eventbridge_commands()

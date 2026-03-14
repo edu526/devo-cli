@@ -89,74 +89,75 @@ class BaseAgent:
         self.console = Console() if enable_rich_logging else None
         self._event_grouping_active = False
 
-    def _console_ui_callback(self, **kwargs):
-        """Built-in ConsoleUI callback handler."""
+    def _handle_message_event(self, kwargs: dict) -> None:
+        """Handle a complete assistant message event."""
+        console_ui._reset_event_grouping()
+        message_content = kwargs["message"].get("content", "")
+        if isinstance(message_content, list) and len(message_content) > 0:
+            if "text" in message_content[0]:
+                console_ui.show_ai_real_response(message_content[0]["text"], is_complete=True)
 
-        # Text generation events - show real AI output
-        if "data" in kwargs:
-            text_chunk = kwargs["data"]
-            console_ui.show_ai_real_response(text_chunk, is_complete=False)
-
-        # Tool usage events - only show when tool changes
-        elif "current_tool_use" in kwargs and kwargs["current_tool_use"].get("name"):
-            tool_name = kwargs["current_tool_use"]["name"]
-            # Reset event grouping when switching to tool usage
-            console_ui._reset_event_grouping()
-            console_ui.show_ai_thinking(f"AI is using tool: {tool_name}")
-
-        # Reasoning events - group these as they can be frequent
-        elif kwargs.get("reasoning", False) and "reasoningText" in kwargs:
-            reasoning_text = kwargs["reasoningText"]
-            console_ui.show_ai_thinking(f"AI reasoning: {reasoning_text[:100]}...")
-
-        # Lifecycle events - show important ones but group minor ones
-        elif kwargs.get("init_event_loop", False):
+    def _handle_lifecycle_event(self, kwargs: dict) -> None:
+        """Handle agent lifecycle events (init, start, force_stop)."""
+        if kwargs.get("init_event_loop", False):
             console_ui._reset_event_grouping()
             console_ui.show_ai_thinking("AI event loop initialized")
         elif kwargs.get("start_event_loop", False):
             console_ui.show_ai_thinking("AI starting analysis cycle...")
         elif kwargs.get("start", False):
-            # Group these as they can happen frequently
             console_ui.show_ai_thinking("AI beginning new processing cycle")
-        elif "message" in kwargs and kwargs["message"].get("role") == "assistant":
-            # Complete message received - reset grouping
-            console_ui._reset_event_grouping()
-            message_content = kwargs["message"].get("content", "")
-            if isinstance(message_content, list) and len(message_content) > 0:
-                if "text" in message_content[0]:
-                    full_response = message_content[0]["text"]
-                    console_ui.show_ai_real_response(full_response, is_complete=True)
         elif kwargs.get("force_stop", False):
             console_ui._reset_event_grouping()
             reason = kwargs.get("force_stop_reason", "unknown")
             console_ui.show_ai_thinking(f"AI stopped: {reason}")
 
+    def _console_ui_callback(self, **kwargs):
+        """Built-in ConsoleUI callback handler."""
+
+        # Text generation events - show real AI output
+        if "data" in kwargs:
+            console_ui.show_ai_real_response(kwargs["data"], is_complete=False)
+
+        # Tool usage events
+        elif "current_tool_use" in kwargs and kwargs["current_tool_use"].get("name"):
+            console_ui._reset_event_grouping()
+            console_ui.show_ai_thinking(f"AI is using tool: {kwargs['current_tool_use']['name']}")
+
+        # Reasoning events
+        elif kwargs.get("reasoning", False) and "reasoningText" in kwargs:
+            console_ui.show_ai_thinking(f"AI reasoning: {kwargs['reasoningText'][:100]}...")
+
+        # Complete assistant message
+        elif "message" in kwargs and kwargs["message"].get("role") == "assistant":
+            self._handle_message_event(kwargs)
+
+        # Lifecycle events
+        else:
+            self._handle_lifecycle_event(kwargs)
+
+    def _log(self, msg: str) -> None:
+        """Print a message using rich console or plain print depending on config."""
+        if self.enable_rich_logging and self.console:
+            self.console.print(msg)
+        else:
+            print(msg)
+
+    def _build_bedrock_model(self, boto_session, model_id: str) -> "BedrockModel":
+        """Create a BedrockModel with the given session and model ID."""
+        return BedrockModel(boto_session=boto_session, model_id=model_id)
+
     def _create_agent(self) -> Agent:
         """Create and configure the Strands agent."""
         from cli_tool.core.utils.aws import create_aws_session
 
-        # Create boto3 session with proper credential handling
         boto_session = create_aws_session(
             profile_name=self.profile_name,
             region_name=self.region_name,
         )
 
         try:
-            # Try primary model
-            # Note: When boto_session is provided, region_name should not be passed
-            # as the session already has the region configured
-            bedrock_model = BedrockModel(
-                boto_session=boto_session,
-                model_id=self.llm_model_id,
-            )
-
-            if self.enable_rich_logging and self.console:
-                self.console.print(f"🤖 Initializing [bold blue]{self.name}[/bold blue] with primary model: [green]{self.llm_model_id}[/green]")
-            else:
-                print(
-                    f"🤖 Initializing {self.name} with primary model:",
-                    self.llm_model_id,
-                )
+            bedrock_model = self._build_bedrock_model(boto_session, self.llm_model_id)
+            self._log(f"🤖 Initializing [bold blue]{self.name}[/bold blue] with primary model: [green]{self.llm_model_id}[/green]")
 
             return Agent(
                 tools=self.tools,
@@ -167,22 +168,10 @@ class BaseAgent:
             )
 
         except Exception as e:
-            error_msg = f"⚠️ Error initializing {self.name} with primary model: {str(e)}"
-            fallback_msg = f"🔄 Switching to fallback model: {FALLBACK_MODEL_ID}"
+            self._log(f"[yellow]⚠️ Error initializing {self.name} with primary model: {str(e)}[/yellow]")
+            self._log(f"[blue]🔄 Switching to fallback model: {FALLBACK_MODEL_ID}[/blue]")
 
-            if self.enable_rich_logging and self.console:
-                self.console.print(f"[yellow]{error_msg}[/yellow]")
-                self.console.print(f"[blue]{fallback_msg}[/blue]")
-            else:
-                print(error_msg)
-                print(fallback_msg)
-
-            # Fallback to secondary model
-            fallback_model = BedrockModel(
-                boto_session=boto_session,
-                model_id=FALLBACK_MODEL_ID,
-            )
-
+            fallback_model = self._build_bedrock_model(boto_session, FALLBACK_MODEL_ID)
             return Agent(
                 tools=self.tools,
                 system_prompt=self.system_prompt,

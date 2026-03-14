@@ -11,6 +11,10 @@ from cli_tool.commands.aws_login.core.config import get_aws_credentials_path, ge
 
 console = Console()
 
+_SSO_START_URL_KEY = "startUrl"
+_EXPIRES_AT_KEY = "expiresAt"
+_ACCESS_TOKEN_KEY = "accessToken"
+
 
 def get_sso_cache_token(sso_start_url):
     """Get cached SSO token if available and valid."""
@@ -21,16 +25,16 @@ def get_sso_cache_token(sso_start_url):
     try:
         # Find cache file for this SSO start URL
         for cache_file in cache_dir.glob("*.json"):
-            with open(cache_file, "r") as f:
+            with cache_file.open("r") as f:
                 cache_data = json.load(f)
 
-                if cache_data.get("startUrl") == sso_start_url:
+                if cache_data.get(_SSO_START_URL_KEY) == sso_start_url:
                     # Check if token is still valid
-                    expires_at = cache_data.get("expiresAt")
+                    expires_at = cache_data.get(_EXPIRES_AT_KEY)
                     if expires_at:
                         expires_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
                         if expires_dt > datetime.now(expires_dt.tzinfo):
-                            return cache_data.get("accessToken")
+                            return cache_data.get(_ACCESS_TOKEN_KEY)
 
         return None
     except Exception:
@@ -46,11 +50,11 @@ def get_sso_token_expiration(sso_start_url):
     try:
         # Find cache file for this SSO start URL
         for cache_file in cache_dir.glob("*.json"):
-            with open(cache_file, "r") as f:
+            with cache_file.open("r") as f:
                 cache_data = json.load(f)
 
-                if cache_data.get("startUrl") == sso_start_url:
-                    expires_at = cache_data.get("expiresAt")
+                if cache_data.get(_SSO_START_URL_KEY) == sso_start_url:
+                    expires_at = cache_data.get(_EXPIRES_AT_KEY)
                     if expires_at:
                         expires_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
                         return expires_dt

@@ -31,12 +31,12 @@ def get_aws_profiles():
     return profiles if profiles else []
 
 
-def verify_aws_credentials(profile=None, required_account=None):
+def verify_aws_credentials(profile=None, required_account=None):  # noqa: ARG001
     """Verify AWS credentials and account.
 
     Args:
       profile: AWS profile name (optional)
-      required_account: Required AWS account ID (optional)
+      required_account: Required AWS account ID (optional, unused — kept for API compatibility)
 
     Returns:
       Tuple of (account_id, user_arn)
@@ -54,6 +54,70 @@ def verify_aws_credentials(profile=None, required_account=None):
         return identity.get("Account"), identity.get("Arn")
     except Exception:
         return None, None
+
+
+def _verify_and_check_account(profile_name: str, required_account, show_messages: bool) -> bool:
+    """Verify credentials for a profile and optionally check the account ID.
+
+    Returns True if credentials are valid and account matches (when required).
+    """
+    account_id, _ = verify_aws_credentials(profile_name)
+    if not account_id:
+        if show_messages:
+            click.echo("")
+            click.echo(click.style(f"Error: Profile '{profile_name}' has invalid or expired credentials", fg="red"))
+            click.echo("")
+            click.echo(click.style("Get fresh credentials from:", fg="blue"))
+            click.echo(f"  {AWS_SSO_URL}")
+            click.echo("")
+            click.echo(f"Then run: aws configure --profile {profile_name}")
+        return False
+
+    if required_account and account_id != required_account:
+        if show_messages:
+            click.echo("")
+            click.echo(click.style(f"Error: Profile is for account {account_id}", fg="red"))
+            click.echo(click.style(f"Required account: {required_account}", fg="red"))
+            click.echo("")
+        return False
+
+    return True
+
+
+def _pick_profile_from_list(profiles: list, required_account, show_messages: bool):
+    """Prompt the user to pick a profile from a list. Returns profile name or None."""
+    click.echo(click.style("Available AWS profiles:", fg="blue"))
+    for i, (profile_name, source) in enumerate(profiles, 1):
+        click.echo(f"  {i}. {profile_name} [{source}]")
+    click.echo("")
+
+    choice = click.prompt(
+        "Select a profile number (or press Enter to skip)",
+        type=str,
+        default="",
+        show_default=False,
+    )
+
+    if not choice:
+        if show_messages:
+            click.echo("")
+            click.echo(click.style("No profile selected", fg="yellow"))
+            click.echo("")
+        return None
+
+    try:
+        index = int(choice) - 1
+        if 0 <= index < len(profiles):
+            selected_profile, _ = profiles[index]
+            if not _verify_and_check_account(selected_profile, required_account, show_messages):
+                return None
+            return selected_profile
+    except ValueError:
+        pass
+
+    if show_messages:
+        click.echo(click.style("Invalid selection", fg="red"))
+    return None
 
 
 def select_aws_profile(required_account=None, show_messages=True):
@@ -85,105 +149,25 @@ def select_aws_profile(required_account=None, show_messages=True):
             click.echo("Then run: aws configure")
         return None
 
-    # If only one profile, use it automatically
     if len(profiles) == 1:
         selected_profile, source = profiles[0]
-
-        # Verify the profile works
-        account_id, user_arn = verify_aws_credentials(selected_profile, required_account)
-        if not account_id:
-            if show_messages:
-                click.echo("")
-                click.echo(
-                    click.style(
-                        f"Error: Profile '{selected_profile}' has invalid or expired credentials",
-                        fg="red",
-                    )
-                )
-                click.echo("")
-                click.echo(click.style("Get fresh credentials from:", fg="blue"))
-                click.echo(f"  {AWS_SSO_URL}")
-                click.echo("")
-                click.echo(f"Then run: aws configure --profile {selected_profile}")
+        if not _verify_and_check_account(selected_profile, required_account, show_messages):
             return None
-
-        # Check account if required
-        if required_account and account_id != required_account:
-            if show_messages:
-                click.echo("")
-                click.echo(click.style(f"Error: Profile is for account {account_id}", fg="red"))
-                click.echo(click.style(f"Required account: {required_account}", fg="red"))
-                click.echo("")
-            return None
-
         if show_messages:
             click.echo(click.style(f"✓ Using profile: {selected_profile} [{source}]", fg="green"))
         return selected_profile
 
-    # Always show the profile list
-    click.echo(click.style("Available AWS profiles:", fg="blue"))
-    for i, (profile_name, source) in enumerate(profiles, 1):
-        click.echo(f"  {i}. {profile_name} [{source}]")
-    click.echo("")
+    return _pick_profile_from_list(profiles, required_account, show_messages)
 
-    choice = click.prompt(
-        "Select a profile number (or press Enter to skip)",
-        type=str,
-        default="",
-        show_default=False,
-    )
 
-    if not choice:
-        if show_messages:
-            click.echo("")
-            click.echo(click.style("No profile selected", fg="yellow"))
-            click.echo("")
-        return None
-
-    try:
-        index = int(choice) - 1
-        if 0 <= index < len(profiles):
-            selected_profile, source = profiles[index]
-
-            # Verify the selected profile works
-            account_id, user_arn = verify_aws_credentials(selected_profile, required_account)
-            if not account_id:
-                if show_messages:
-                    click.echo("")
-                    click.echo(
-                        click.style(
-                            f"Error: Selected profile '{selected_profile}' has invalid or expired credentials",
-                            fg="red",
-                        )
-                    )
-                    click.echo("")
-                    click.echo(click.style("Get fresh credentials from:", fg="blue"))
-                    click.echo(f"  {AWS_SSO_URL}")
-                    click.echo("")
-                    click.echo(f"Then run: aws configure --profile {selected_profile}")
-                return None
-
-            # Check account if required
-            if required_account and account_id != required_account:
-                if show_messages:
-                    click.echo("")
-                    click.echo(
-                        click.style(
-                            f"Error: Selected profile is for account {account_id}",
-                            fg="red",
-                        )
-                    )
-                    click.echo(click.style(f"Required account: {required_account}", fg="red"))
-                    click.echo("")
-                return None
-
-            return selected_profile
-    except ValueError:
-        pass
-
+def _handle_wrong_account(account_id: str, required_account: str, show_messages: bool) -> None:
+    """Print an error message when the selected profile belongs to the wrong account."""
     if show_messages:
-        click.echo(click.style("Invalid selection", fg="red"))
-    return None
+        click.echo("")
+        click.echo(click.style("Error: Selected profile is for wrong AWS account", fg="red"))
+        click.echo(click.style(f"Expected: {required_account}", fg="red"))
+        click.echo(click.style(f"Got: {account_id}", fg="red"))
+        click.echo("")
 
 
 def ensure_aws_profile(profile=None, required_account=None, show_messages=True):
@@ -197,39 +181,27 @@ def ensure_aws_profile(profile=None, required_account=None, show_messages=True):
     Returns:
       Tuple of (profile, account_id, user_arn) or (None, None, None) if failed
     """
-    # Check current credentials
     account_id, user_arn = verify_aws_credentials(profile, required_account)
 
-    # If credentials are valid and account matches (if required), return them
     if account_id:
         if not required_account or account_id == required_account:
             return profile, account_id, user_arn
 
-        # Wrong account
         if show_messages:
             click.echo(click.style(f"Current credentials are for account: {account_id}", fg="yellow"))
-            if required_account:
-                click.echo(click.style(f"Required account: {required_account}", fg="yellow"))
+            click.echo(click.style(f"Required account: {required_account}", fg="yellow"))
             click.echo("")
 
-    # Try to select a profile
     selected_profile = select_aws_profile(required_account, show_messages)
     if not selected_profile:
         return None, None, None
 
-    # Verify the selected profile
     account_id, user_arn = verify_aws_credentials(selected_profile, required_account)
     if not account_id:
         return None, None, None
 
-    # Check account if required
     if required_account and account_id != required_account:
-        if show_messages:
-            click.echo("")
-            click.echo(click.style("Error: Selected profile is for wrong AWS account", fg="red"))
-            click.echo(click.style(f"Expected: {required_account}", fg="red"))
-            click.echo(click.style(f"Got: {account_id}", fg="red"))
-            click.echo("")
+        _handle_wrong_account(account_id, required_account, show_messages)
         return None, None, None
 
     return selected_profile, account_id, user_arn
