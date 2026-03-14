@@ -160,3 +160,5 @@ Thumbs.db
 
 config.*.json
 *.csv
+.claude
+.mcp.json

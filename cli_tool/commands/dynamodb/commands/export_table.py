@@ -344,7 +344,7 @@ def _extract_remaining_filter(
     """Extract the AND portion of a parsed filter expression."""
     if not (filter_expr and expression_attribute_values and expression_attribute_names):
         return None
-    and_match = re.search(r"\)\s+AND\s+(.+)\)$", filter_expr, re.IGNORECASE)
+    and_match = re.search(r"\)\s+AND\s+([^)]+)\)$", filter_expr, re.IGNORECASE)
     if and_match:
         remaining = and_match.group(1).strip()
         console.print(f"[cyan]  Additional filter: {remaining}[/cyan]")

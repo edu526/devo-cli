@@ -828,7 +828,7 @@ class FilterBuilder:
 
     def _process_between(self, expr: str) -> str:
         """Process BETWEEN expression."""
-        match = re.match(r"(\w+)\s+(?:BETWEEN|between)\s+(.+?)\s+(?:AND|and)\s+(.+)", expr)
+        match = re.match(r"(\w+)\s+(?:BETWEEN|between)\s+(\S+)\s+(?:AND|and)\s+(\S+)", expr, re.IGNORECASE)
         if not match:
             return expr
 

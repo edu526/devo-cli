@@ -66,6 +66,10 @@ def _update_shell_config_file(config_file: Path, export_line: str):
         return
 
     try:
+        resolved = config_file.resolve()
+        if not str(resolved).startswith(str(Path.home().resolve())):
+            raise ValueError(f"Refusing to write outside home directory: {resolved}")
+
         lines = config_file.read_text().splitlines(keepends=True)
         new_lines = []
         found = False
