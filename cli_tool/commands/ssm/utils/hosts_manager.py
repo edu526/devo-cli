@@ -197,7 +197,7 @@ class HostsManager:
         system = platform.system()
 
         if system == "Windows":
-            hosts_path = Path(self.WINDOWS_HOSTS_FILE)
+            hosts_path = Path(HostsManager.WINDOWS_HOSTS_FILE)
             try:
                 hosts_path.write_text(content, encoding="utf-8")
             except PermissionError as e:
