@@ -50,7 +50,7 @@ class PortForwarder:
             system_name = "macOS" if self.system == "Darwin" else "Linux"
             install_cmd = "brew install socat" if self.system == "Darwin" else "sudo apt-get install socat"
 
-            raise Exception(f"socat is not installed on {system_name}. Install it with:\n" f"  {install_cmd}")
+            raise FileNotFoundError(f"socat is not installed on {system_name}. Install it with:\n  {install_cmd}")
 
         # Start socat
         cmd = ["socat", f"TCP-LISTEN:{local_port},bind={local_address},reuseaddr,fork", f"TCP:127.0.0.1:{target_port}"]
@@ -67,13 +67,13 @@ class PortForwarder:
                 # Process died immediately, get error
                 _, stderr_bytes = process.communicate()
                 error_msg = stderr_bytes.decode() if stderr_bytes else "Unknown error"
-                raise Exception(f"socat failed to start: {error_msg}")
+                raise RuntimeError(f"socat failed to start: {error_msg}")
 
             self.processes[key] = process
             return process.pid
 
         except FileNotFoundError:
-            raise Exception("socat command not found. This should not happen as we checked for it earlier.")
+            raise FileNotFoundError("socat command not found. This should not happen as we checked for it earlier.")
 
     def _start_forward_windows(self, local_address: str, local_port: int, target_port: int) -> None:
         """Start forwarding using netsh portproxy (Windows)"""
@@ -117,14 +117,14 @@ class PortForwarder:
             ]
 
             if any(keyword in error_lower for keyword in permission_keywords):
-                raise Exception(
+                raise PermissionError(
                     "Permission denied. Please run your terminal as Administrator:\n"
                     "  1. Right-click on Git Bash, Command Prompt or PowerShell\n"
                     "  2. Select 'Run as administrator'\n"
                     "  3. Run the command again"
                 )
             else:
-                raise Exception(f"Failed to create port proxy: {error_output.strip() or 'Unknown error'}")
+                raise RuntimeError(f"Failed to create port proxy: {error_output.strip() or 'Unknown error'}")
 
     def stop_forward(self, local_address: str, local_port: int):
         """Stop port forwarding"""
@@ -165,7 +165,8 @@ class PortForwarder:
 
     def stop_all(self):
         """Stop all port forwarding"""
-        for key in list(self.processes.keys()):
+        # list() is necessary here because stop_forward modifies self.processes during iteration
+        for key in list(self.processes.keys()):  # NOSONAR
             local_address, local_port = key.split(":")
             self.stop_forward(local_address, int(local_port))
 
@@ -202,7 +203,7 @@ class PortForwarder:
             subprocess.run(["sudo", "ifconfig", "lo0", "alias", ip, "up"], capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError as e:
             stderr = e.stderr if e.stderr else ""
-            raise Exception(f"Failed to configure loopback alias {ip}: {stderr.strip() or 'Unknown error'}")
+            raise OSError(f"Failed to configure loopback alias {ip}: {stderr.strip() or 'Unknown error'}")
 
     def __del__(self):
         """Cleanup on deletion"""
