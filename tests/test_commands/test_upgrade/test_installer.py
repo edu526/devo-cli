@@ -433,3 +433,144 @@ def test_extract_archive_unknown_type_does_nothing(tmp_path):
 
     # Should not raise; just a no-op
     _extract_archive(dummy, "unknown", extract_dir)
+
+
+# ---------------------------------------------------------------------------
+# _replace_unix_archive — OSError cleanup path (lines 88-89)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_replace_unix_archive_handles_oserror_on_temp_cleanup(tmp_path, mocker):
+    """When shutil.rmtree raises OSError on temp_extract cleanup, it is silently ignored."""
+    target = tmp_path / "devo"
+    target.mkdir()
+    (target / "devo").write_text("old binary")
+
+    extracted = tmp_path / "new_devo"
+    extracted.mkdir()
+    (extracted / "devo").write_text("new binary")
+
+    backup = tmp_path / "devo.backup"
+    temp_extract = tmp_path / "devo_new"
+    temp_extract.mkdir()
+
+    # Make rmtree raise OSError only when called for temp_extract
+    import shutil as _shutil
+
+    original_rmtree = _shutil.rmtree
+    temp_str = str(temp_extract)
+
+    def selective_rmtree(path, *args, **kwargs):
+        if str(path) == temp_str:
+            raise OSError("permission denied")
+        return original_rmtree(path, *args, **kwargs)
+
+    mocker.patch("shutil.rmtree", side_effect=selective_rmtree)
+    mocker.patch("os.chmod")
+
+    result = _replace_unix_archive(extracted, target, backup, temp_extract)
+
+    # Should return True despite the OSError
+    assert result is True
+
+
+# ---------------------------------------------------------------------------
+# replace_binary — OSError when removing existing temp dir (lines 116-119)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_replace_binary_warns_when_old_temp_dir_removal_fails(tmp_path, mocker):
+    """Prints a warning but continues when removing the existing temp dir raises OSError."""
+    mocker.patch("platform.system", return_value="Darwin")
+
+    target = tmp_path / "devo"
+    target.mkdir()
+    (target / "devo").write_text("old binary")
+
+    # Mock Path.exists to report temp dir exists (triggering the rmtree call)
+    # and mock rmtree to raise OSError for the temp dir, then mock mkdir to succeed
+    original_exists = Path.exists
+
+    temp_dir_path = target.parent / "devo_new"
+    backup_path = target.parent / "devo.backup"
+
+    def patched_exists(self):
+        if self == temp_dir_path and not temp_dir_path.is_dir():
+            return True  # Pretend temp dir exists so rmtree is called
+        if self == backup_path:
+            return False  # Pretend no pre-existing backup
+        return original_exists(self)
+
+    mocker.patch.object(Path, "exists", patched_exists)
+
+    call_count = {"n": 0}
+
+    import shutil as _shutil
+
+    original_rmtree = _shutil.rmtree
+
+    def selective_rmtree(path, *args, **kwargs):
+        if str(path) == str(temp_dir_path) and call_count["n"] == 0:
+            call_count["n"] += 1
+            raise OSError("busy")
+        return original_rmtree(path, *args, **kwargs)
+
+    mocker.patch("shutil.rmtree", side_effect=selective_rmtree)
+    mocker.patch("cli_tool.commands.upgrade.core.installer._replace_unix_archive", return_value=True)
+    mocker.patch("shutil.copytree")  # avoid real copytree
+
+    # Also mock Path.mkdir so the temp dir mkdir succeeds after warning
+    original_mkdir = Path.mkdir
+
+    def patched_mkdir(self, *args, **kwargs):
+        if self == temp_dir_path:
+            return  # no-op (pretend it works)
+        return original_mkdir(self, *args, **kwargs)
+
+    mocker.patch.object(Path, "mkdir", patched_mkdir)
+    mocker.patch("cli_tool.commands.upgrade.core.installer._extract_archive")
+    mocker.patch("cli_tool.commands.upgrade.core.installer._find_extracted_dir", return_value=tmp_path / "devo_new")
+
+    result = replace_binary(tmp_path / "fake.tar.gz", target, archive_type="tar.gz")
+
+    assert result is True
+    assert call_count["n"] == 1  # OSError was hit once
+
+
+# ---------------------------------------------------------------------------
+# replace_binary — OSError when cleaning up temp after extraction failure (lines 136-137)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_replace_binary_ignores_oserror_during_failure_cleanup(tmp_path, mocker):
+    """When extraction fails and cleaning up temp also raises OSError, it is silently ignored."""
+    mocker.patch("platform.system", return_value="Darwin")
+
+    target = tmp_path / "devo"
+    target.mkdir()
+    (target / "devo").write_text("old binary")
+
+    new_binary = tmp_path / "bad.tar.gz"
+    new_binary.write_text("not a real archive")
+
+    # Make _extract_archive raise and rmtree also raise
+    mocker.patch("cli_tool.commands.upgrade.core.installer._extract_archive", side_effect=Exception("bad archive"))
+
+    import shutil as _shutil
+
+    original_rmtree = _shutil.rmtree
+
+    def always_fail_rmtree(path, *args, **kwargs):
+        if "devo_new" in str(path):
+            raise OSError("in use")
+        return original_rmtree(path, *args, **kwargs)
+
+    mocker.patch("shutil.rmtree", side_effect=always_fail_rmtree)
+
+    result = replace_binary(new_binary, target, archive_type="tar.gz")
+
+    # Should return False without raising
+    assert result is False

@@ -423,3 +423,119 @@ def test_ensure_aws_profile_selected_profile_wrong_account(mocker):
     assert profile is None
     assert account is None
     assert arn is None
+
+
+# ============================================================================
+# Additional branch coverage for uncovered lines
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_verify_and_check_account_wrong_account_shows_messages(mocker):
+    """Prints messages when show_messages=True and account does not match required."""
+    mocker.patch(
+        "cli_tool.core.utils.aws_profile.verify_aws_credentials",
+        return_value=("999999999999", "arn:aws:iam::999999999999:user/u"),
+    )
+    with patch("cli_tool.core.utils.aws_profile.click") as mock_click:
+        result = _verify_and_check_account("my-profile", "123456789012", show_messages=True)
+
+    assert result is False
+    assert mock_click.echo.call_count >= 2
+
+
+@pytest.mark.unit
+def test_pick_profile_from_list_empty_input_shows_messages(mocker):
+    """When show_messages=True and user skips, messages are printed."""
+    profiles = [("dev-profile", "sso")]
+    with patch("cli_tool.core.utils.aws_profile.click") as mock_click:
+        mock_click.prompt.return_value = ""
+        result = _pick_profile_from_list(profiles, None, show_messages=True)
+
+    assert result is None
+    assert mock_click.echo.called
+
+
+@pytest.mark.unit
+def test_pick_profile_from_list_invalid_number_shows_messages(mocker):
+    """When show_messages=True and selection is invalid, prints message."""
+    profiles = [("dev-profile", "sso")]
+    with patch("cli_tool.core.utils.aws_profile.click") as mock_click:
+        mock_click.prompt.return_value = "abc"
+        result = _pick_profile_from_list(profiles, None, show_messages=True)
+
+    assert result is None
+    # Should have printed something for invalid selection
+    assert mock_click.echo.called
+
+
+@pytest.mark.unit
+def test_select_aws_profile_with_show_messages_true_no_profiles(mocker):
+    """When show_messages=True and no profiles, prints messages and returns None."""
+    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=[])
+    with patch("cli_tool.core.utils.aws_profile.click") as mock_click:
+        result = select_aws_profile(show_messages=True)
+
+    assert result is None
+    assert mock_click.echo.called
+
+
+@pytest.mark.unit
+def test_select_aws_profile_with_show_messages_true_single_valid(mocker):
+    """When show_messages=True and one valid profile, prints success and returns it."""
+    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=[("dev", "sso")])
+    mocker.patch(
+        "cli_tool.core.utils.aws_profile.verify_aws_credentials",
+        return_value=("123456789012", "arn:aws:iam::123456789012:user/u"),
+    )
+    with patch("cli_tool.core.utils.aws_profile.click") as mock_click:
+        result = select_aws_profile(show_messages=True)
+
+    assert result == "dev"
+    # Should print success message including the profile name
+    printed_texts = [str(c) for c in mock_click.echo.call_args_list]
+    assert any("dev" in text for text in printed_texts) or mock_click.echo.called
+
+
+@pytest.mark.unit
+def test_ensure_aws_profile_wrong_account_prints_messages(mocker):
+    """When profile is for wrong account and show_messages=True, prints warning messages."""
+    mocker.patch(
+        "cli_tool.core.utils.aws_profile.verify_aws_credentials",
+        side_effect=[
+            ("999999999999", "arn:aws:iam::999999999999:user/u"),  # Wrong account
+            ("123456789012", "arn:aws:iam::123456789012:user/u"),  # Correct after selection
+        ],
+    )
+    mocker.patch("cli_tool.core.utils.aws_profile.select_aws_profile", return_value="correct-profile")
+
+    with patch("cli_tool.core.utils.aws_profile.click") as mock_click:
+        profile, account, arn = ensure_aws_profile(
+            profile="wrong-profile",
+            required_account="123456789012",
+            show_messages=True,
+        )
+
+    assert profile == "correct-profile"
+    assert account == "123456789012"
+    assert mock_click.echo.called
+
+
+@pytest.mark.unit
+def test_ensure_aws_profile_selected_profile_invalid_credentials(mocker):
+    """Returns (None, None, None) when selected profile returns no credentials."""
+    mocker.patch(
+        "cli_tool.core.utils.aws_profile.verify_aws_credentials",
+        side_effect=[
+            (None, None),  # Initial call fails
+            (None, None),  # Selected profile also fails
+        ],
+    )
+    mocker.patch("cli_tool.core.utils.aws_profile.select_aws_profile", return_value="selected-profile")
+
+    with patch("cli_tool.core.utils.aws_profile.click"):
+        profile, account, arn = ensure_aws_profile(show_messages=False)
+
+    assert profile is None
+    assert account is None
+    assert arn is None

@@ -741,3 +741,132 @@ def test_read_config_profiles_sso_session_section_flushes_current_profile(tmp_pa
 
     assert "dev" in result
     assert "my-org" not in result
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage for uncovered lines
+# Lines 30, 97-99, 122, 224-225, 257-258, 293-295, 302-303
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_merge_sso_session_breaks_at_next_section_after_match(tmp_path):
+    """_merge_sso_session stops reading (break) when a new section starts after target session."""
+    config = tmp_path / "config"
+    config.write_text(
+        "[sso-session my-org]\nsso_start_url = https://org.awsapps.com/start\nsso_region = us-east-1\n"
+        "[profile dev]\nregion = us-east-1\n"
+        "[sso-session other]\nsso_start_url = https://other.com/start\n"
+    )
+    target = {}
+
+    _merge_sso_session(config, "my-org", target)
+
+    # Only my-org values should be merged; other session should not bleed in
+    assert target.get("sso_start_url") == "https://org.awsapps.com/start"
+    assert target.get("sso_region") == "us-east-1"
+
+
+@pytest.mark.unit
+def test_parse_sso_config_returns_none_on_read_exception(tmp_path, monkeypatch, mocker):
+    """parse_sso_config returns None when config file raises on read (exception handler)."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    aws_dir = tmp_path / ".aws"
+    aws_dir.mkdir()
+    config = aws_dir / "config"
+    config.write_text("[profile dev]\nregion = us-east-1\n")
+
+    # Patch Path.open to raise PermissionError
+    mocker.patch.object(Path, "open", side_effect=PermissionError("access denied"))
+
+    result = parse_sso_config("dev")
+
+    assert result is None
+
+
+@pytest.mark.unit
+def test_read_config_profiles_default_section_saves_previous_named_profile(tmp_path):
+    """When [default] follows a [profile <name>], the named profile is saved before switching."""
+    config = tmp_path / "config"
+    config.write_text("[profile dev]\nregion = us-east-1\n[default]\nregion = us-west-2\n")
+
+    result = _read_config_profiles(config)
+
+    # 'dev' should have been saved when [default] was encountered
+    assert "dev" in result
+    assert "default" in result
+
+
+@pytest.mark.unit
+def test_get_profile_config_returns_none_on_read_exception(tmp_path, monkeypatch, mocker):
+    """get_profile_config returns None when config file cannot be read (exception handler)."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    aws_dir = tmp_path / ".aws"
+    aws_dir.mkdir()
+    config = aws_dir / "config"
+    config.write_text("[profile dev]\nregion = us-east-1\n")
+
+    mocker.patch.object(Path, "open", side_effect=PermissionError("access denied"))
+
+    result = get_profile_config("dev")
+
+    assert result is None
+
+
+@pytest.mark.unit
+def test_remove_section_from_file_handles_write_exception(tmp_path, mocker):
+    """remove_section_from_file handles exception during write without raising."""
+    from cli_tool.commands.aws_login.core.config import remove_section_from_file
+
+    ini_file = tmp_path / "config"
+    ini_file.write_text("[profile dev]\nregion = us-east-1\n")
+
+    # Patch Path.open: first call (read) succeeds, second call (write) raises
+    call_count = {"n": 0}
+    real_open = Path.open
+
+    def patched_open(self, mode="r", *args, **kwargs):
+        call_count["n"] += 1
+        if call_count["n"] >= 2 and "w" in str(mode):
+            raise PermissionError("read only filesystem")
+        return real_open(self, mode, *args, **kwargs)
+
+    mocker.patch.object(Path, "open", patched_open)
+
+    # Should not raise
+    remove_section_from_file(ini_file, "[profile dev]")
+
+
+@pytest.mark.unit
+def test_get_existing_sso_sessions_non_sso_section_flushes_current(tmp_path, monkeypatch):
+    """In get_existing_sso_sessions, a non-sso-session section header flushes the current session."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    aws_dir = tmp_path / ".aws"
+    aws_dir.mkdir()
+    (aws_dir / "config").write_text(
+        "[sso-session my-org]\nsso_start_url = https://org.awsapps.com/start\n"
+        "[profile dev]\nregion = us-east-1\n"
+        "[sso-session second-org]\nsso_start_url = https://second.com/start\n"
+    )
+
+    result = get_existing_sso_sessions()
+
+    assert "my-org" in result
+    assert "second-org" in result
+    assert "dev" not in result
+
+
+@pytest.mark.unit
+def test_get_existing_sso_sessions_returns_empty_on_read_exception(tmp_path, monkeypatch, mocker):
+    """get_existing_sso_sessions returns empty dict when config file raises on read."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    aws_dir = tmp_path / ".aws"
+    aws_dir.mkdir()
+    config = aws_dir / "config"
+    config.write_text("[sso-session my-org]\nsso_start_url = https://org.com/start\n")
+
+    mocker.patch.object(Path, "open", side_effect=PermissionError("access denied"))
+
+    result = get_existing_sso_sessions()
+
+    assert result == {}

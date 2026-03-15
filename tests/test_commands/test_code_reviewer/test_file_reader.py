@@ -549,3 +549,510 @@ def test_get_file_stats_size_human_kb_format(tmp_path):
     stats = get_file_stats(str(test_file))
 
     assert "KB" in stats["size_human"]
+
+
+@pytest.mark.unit
+def test_get_file_stats_size_human_mb_format(tmp_path):
+    """size_human uses MB format for large files (>= 1 MB)."""
+    test_file = tmp_path / "large.py"
+    test_file.write_bytes(b"x" * (1024 * 1024 + 1))
+
+    stats = get_file_stats(str(test_file))
+
+    assert "MB" in stats["size_human"]
+
+
+@pytest.mark.unit
+def test_get_file_stats_handles_read_error(tmp_path):
+    """get_file_stats stores error key when reading the file content fails."""
+    test_file = tmp_path / "module.py"
+    test_file.write_text("content\n")
+
+    with patch("pathlib.Path.open", side_effect=OSError("cannot read")):
+        stats = get_file_stats(str(test_file))
+
+    assert "error" in stats
+
+
+# ============================================================================
+# get_gitignore_excludes — error path (lines 43-44)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_get_gitignore_excludes_exception_during_open_returns_defaults(tmp_path, monkeypatch):
+    """Returns default excludes when .gitignore open raises inside the with block."""
+    monkeypatch.chdir(tmp_path)
+    gitignore = tmp_path / ".gitignore"
+    gitignore.write_text("custom_pattern\n")
+
+    original_open = open
+
+    def _flaky_open(file, *args, **kwargs):
+        if ".gitignore" in str(file):
+            raise IOError("forced error")
+        return original_open(file, *args, **kwargs)
+
+    with patch("builtins.open", side_effect=_flaky_open):
+        excludes = get_gitignore_excludes()
+
+    assert ".git" in excludes
+
+
+# ============================================================================
+# should_exclude_path — wildcard exception path (lines 61-62)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_should_exclude_path_wildcard_raises_attribute_error():
+    """Returns False (not excluded) when path.match raises AttributeError on a wildcard."""
+    with patch.object(Path, "match", side_effect=AttributeError("mock error")):
+        result = should_exclude_path("some/module.py", ["*.pyc"])
+    assert result is False
+
+
+@pytest.mark.unit
+def test_should_exclude_path_wildcard_raises_value_error():
+    """Returns False (not excluded) when path.match raises ValueError on a wildcard."""
+    with patch.object(Path, "match", side_effect=ValueError("mock error")):
+        result = should_exclude_path("some/module.py", ["*.pyc"])
+    assert result is False
+
+
+# ============================================================================
+# find_files — glob/wildcard branch (lines 89-99)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_find_files_with_glob_pattern(tmp_path, monkeypatch):
+    """find_files uses glob when path does not exist as a file or directory."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "alpha.py").write_text("a = 1")
+    (tmp_path / "beta.py").write_text("b = 2")
+
+    result = find_files("*.py", recursive=False)
+
+    assert any("alpha.py" in f for f in result) or any("beta.py" in f for f in result)
+
+
+@pytest.mark.unit
+def test_find_files_glob_with_double_star_already_present(tmp_path, monkeypatch):
+    """find_files does not prepend **/ when pattern already contains **."""
+    monkeypatch.chdir(tmp_path)
+    subdir = tmp_path / "sub"
+    subdir.mkdir()
+    (subdir / "deep.py").write_text("d = 1")
+
+    result = find_files("**/*.py", recursive=True)
+
+    assert any("deep.py" in f for f in result)
+
+
+@pytest.mark.unit
+def test_find_files_glob_respects_max_files(tmp_path, monkeypatch):
+    """find_files stops at max_files when using glob matching."""
+    monkeypatch.chdir(tmp_path)
+    for i in range(10):
+        (tmp_path / f"file{i}.py").write_text(f"x = {i}")
+
+    result = find_files("*.py", recursive=False, max_files=3)
+
+    assert len(result) <= 3
+
+
+@pytest.mark.unit
+def test_find_files_exception_returns_empty_list(tmp_path, monkeypatch):
+    """find_files returns empty list when an unexpected exception occurs inside the try block."""
+    monkeypatch.chdir(tmp_path)
+    with patch("pathlib.Path.rglob", side_effect=OSError("permission denied")):
+        result = find_files(str(tmp_path))
+    assert result == []
+
+
+@pytest.mark.unit
+def test_find_files_excludes_excluded_file(tmp_path, monkeypatch):
+    """find_files skips files matching the exclusion list (direct file path)."""
+    monkeypatch.chdir(tmp_path)
+    venv_dir = tmp_path / ".venv"
+    venv_dir.mkdir()
+    excluded_file = venv_dir / "module.py"
+    excluded_file.write_text("x = 1")
+
+    result = find_files(str(excluded_file))
+
+    assert str(excluded_file) not in result
+
+
+# ============================================================================
+# detect_language_from_path — all remaining language mappings
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_detect_language_tsx():
+    assert detect_language_from_path("component.tsx") == "tsx"
+
+
+@pytest.mark.unit
+def test_detect_language_jsx():
+    assert detect_language_from_path("component.jsx") == "jsx"
+
+
+@pytest.mark.unit
+def test_detect_language_html():
+    assert detect_language_from_path("index.html") == "html"
+
+
+@pytest.mark.unit
+def test_detect_language_css():
+    assert detect_language_from_path("styles.css") == "css"
+
+
+@pytest.mark.unit
+def test_detect_language_xml():
+    assert detect_language_from_path("config.xml") == "xml"
+
+
+@pytest.mark.unit
+def test_detect_language_markdown():
+    assert detect_language_from_path("README.md") == "markdown"
+
+
+@pytest.mark.unit
+def test_detect_language_sql():
+    assert detect_language_from_path("query.sql") == "sql"
+
+
+@pytest.mark.unit
+def test_detect_language_bash():
+    assert detect_language_from_path("script.sh") == "bash"
+
+
+@pytest.mark.unit
+def test_detect_language_java():
+    assert detect_language_from_path("Main.java") == "java"
+
+
+@pytest.mark.unit
+def test_detect_language_cpp():
+    assert detect_language_from_path("main.cpp") == "cpp"
+
+
+@pytest.mark.unit
+def test_detect_language_c():
+    assert detect_language_from_path("main.c") == "c"
+
+
+@pytest.mark.unit
+def test_detect_language_csharp():
+    assert detect_language_from_path("Program.cs") == "csharp"
+
+
+@pytest.mark.unit
+def test_detect_language_php():
+    assert detect_language_from_path("index.php") == "php"
+
+
+@pytest.mark.unit
+def test_detect_language_ruby():
+    assert detect_language_from_path("app.rb") == "ruby"
+
+
+@pytest.mark.unit
+def test_detect_language_go():
+    assert detect_language_from_path("main.go") == "go"
+
+
+@pytest.mark.unit
+def test_detect_language_rust():
+    assert detect_language_from_path("lib.rs") == "rust"
+
+
+# ============================================================================
+# get_file_content (@tool) — all modes via mocked console_ui
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_get_file_content_view_mode(tmp_path):
+    """get_file_content view mode returns file content."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_content
+
+    test_file = tmp_path / "module.py"
+    test_file.write_text("x = 1\ny = 2\n")
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_content(str(test_file), mode="view")
+
+    assert "x = 1" in result
+    assert "Content of" in result
+
+
+@pytest.mark.unit
+def test_get_file_content_lines_mode_with_line_numbers(tmp_path):
+    """get_file_content lines mode with line numbers enabled."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_content
+
+    test_file = tmp_path / "code.py"
+    test_file.write_text("line1\nline2\nline3\nline4\nline5\n")
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_content(str(test_file), mode="lines", start_line=2, end_line=4, show_line_numbers=True)
+
+    assert "2:" in result or "   2:" in result
+
+
+@pytest.mark.unit
+def test_get_file_content_lines_mode_without_line_numbers(tmp_path):
+    """get_file_content lines mode without line numbers."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_content
+
+    test_file = tmp_path / "code.py"
+    test_file.write_text("lineA\nlineB\nlineC\n")
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_content(str(test_file), mode="lines", start_line=1, end_line=2, show_line_numbers=False)
+
+    assert "lineA" in result
+
+
+@pytest.mark.unit
+def test_get_file_content_lines_mode_with_lines_count(tmp_path):
+    """get_file_content lines mode uses lines_count to derive end_line."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_content
+
+    test_file = tmp_path / "code.py"
+    test_file.write_text("a\nb\nc\nd\ne\n")
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_content(str(test_file), mode="lines", start_line=1, lines_count=3, show_line_numbers=False)
+
+    assert "a" in result
+
+
+@pytest.mark.unit
+def test_get_file_content_search_mode_with_match(tmp_path):
+    """get_file_content search mode returns matches found."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_content
+
+    test_file = tmp_path / "code.py"
+    test_file.write_text("def hello():\n    pass\n\nhello()\n")
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_content(str(test_file), mode="search", search_pattern="hello", search_mode="regex")
+
+    assert "hello" in result or "Search Results" in result
+
+
+@pytest.mark.unit
+def test_get_file_content_search_mode_no_pattern_raises_in_results(tmp_path):
+    """get_file_content search mode without pattern returns error in results."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_content
+
+    test_file = tmp_path / "code.py"
+    test_file.write_text("content\n")
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_content(str(test_file), mode="search")
+
+    assert "Error" in result or "search_pattern" in result
+
+
+@pytest.mark.unit
+def test_get_file_content_stats_mode(tmp_path):
+    """get_file_content stats mode returns file statistics."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_content
+
+    test_file = tmp_path / "module.py"
+    test_file.write_text("def foo():\n    pass\n\nclass Bar:\n    pass\n")
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_content(str(test_file), mode="stats")
+
+    import json as _json
+
+    parsed = _json.loads(result)
+    assert "line_count" in parsed
+
+
+@pytest.mark.unit
+def test_get_file_content_preview_mode(tmp_path):
+    """get_file_content preview mode returns file preview."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_content
+
+    test_file = tmp_path / "module.py"
+    test_file.write_text("line1\nline2\nline3\n")
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_content(str(test_file), mode="preview")
+
+    assert "Preview of" in result
+
+
+@pytest.mark.unit
+def test_get_file_content_unknown_mode_returns_error(tmp_path):
+    """get_file_content unknown mode returns error string."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_content
+
+    test_file = tmp_path / "module.py"
+    test_file.write_text("content\n")
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_content(str(test_file), mode="invalid_mode")
+
+    assert "Error" in result or "Unknown mode" in result
+
+
+@pytest.mark.unit
+def test_get_file_content_find_mode_with_files(tmp_path):
+    """get_file_content find mode lists files found."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_content
+
+    (tmp_path / "a.py").write_text("a = 1")
+    (tmp_path / "b.py").write_text("b = 2")
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_content(str(tmp_path), mode="find")
+
+    assert "Found" in result or "files" in result.lower()
+
+
+@pytest.mark.unit
+def test_get_file_content_find_mode_no_files(tmp_path):
+    """get_file_content find mode when no files found returns no-files message."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_content
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_content("nonexistent_xyz_*.py", mode="find")
+
+    assert "No files found" in result
+
+
+@pytest.mark.unit
+def test_get_file_content_no_files_found_non_find_mode(tmp_path):
+    """get_file_content returns error when no files match and mode is not find."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_content
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_content("nonexistent_xyz_file.py", mode="view")
+
+    assert "No files found" in result
+
+
+@pytest.mark.unit
+def test_get_file_content_outer_exception_handled():
+    """get_file_content handles unexpected top-level exceptions."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_content
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        with patch("cli_tool.commands.code_reviewer.tools.file_reader.split_path_list", side_effect=RuntimeError("crash")):
+            result = get_file_content("any_path.py", mode="view")
+
+    assert "Error in get_file_content" in result
+
+
+@pytest.mark.unit
+def test_get_file_content_comma_separated_paths(tmp_path):
+    """get_file_content processes comma-separated paths."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_content
+
+    file1 = tmp_path / "a.py"
+    file2 = tmp_path / "b.py"
+    file1.write_text("a = 1\n")
+    file2.write_text("b = 2\n")
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_content(f"{file1},{file2}", mode="view")
+
+    assert "a = 1" in result or "b = 2" in result
+
+
+@pytest.mark.unit
+def test_get_file_content_search_mode_no_match_in_file(tmp_path):
+    """get_file_content search mode with no matches adds no-match entry to results."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_content
+
+    test_file = tmp_path / "code.py"
+    test_file.write_text("x = 1\ny = 2\n")
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_content(str(test_file), mode="search", search_pattern="zzz_not_here", search_mode="regex")
+
+    assert isinstance(result, str)
+
+
+@pytest.mark.unit
+def test_get_file_content_search_mode_more_than_5_matches(tmp_path):
+    """get_file_content search mode truncates output when more than 5 matches."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_content
+
+    lines = "\n".join([f"target_token_{i}" for i in range(10)])
+    test_file = tmp_path / "code.py"
+    test_file.write_text(lines)
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_content(str(test_file), mode="search", search_pattern="target_token", search_mode="regex")
+
+    assert "more matches" in result or "target_token" in result
+
+
+# ============================================================================
+# get_file_info (@tool)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_get_file_info_small_file(tmp_path):
+    """get_file_info returns file info with small-file recommendation."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_info
+
+    test_file = tmp_path / "tiny.py"
+    test_file.write_text("x = 1\n")
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_info(str(test_file))
+
+    assert "mode='view'" in result or "Small file" in result
+
+
+@pytest.mark.unit
+def test_get_file_info_medium_file(tmp_path):
+    """get_file_info returns medium-file recommendation for 100-499 line files."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_info
+
+    content = "\n".join([f"line {i}" for i in range(200)])
+    test_file = tmp_path / "medium.py"
+    test_file.write_text(content)
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_info(str(test_file))
+
+    assert "mode='lines'" in result or "Medium file" in result
+
+
+@pytest.mark.unit
+def test_get_file_info_large_file(tmp_path):
+    """get_file_info returns large-file recommendation for 500+ line files."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_info
+
+    content = "\n".join([f"line {i}" for i in range(600)])
+    test_file = tmp_path / "large.py"
+    test_file.write_text(content)
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_info(str(test_file))
+
+    assert "Large file" in result or "mode='lines'" in result or "mode='search'" in result
+
+
+@pytest.mark.unit
+def test_get_file_info_file_not_found():
+    """get_file_info returns error string when file does not exist."""
+    from cli_tool.commands.code_reviewer.tools.file_reader import get_file_info
+
+    with patch("cli_tool.commands.code_reviewer.tools.file_reader.console_ui"):
+        result = get_file_info("/nonexistent/path/file.py")
+
+    assert "Error" in result

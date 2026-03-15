@@ -406,3 +406,163 @@ def test_get_pr_context_excludes_error_diffs(git_manager, mock_repo):
 
     assert "good.py" in result["supported_files"]
     assert "bad.py" not in result["supported_files"]
+
+
+# ============================================================================
+# get_file_diff — auto-detect base_branch and IndexError branches (lines 97, 103-104, 130-131)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_get_file_diff_auto_detects_base_branch(git_manager, mock_repo):
+    """Calls get_base_branch when base_branch=None in get_file_diff."""
+    merge_base = MagicMock()
+    mock_repo.merge_base.return_value = [merge_base]
+    mock_repo.git.diff.return_value = "diff content"
+
+    with patch.object(git_manager, "get_base_branch", return_value="main") as mock_get_base:
+        git_manager.get_file_diff("file.py", base_branch=None)
+
+    mock_get_base.assert_called_once()
+
+
+@pytest.mark.unit
+def test_get_file_diff_handles_no_merge_base(git_manager, mock_repo):
+    """Falls back to base_branch string when IndexError occurs on merge_base in get_file_diff."""
+    mock_repo.merge_base.return_value = []
+    mock_repo.git.diff.return_value = "diff content"
+
+    with patch.object(git_manager, "get_base_branch", return_value="main"):
+        result = git_manager.get_file_diff("file.py", base_branch="main")
+
+    assert isinstance(result, str)
+
+
+@pytest.mark.unit
+def test_get_file_diff_new_file_both_show_calls_fail(git_manager, mock_repo):
+    """Returns error string when both show() calls fail for a new file."""
+    merge_base = MagicMock()
+    mock_repo.merge_base.return_value = [merge_base]
+    mock_repo.git.diff.return_value = ""
+    # Both show calls raise exceptions
+    mock_repo.git.show.side_effect = [Exception("not in base"), Exception("cannot read new file")]
+
+    with patch.object(git_manager, "get_base_branch", return_value="main"):
+        result = git_manager.get_file_diff("new_file.py", "main")
+
+    assert "Error: Could not read new file" in result
+
+
+# ============================================================================
+# get_full_diff — auto-detect base_branch and IndexError branches (lines 149, 155-156)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_get_full_diff_auto_detects_base_branch(git_manager, mock_repo):
+    """Calls get_base_branch when base_branch=None in get_full_diff."""
+    merge_base = MagicMock()
+    mock_repo.merge_base.return_value = [merge_base]
+    mock_repo.git.diff.return_value = "full diff"
+
+    with patch.object(git_manager, "get_base_branch", return_value="main") as mock_get_base:
+        result = git_manager.get_full_diff(base_branch=None)
+
+    mock_get_base.assert_called_once()
+    assert result == "full diff"
+
+
+@pytest.mark.unit
+def test_get_full_diff_handles_no_merge_base(git_manager, mock_repo):
+    """Falls back to base_branch string when IndexError on merge_base in get_full_diff."""
+    mock_repo.merge_base.return_value = []
+    mock_repo.git.diff.return_value = "full diff fallback"
+
+    with patch.object(git_manager, "get_base_branch", return_value="main"):
+        result = git_manager.get_full_diff(base_branch="main")
+
+    assert result == "full diff fallback"
+
+
+# ============================================================================
+# get_pr_context — auto-detect base_branch (line 238)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_get_pr_context_auto_detects_base_branch(git_manager, mock_repo):
+    """Calls get_base_branch when base_branch=None in get_pr_context."""
+    with patch.object(git_manager, "get_base_branch", return_value="main") as mock_get_base:
+        with patch.object(git_manager, "get_current_branch", return_value="feature/x"):
+            with patch.object(git_manager, "get_changed_files", return_value=[]):
+                with patch.object(git_manager, "get_full_diff", return_value=""):
+                    git_manager.get_pr_context(base_branch=None)
+
+    mock_get_base.assert_called_once()
+
+
+# ============================================================================
+# is_file_supported — additional binary extensions
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_is_file_supported_dll_file(git_manager):
+    """DLL files are NOT supported."""
+    assert git_manager.is_file_supported("library.dll") is False
+
+
+@pytest.mark.unit
+def test_is_file_supported_so_file(git_manager):
+    """Shared object files are NOT supported."""
+    assert git_manager.is_file_supported("lib.so") is False
+
+
+@pytest.mark.unit
+def test_is_file_supported_mp3_file(git_manager):
+    """MP3 files are NOT supported."""
+    assert git_manager.is_file_supported("audio.mp3") is False
+
+
+@pytest.mark.unit
+def test_is_file_supported_yaml_file(git_manager):
+    """YAML config files are supported (text-based)."""
+    assert git_manager.is_file_supported("config.yaml") is True
+
+
+@pytest.mark.unit
+def test_is_file_supported_sql_file(git_manager):
+    """SQL files are supported (text-based)."""
+    assert git_manager.is_file_supported("schema.sql") is True
+
+
+# ============================================================================
+# get_base_branch — dev fallback and origin/ exclusion
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_get_base_branch_falls_back_to_dev(git_manager, mock_repo):
+    """Falls back to 'dev' when neither main, master, nor develop exists."""
+    dev_ref = MagicMock()
+    dev_ref.name = "dev"
+    mock_repo.refs = [dev_ref]
+
+    result = git_manager.get_base_branch(default_base="main")
+
+    assert result == "dev"
+
+
+@pytest.mark.unit
+def test_get_base_branch_excludes_origin_refs(git_manager, mock_repo):
+    """Branches starting with 'origin/' are excluded from the first-branch fallback."""
+    origin_ref = MagicMock()
+    origin_ref.name = "origin/main"
+    local_ref = MagicMock()
+    local_ref.name = "feature/local"
+    mock_repo.refs = [origin_ref, local_ref]
+
+    result = git_manager.get_base_branch(default_base="nonexistent")
+
+    # origin/main excluded, feature/local returned
+    assert result == "feature/local"

@@ -987,3 +987,296 @@ class TestPrintStats:
         exporter.stats["file_size"] = 0
 
         exporter.print_stats(tmp_file)
+
+
+# ---------------------------------------------------------------------------
+# _convert_dynamodb_item  (lines 47-51 uncovered)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestConvertDynamoDbItem:
+    def test_converts_string_attribute(self):
+        exporter = _make_exporter()
+        item = {"name": {"S": "Alice"}}
+        result = exporter._convert_dynamodb_item(item)
+        assert result == {"name": "Alice"}
+
+    def test_converts_number_attribute(self):
+        exporter = _make_exporter()
+        item = {"age": {"N": "30"}}
+        result = exporter._convert_dynamodb_item(item)
+        assert result["age"] == Decimal("30")
+
+    def test_converts_bool_attribute(self):
+        exporter = _make_exporter()
+        item = {"active": {"BOOL": True}}
+        result = exporter._convert_dynamodb_item(item)
+        assert result["active"] is True
+
+    def test_converts_multiple_attributes(self):
+        exporter = _make_exporter()
+        item = {"pk": {"S": "123"}, "count": {"N": "5"}, "flag": {"BOOL": False}}
+        result = exporter._convert_dynamodb_item(item)
+        assert result["pk"] == "123"
+        assert result["flag"] is False
+
+    def test_empty_item(self):
+        exporter = _make_exporter()
+        result = exporter._convert_dynamodb_item({})
+        assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# scan_table – extra parameter branches (lines 194, 201, 203)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestScanTableExtraParams:
+    @patch("cli_tool.commands.dynamodb.core.exporter.Progress")
+    def test_scan_passes_projection_expression(self, mock_progress_cls):
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+
+        exporter = _make_exporter()
+        exporter.dynamodb.scan.return_value = {"Items": []}
+
+        exporter.scan_table(projection_expression="id, name")
+        call_kwargs = exporter.dynamodb.scan.call_args[1]
+        assert call_kwargs.get("ProjectionExpression") == "id, name"
+
+    @patch("cli_tool.commands.dynamodb.core.exporter.Progress")
+    def test_scan_passes_expression_attribute_values(self, mock_progress_cls):
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+
+        exporter = _make_exporter()
+        exporter.dynamodb.scan.return_value = {"Items": []}
+        attr_values = {":val": {"S": "active"}}
+
+        exporter.scan_table(expression_attribute_values=attr_values)
+        call_kwargs = exporter.dynamodb.scan.call_args[1]
+        assert call_kwargs.get("ExpressionAttributeValues") == attr_values
+
+    @patch("cli_tool.commands.dynamodb.core.exporter.Progress")
+    def test_scan_passes_expression_attribute_names(self, mock_progress_cls):
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+
+        exporter = _make_exporter()
+        exporter.dynamodb.scan.return_value = {"Items": []}
+        attr_names = {"#n": "name"}
+
+        exporter.scan_table(expression_attribute_names=attr_names)
+        call_kwargs = exporter.dynamodb.scan.call_args[1]
+        assert call_kwargs.get("ExpressionAttributeNames") == attr_names
+
+
+# ---------------------------------------------------------------------------
+# export_to_csv – normalize mode with large lists (lines 329-332)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestExportToCsvNormalizeLargeLists:
+    @patch("cli_tool.commands.dynamodb.core.exporter.Progress")
+    def test_normalize_mode_large_list_prints_warning(self, mock_progress_cls, tmp_path):
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+
+        exporter = _make_exporter()
+        # Build item where normalization produces > 100 rows
+        large_list = list(range(101))
+        items = [{"id": {"S": "1"}}]
+        out = tmp_path / "out.csv"
+
+        with patch.object(exporter, "_convert_dynamodb_item", return_value={"id": "1", "vals": large_list}):
+            result = exporter.export_to_csv(items, out, mode="normalize")
+
+        assert result.exists()
+
+    @patch("cli_tool.commands.dynamodb.core.exporter.Progress")
+    def test_export_csv_zip_compression(self, mock_progress_cls, tmp_path):
+        """Cover the zip branch in non-streaming CSV export (lines 376-381)."""
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+
+        exporter = _make_exporter()
+        items = [{"id": {"S": "1"}}]
+        out = tmp_path / "out.csv"
+
+        with patch.object(exporter, "_convert_dynamodb_item", return_value={"id": "1"}):
+            result = exporter.export_to_csv(items, out, compress="zip")
+
+        assert result.suffix == ".zip"
+
+    @patch("cli_tool.commands.dynamodb.core.exporter.Progress")
+    def test_export_csv_with_metadata_and_compress(self, mock_progress_cls, tmp_path):
+        """Cover the metadata+compress branch that writes .meta file (lines 398-407)."""
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+
+        exporter = _make_exporter(profile="test-profile")
+        items = [{"id": {"S": "1"}}]
+        out = tmp_path / "out.csv"
+
+        with patch.object(exporter, "_convert_dynamodb_item", return_value={"id": "1"}):
+            result = exporter.export_to_csv(items, out, compress="gzip", include_metadata=True)
+
+        assert result.suffix == ".gz"
+        meta_file = result.with_suffix(".meta")
+        assert meta_file.exists()
+        content = meta_file.read_text()
+        assert "Table:" in content
+        assert "Profile:" in content
+
+    @patch("cli_tool.commands.dynamodb.core.exporter.Progress")
+    def test_export_csv_stats_updated_after_write(self, mock_progress_cls, tmp_path):
+        """Verify stats are updated after CSV export (covers line 440)."""
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+
+        exporter = _make_exporter()
+        items = [{"id": {"S": "1"}}, {"id": {"S": "2"}}]
+        out = tmp_path / "out.csv"
+
+        with patch.object(exporter, "_convert_dynamodb_item", side_effect=lambda x: {"id": x["id"]["S"]}):
+            exporter.export_to_csv(items, out)
+
+        assert exporter.stats["total_items"] == 2
+        assert exporter.stats["file_size"] > 0
+        assert exporter.stats["end_time"] is not None
+
+
+# ---------------------------------------------------------------------------
+# _export_to_csv_streaming – zip branch + metadata with compress (lines 491-521)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestStreamingCsvAdditionalBranches:
+    @patch("cli_tool.commands.dynamodb.core.exporter.Progress")
+    def test_streaming_zip_compression(self, mock_progress_cls, tmp_path):
+        """Cover zip branch in streaming CSV (lines 491-496)."""
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+
+        exporter = _make_exporter()
+        items = [{"id": {"S": "1"}}]
+        out = tmp_path / "out.csv"
+
+        with patch.object(exporter, "_convert_dynamodb_item", return_value={"id": "1"}):
+            result = exporter._export_to_csv_streaming(
+                items,
+                out,
+                mode="strings",
+                null_value="",
+                delimiter=",",
+                encoding="utf-8",
+                include_metadata=False,
+                compress="zip",
+                bool_format="lowercase",
+            )
+
+        assert result.suffix == ".zip"
+
+    @patch("cli_tool.commands.dynamodb.core.exporter.Progress")
+    def test_streaming_metadata_with_compress(self, mock_progress_cls, tmp_path):
+        """Cover metadata+compress branch in streaming CSV (lines 513-521)."""
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+
+        exporter = _make_exporter(profile="my-profile")
+        items = [{"id": {"S": "1"}}]
+        out = tmp_path / "out.csv"
+
+        with patch.object(exporter, "_convert_dynamodb_item", return_value={"id": "1"}):
+            result = exporter._export_to_csv_streaming(
+                items,
+                out,
+                mode="strings",
+                null_value="",
+                delimiter=",",
+                encoding="utf-8",
+                include_metadata=True,
+                compress="gzip",
+                bool_format="lowercase",
+            )
+
+        assert result.suffix == ".gz"
+        meta_file = result.with_suffix(".meta")
+        assert meta_file.exists()
+        content = meta_file.read_text()
+        assert "Profile:" in content
+
+    @patch("cli_tool.commands.dynamodb.core.exporter.Progress")
+    def test_streaming_stats_updated(self, mock_progress_cls, tmp_path):
+        """Verify stats.total_items and file_size set after streaming (line 578)."""
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+
+        exporter = _make_exporter()
+        items = [{"id": {"S": "1"}}, {"id": {"S": "2"}}]
+        out = tmp_path / "out.csv"
+
+        with patch.object(exporter, "_convert_dynamodb_item", side_effect=lambda x: {"id": x["id"]["S"]}):
+            exporter._export_to_csv_streaming(
+                items,
+                out,
+                mode="strings",
+                null_value="",
+                delimiter=",",
+                encoding="utf-8",
+                include_metadata=False,
+                compress=None,
+                bool_format="lowercase",
+            )
+
+        assert exporter.stats["total_items"] == 2
+        assert exporter.stats["file_size"] > 0
+
+
+# ---------------------------------------------------------------------------
+# export_to_json – zip branch already in .zip path (line 625)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestExportToJsonAdditionalBranches:
+    @patch("cli_tool.commands.dynamodb.core.exporter.Progress")
+    def test_export_json_zip_already_zip_extension(self, mock_progress_cls, tmp_path):
+        """When output already ends in .zip, no extra .zip suffix is added (line 625)."""
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+
+        exporter = _make_exporter()
+        items = [{"id": {"S": "1"}}]
+        out = tmp_path / "out.json.zip"
+
+        with patch.object(exporter, "_convert_dynamodb_item", return_value={"id": "1"}):
+            result = exporter.export_to_json(items, out, compress="zip")
+
+        assert str(result) == str(out)
