@@ -1158,3 +1158,52 @@ class TestCodeReviewAnalyzerUnit:
                         analyzer._analyze_pr_diff_only(pr_context)
 
         mock_display.assert_called_once()
+
+
+# ============================================================================
+# Unit tests for analyze.py lines 109-111 (exception handler in code_reviewer command)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_code_reviewer_command_exception_prints_error_and_exits(mocker):
+    """
+    When CodeReviewAnalyzer.analyze_pr raises an exception, the command prints
+    the error to stderr and exits with code 1 (lines 109-111).
+    """
+    from click.testing import CliRunner
+
+    from cli_tool.commands.code_reviewer.commands.analyze import code_reviewer
+
+    mocker.patch("cli_tool.core.utils.aws.select_profile", return_value=None)
+    mocker.patch("cli_tool.commands.code_reviewer.commands.analyze.CodeReviewAnalyzer").return_value.analyze_pr.side_effect = RuntimeError(
+        "fatal analysis error"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(code_reviewer, ["--output", "json"], obj={"profile": None})
+
+    assert result.exit_code == 1
+    # Error message should be in the combined output
+    assert "fatal analysis error" in result.output
+
+
+@pytest.mark.unit
+def test_code_reviewer_command_exception_with_table_output_exits(mocker):
+    """
+    When an exception is raised during table output rendering, the command
+    exits with code 1 (lines 109-111).
+    """
+    from click.testing import CliRunner
+
+    from cli_tool.commands.code_reviewer.commands.analyze import code_reviewer
+
+    mocker.patch("cli_tool.core.utils.aws.select_profile", return_value=None)
+    mocker.patch("cli_tool.commands.code_reviewer.commands.analyze.CodeReviewAnalyzer").return_value.analyze_pr.side_effect = ValueError(
+        "invalid repo path"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(code_reviewer, ["--output", "table"], obj={"profile": None})
+
+    assert result.exit_code == 1

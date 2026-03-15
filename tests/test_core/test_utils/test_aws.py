@@ -339,3 +339,82 @@ def test_select_profile_invalid_then_valid_choice(mocker):
     result = select_profile()
 
     assert result == "prod"
+
+
+@pytest.mark.unit
+def test_select_profile_source_label_both(mocker):
+    """Profile with source='both' displays [sso+static] label (line 57)."""
+    profiles = [("myprofile", "both"), ("other", "sso")]
+    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=profiles)
+    # Choose the first profile
+    mocker.patch("click.prompt", return_value="1")
+    mock_echo = mocker.patch("click.echo")
+
+    result = select_profile()
+
+    assert result == "myprofile"
+    # Verify the [sso+static] label was printed somewhere in the echo calls
+    echo_texts = " ".join(str(call) for call in mock_echo.call_args_list)
+    assert "sso+static" in echo_texts
+
+
+@pytest.mark.unit
+def test_select_profile_value_error_then_valid_input(mocker):
+    """Loops with error message when ValueError is raised, then accepts valid input (lines 89-90)."""
+    profiles = [("dev", "sso"), ("prod", "sso")]
+    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=profiles)
+    # First call raises ValueError (non-numeric after stripping), second call succeeds
+    mocker.patch("click.prompt", side_effect=[ValueError("bad input"), "1"])
+    mock_echo = mocker.patch("click.echo")
+
+    result = select_profile()
+
+    assert result == "dev"
+    echo_texts = " ".join(str(call) for call in mock_echo.call_args_list)
+    assert "Invalid input" in echo_texts
+
+
+@pytest.mark.unit
+def test_select_profile_keyboard_interrupt_then_valid_input(mocker):
+    """Loops with error message when KeyboardInterrupt is raised, then accepts valid input (lines 89-90)."""
+    profiles = [("dev", "sso"), ("prod", "sso")]
+    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=profiles)
+    mocker.patch("click.prompt", side_effect=[KeyboardInterrupt(), "2"])
+    mock_echo = mocker.patch("click.echo")
+
+    result = select_profile()
+
+    assert result == "prod"
+    echo_texts = " ".join(str(call) for call in mock_echo.call_args_list)
+    assert "Invalid input" in echo_texts
+
+
+@pytest.mark.unit
+def test_select_profile_unknown_source_shows_config_label(mocker):
+    """Profile with unknown source shows [config] label (line 57).
+
+    Needs 2+ profiles to bypass the auto-select single-profile shortcut.
+    """
+    profiles = [("dev", "sso"), ("myprofile", "unknown_type")]
+    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=profiles)
+    mocker.patch("click.prompt", return_value="2")
+    mock_echo = mocker.patch("click.echo")
+
+    result = select_profile()
+
+    assert result == "myprofile"
+    echo_texts = " ".join(str(call) for call in mock_echo.call_args_list)
+    assert "config" in echo_texts
+
+
+@pytest.mark.unit
+def test_select_profile_reraises_click_abort(mocker):
+    """select_profile re-raises click.Abort (lines 91-92)."""
+    import click
+
+    profiles = [("dev", "sso"), ("prod", "sso")]
+    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=profiles)
+    mocker.patch("click.prompt", side_effect=click.Abort())
+
+    with pytest.raises(click.Abort):
+        select_profile()

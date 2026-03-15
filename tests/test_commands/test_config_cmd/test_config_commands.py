@@ -12,6 +12,7 @@ Tests cover:
 - Config validation on import
 - Config export with nested structures
 - Config round-trip (export then import)
+- Config reset (full and per-section)
 """
 
 import json
@@ -20,9 +21,12 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from cli_tool.commands.config_cmd.commands import register_config_commands
 from cli_tool.commands.config_cmd.commands.export import export_command
 from cli_tool.commands.config_cmd.commands.import_cmd import import_command
 from cli_tool.commands.config_cmd.commands.migrate import migrate_command
+from cli_tool.commands.config_cmd.commands.path import show_path
+from cli_tool.commands.config_cmd.commands.reset import reset_command
 from cli_tool.commands.config_cmd.commands.sections import list_sections
 from cli_tool.commands.config_cmd.commands.set import set_command
 from cli_tool.commands.config_cmd.commands.show import show_config
@@ -546,3 +550,224 @@ def test_config_import_replace_mode(cli_runner, temp_config_dir, mocker):
     assert config["aws"]["region"] == "us-west-2"
     assert "profile" not in config["aws"]  # Should be removed
     assert "extra_key" not in config["aws"]  # Should be removed
+
+
+# ============================================================================
+# Config Reset Command Tests
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_reset_command_full_reset(cli_runner, mocker):
+    """Test reset command with no section resets entire configuration."""
+    mock_reset = mocker.patch("cli_tool.commands.config_cmd.commands.reset.reset_config")
+
+    result = cli_runner.invoke(reset_command, ["--yes"])
+
+    assert result.exit_code == 0
+    mock_reset.assert_called_once()
+    assert "reset to defaults" in result.output
+
+
+@pytest.mark.unit
+def test_reset_command_valid_section(cli_runner, mocker):
+    """Test reset command with a known section resets that section only."""
+    bedrock_defaults = {"model_id": "default-model", "region": "us-east-1"}
+    mocker.patch(
+        "cli_tool.commands.config_cmd.commands.reset.get_default_config",
+        return_value={"bedrock": bedrock_defaults},
+    )
+    mock_set = mocker.patch("cli_tool.commands.config_cmd.commands.reset.set_config_value")
+
+    result = cli_runner.invoke(reset_command, ["--section", "bedrock", "--yes"])
+
+    assert result.exit_code == 0
+    mock_set.assert_called_once_with("bedrock", bedrock_defaults)
+    assert "bedrock" in result.output
+
+
+@pytest.mark.unit
+def test_reset_command_invalid_section(cli_runner, mocker):
+    """Test reset command with an unknown section prints an error and returns."""
+    mocker.patch(
+        "cli_tool.commands.config_cmd.commands.reset.get_default_config",
+        return_value={},
+    )
+    mock_set = mocker.patch("cli_tool.commands.config_cmd.commands.reset.set_config_value")
+
+    result = cli_runner.invoke(reset_command, ["--section", "nonexistent", "--yes"])
+
+    assert result.exit_code == 0
+    mock_set.assert_not_called()
+    assert "Unknown section" in result.output or "nonexistent" in result.output
+
+
+# ============================================================================
+# Additional unit tests to cover missing lines
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_show_path_command_prints_config_path(cli_runner, mocker):
+    """Test show_path command prints the config path returned by get_config_path."""
+    mocker.patch(
+        "cli_tool.commands.config_cmd.commands.path.get_config_path",
+        return_value="/home/user/.devo/config.json",
+    )
+
+    result = cli_runner.invoke(show_path)
+
+    assert result.exit_code == 0
+    assert "/home/user/.devo/config.json" in result.output
+
+
+@pytest.mark.unit
+def test_migrate_command_already_migrated_returns_early(cli_runner, mocker):
+    """Test migrate_command returns early without printing migration messages when already migrated."""
+    mocker.patch(
+        "cli_tool.commands.config_cmd.commands.migrate.migrate_legacy_configs",
+        return_value={"already_migrated": True, "ssm": False, "dynamodb": False},
+    )
+
+    result = cli_runner.invoke(migrate_command, [])
+
+    assert result.exit_code == 0
+    assert "Migration completed" not in result.output
+    assert "No legacy config files found" not in result.output
+
+
+@pytest.mark.unit
+def test_migrate_command_no_legacy_files_found(cli_runner, mocker):
+    """Test migrate_command prints 'No legacy config files found' when ssm and dynamodb are both False."""
+    mocker.patch(
+        "cli_tool.commands.config_cmd.commands.migrate.migrate_legacy_configs",
+        return_value={"already_migrated": False, "ssm": False, "dynamodb": False},
+    )
+
+    result = cli_runner.invoke(migrate_command, [])
+
+    assert result.exit_code == 0
+    assert "No legacy config files found" in result.output
+
+
+@pytest.mark.unit
+def test_export_command_generates_timestamped_filename(cli_runner, mocker):
+    """Test export_command generates a timestamped filename when --output and --stdout are not given."""
+    mock_export = mocker.patch(
+        "cli_tool.commands.config_cmd.commands.export.export_config",
+        return_value={"aws": {"region": "us-east-1"}},
+    )
+
+    result = cli_runner.invoke(export_command, [])
+
+    assert result.exit_code == 0
+    # export_config must have been called with an output_path matching the timestamp pattern
+    call_kwargs = mock_export.call_args
+    output_path_used = call_kwargs[1].get("output_path") or (call_kwargs[0][0] if call_kwargs[0] else None)
+    # Retrieve via keyword argument; export_config(sections=..., output_path=...)
+    output_path_used = mock_export.call_args.kwargs.get("output_path")
+    assert output_path_used is not None
+    assert output_path_used.startswith("devo-config-backup-")
+    assert output_path_used.endswith(".json")
+    assert "Configuration exported to" in result.output
+
+
+@pytest.mark.unit
+def test_export_command_exception_prints_error(cli_runner, mocker):
+    """Test export_command prints an error message when export_config raises an exception."""
+    mocker.patch(
+        "cli_tool.commands.config_cmd.commands.export.export_config",
+        side_effect=Exception("disk full"),
+    )
+
+    result = cli_runner.invoke(export_command, ["--stdout"])
+
+    assert result.exit_code == 0
+    assert "Export failed" in result.output
+    assert "disk full" in result.output
+
+
+@pytest.mark.unit
+def test_import_command_generic_exception_prints_error(cli_runner, tmp_path, mocker):
+    """Test import_command prints 'Import failed' for non-FileNotFoundError exceptions."""
+    # Create a real file so Click's exists=True check passes
+    input_file = tmp_path / "config.json"
+    input_file.write_text('{"key": "value"}')
+
+    mocker.patch(
+        "cli_tool.commands.config_cmd.commands.import_cmd.import_config",
+        side_effect=Exception("unexpected error"),
+    )
+
+    result = cli_runner.invoke(import_command, [str(input_file)])
+
+    assert result.exit_code == 0
+    assert "Import failed" in result.output
+    assert "unexpected error" in result.output
+
+
+@pytest.mark.unit
+def test_set_command_exception_prints_error(cli_runner, mocker):
+    """Test set_command prints 'Failed to set value' when set_config_value raises an exception."""
+    mocker.patch(
+        "cli_tool.commands.config_cmd.commands.set.set_config_value",
+        side_effect=Exception("permission denied"),
+    )
+
+    result = cli_runner.invoke(set_command, ["some.key", "some_value"])
+
+    assert result.exit_code == 0
+    assert "Failed to set value" in result.output
+    assert "permission denied" in result.output
+
+
+@pytest.mark.unit
+def test_show_config_without_json_flag_uses_syntax(cli_runner, mocker):
+    """Test show_config without --json flag renders config using rich Syntax (not plain JSON print)."""
+    mocker.patch(
+        "cli_tool.commands.config_cmd.commands.show.load_config",
+        return_value={"aws": {"region": "us-east-1"}},
+    )
+
+    result = cli_runner.invoke(show_config, [])
+
+    assert result.exit_code == 0
+    # The config data must appear in output regardless of rich formatting
+    assert "us-east-1" in result.output
+
+
+@pytest.mark.unit
+def test_register_config_commands_group_help(cli_runner):
+    """Test that the config group returned by register_config_commands works and shows help."""
+    config_group = register_config_commands()
+
+    result = cli_runner.invoke(config_group, ["--help"])
+
+    assert result.exit_code == 0
+    assert "config" in result.output.lower() or "Manage" in result.output
+
+
+@pytest.mark.unit
+def test_register_config_commands_group_callback_invoked(cli_runner):
+    """config/__init__.py line 21: config_group() callback (pass) is invoked when a subcommand is called."""
+    config_group = register_config_commands()
+    # Invoking a subcommand causes Click to first call config_group() callback
+    result = cli_runner.invoke(config_group, ["show", "--help"])
+    assert result.exit_code == 0
+
+
+@pytest.mark.unit
+def test_import_command_file_not_found_prints_error(cli_runner, tmp_path, mocker):
+    """import_cmd.py line 41: FileNotFoundError path prints error message."""
+    input_file = tmp_path / "config.json"
+    input_file.write_text('{"key": "value"}')
+
+    mocker.patch(
+        "cli_tool.commands.config_cmd.commands.import_cmd.import_config",
+        side_effect=FileNotFoundError("file not found"),
+    )
+
+    result = cli_runner.invoke(import_command, [str(input_file)])
+
+    assert result.exit_code == 0
+    assert "file not found" in result.output

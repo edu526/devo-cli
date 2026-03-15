@@ -6,13 +6,16 @@ Covers:
 - install (fresh install, idempotent, fish directory creation, write error)
 - get_config_file / get_completion_line / get_instructions (unsupported shell)
 - is_supported_shell
+- autocomplete command (unsupported shell, show instructions, install flows)
 """
 
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from click.testing import CliRunner
 
+from cli_tool.commands.autocomplete.commands.autocomplete import autocomplete
 from cli_tool.commands.autocomplete.core.installer import CompletionInstaller
 
 SUPPORTED_SHELLS = ["bash", "zsh", "fish"]
@@ -209,3 +212,77 @@ def test_is_supported_shell_true_for_known_shells(shell):
 
 def test_is_supported_shell_false_for_unknown_shell():
     assert CompletionInstaller.is_supported_shell("powershell") is False
+
+
+# ---------------------------------------------------------------------------
+# autocomplete command
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_autocomplete_unsupported_shell(monkeypatch):
+    """Unsupported shell shows warning message and returns early (lines 26-37)."""
+    monkeypatch.setenv("SHELL", "/usr/bin/powershell")
+    runner = CliRunner()
+    result = runner.invoke(autocomplete, [])
+    assert result.exit_code == 0
+    assert "not officially supported" in result.output
+
+
+@pytest.mark.unit
+def test_autocomplete_show_instructions_when_no_install_flag(monkeypatch, mocker):
+    """Without --install, _show_instructions is called (lines 43, 78-81)."""
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    mocker.patch.object(CompletionInstaller, "is_supported_shell", return_value=True)
+    mocker.patch.object(CompletionInstaller, "get_instructions", return_value="run this to setup zsh")
+    runner = CliRunner()
+    result = runner.invoke(autocomplete, [])
+    assert result.exit_code == 0
+    assert "run this to setup zsh" in result.output
+    assert "--install" in result.output
+
+
+@pytest.mark.unit
+def test_autocomplete_install_prompts_user_and_confirms(monkeypatch, mocker):
+    """--install without --yes prompts; user confirms → installs (lines 58-63)."""
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    mocker.patch.object(CompletionInstaller, "is_supported_shell", return_value=True)
+    mocker.patch.object(CompletionInstaller, "is_already_configured", return_value=False)
+    mocker.patch.object(CompletionInstaller, "get_config_file", return_value="/home/user/.zshrc")
+    mocker.patch.object(CompletionInstaller, "get_completion_line", return_value='eval "$(_DEVO_COMPLETE=zsh_source devo)"')
+    mocker.patch.object(CompletionInstaller, "install", return_value=(True, "Installed successfully"))
+    runner = CliRunner()
+    result = runner.invoke(autocomplete, ["--install"], input="y\n")
+    assert result.exit_code == 0
+    assert "Do you want to continue?" in result.output
+    assert "Installed successfully" in result.output
+
+
+@pytest.mark.unit
+def test_autocomplete_install_prompts_user_and_declines(monkeypatch, mocker):
+    """--install without --yes, user declines → 'Setup cancelled' (lines 61-63)."""
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    mocker.patch.object(CompletionInstaller, "is_supported_shell", return_value=True)
+    mocker.patch.object(CompletionInstaller, "is_already_configured", return_value=False)
+    mocker.patch.object(CompletionInstaller, "get_config_file", return_value="/home/user/.zshrc")
+    mocker.patch.object(CompletionInstaller, "get_completion_line", return_value='eval "$(_DEVO_COMPLETE=zsh_source devo)"')
+    runner = CliRunner()
+    result = runner.invoke(autocomplete, ["--install"], input="n\n")
+    assert result.exit_code == 0
+    assert "Setup cancelled" in result.output
+
+
+@pytest.mark.unit
+def test_autocomplete_install_shows_error_on_failure(monkeypatch, mocker):
+    """--install --yes with install failure prints error message (line 73)."""
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    mocker.patch.object(CompletionInstaller, "is_supported_shell", return_value=True)
+    mocker.patch.object(CompletionInstaller, "is_already_configured", return_value=False)
+    mocker.patch.object(CompletionInstaller, "get_config_file", return_value="/home/user/.zshrc")
+    mocker.patch.object(CompletionInstaller, "get_completion_line", return_value='eval "$(_DEVO_COMPLETE=zsh_source devo)"')
+    mocker.patch.object(CompletionInstaller, "install", return_value=(False, "Permission denied"))
+    runner = CliRunner()
+    result = runner.invoke(autocomplete, ["--install", "--yes"])
+    assert result.exit_code == 0
+    # click.echo(..., err=True) still appears in combined output with CliRunner
+    assert "Permission denied" in result.output

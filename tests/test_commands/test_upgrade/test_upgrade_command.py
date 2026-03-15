@@ -419,3 +419,75 @@ def test_upgrade_force_flag_reinstalls_same_version(mocker, tmp_path):
 
     # Should attempt install even though already latest
     assert result.exit_code == 0
+
+
+@pytest.mark.unit
+def test_upgrade_tmp_unlink_error_after_install_is_swallowed(mocker, tmp_path):
+    """Exception from tmp_path.unlink() after successful install is silently swallowed (lines 150-151)."""
+    from pathlib import Path
+
+    current_exe = tmp_path / "devo"
+    current_exe.write_text("binary")
+
+    tmp_file = tmp_path / "binary.tmp"
+    tmp_file.write_text("downloaded")
+
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.get_current_version", return_value="1.0.0")
+    mocker.patch(
+        "cli_tool.commands.upgrade.commands.upgrade.get_latest_release",
+        return_value={
+            "tag_name": "v1.5.0",
+            "assets": [{"name": "devo-linux-amd64", "browser_download_url": "https://example.com/devo-linux-amd64"}],
+        },
+    )
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.detect_platform", return_value=("linux", "amd64"))
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.get_binary_name", return_value="devo-linux-amd64")
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.get_executable_path", return_value=current_exe)
+    mocker.patch("os.access", return_value=True)
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade._download_and_verify", return_value=tmp_file)
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.replace_binary", return_value=True)
+    mocker.patch("os._exit", side_effect=SystemExit(0))
+    # Patch Path.unlink at class level so it raises, triggering lines 150-151 (except Exception: pass)
+    mocker.patch.object(Path, "unlink", side_effect=OSError("permission denied"))
+
+    runner = CliRunner()
+    result = runner.invoke(upgrade, ["--force"])
+
+    # The exception was swallowed; upgrade still completed (os._exit(0) → SystemExit(0))
+    assert result.exit_code == 0
+
+
+@pytest.mark.unit
+def test_upgrade_tmp_unlink_error_in_finally_is_swallowed(mocker, tmp_path):
+    """Exception from tmp_path.unlink() in finally block is silently swallowed (lines 164-166)."""
+    from pathlib import Path
+
+    current_exe = tmp_path / "devo"
+    current_exe.write_text("binary")
+
+    tmp_file = tmp_path / "binary.tmp"
+    tmp_file.write_text("downloaded")
+
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.get_current_version", return_value="1.0.0")
+    mocker.patch(
+        "cli_tool.commands.upgrade.commands.upgrade.get_latest_release",
+        return_value={
+            "tag_name": "v1.5.0",
+            "assets": [{"name": "devo-linux-amd64", "browser_download_url": "https://example.com/devo-linux-amd64"}],
+        },
+    )
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.detect_platform", return_value=("linux", "amd64"))
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.get_binary_name", return_value="devo-linux-amd64")
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.get_executable_path", return_value=current_exe)
+    mocker.patch("os.access", return_value=True)
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade._download_and_verify", return_value=tmp_file)
+    # replace_binary returns False so sys.exit(1) is called, which triggers the finally block
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.replace_binary", return_value=False)
+    # Patch Path.unlink at class level so it raises, triggering lines 164-166 (except Exception: pass)
+    mocker.patch.object(Path, "unlink", side_effect=OSError("locked"))
+
+    runner = CliRunner()
+    result = runner.invoke(upgrade, ["--force"])
+
+    # replace_binary returned False → sys.exit(1); finally block ran and swallowed unlink error
+    assert result.exit_code == 1

@@ -863,3 +863,75 @@ def test_login_with_keyboard_interrupt(cli_runner, mocker, mock_aws_config_dir, 
     # Verify cancellation handling
     assert result.exit_code == 1
     assert "cancelled" in result.output.lower()
+
+
+# ============================================================================
+# Unit tests for _resolve_profile_name and _show_login_success (lines 53-57, 83)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_resolve_profile_name_configure_sso_returns_profile(mocker):
+    """
+    When no profiles exist and user confirms, configure_sso_profile is called.
+    If it returns a profile name, that name is returned (lines 53-57).
+    """
+    from cli_tool.commands.aws_login.commands.login import _resolve_profile_name
+
+    mocker.patch("cli_tool.commands.aws_login.commands.login.list_aws_profiles", return_value=[])
+    mocker.patch("click.confirm", return_value=True)
+    mock_configure = mocker.patch(
+        "cli_tool.commands.aws_login.commands.login.configure_sso_profile",
+        return_value="new-profile",
+    )
+
+    result = _resolve_profile_name()
+
+    mock_configure.assert_called_once()
+    assert result == "new-profile"
+
+
+@pytest.mark.unit
+def test_resolve_profile_name_configure_sso_returns_none_exits(mocker):
+    """
+    When configure_sso_profile returns None (falsy), sys.exit(1) is called (line 55).
+    """
+    import sys
+
+    from cli_tool.commands.aws_login.commands.login import _resolve_profile_name
+
+    mocker.patch("cli_tool.commands.aws_login.commands.login.list_aws_profiles", return_value=[])
+    mocker.patch("click.confirm", return_value=True)
+    mocker.patch(
+        "cli_tool.commands.aws_login.commands.login.configure_sso_profile",
+        return_value=None,
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        _resolve_profile_name()
+
+    assert exc_info.value.code == 1
+
+
+@pytest.mark.unit
+def test_show_login_success_no_expiration_prints_note(mocker):
+    """
+    When get_profile_credentials_expiration returns None, the 'typically expire in 1 hour'
+    note is printed (line 83).
+    """
+    from cli_tool.commands.aws_login.commands.login import _show_login_success
+
+    mocker.patch(
+        "cli_tool.commands.aws_login.commands.login.get_profile_credentials_expiration",
+        return_value=None,
+    )
+    mock_console = mocker.patch("cli_tool.commands.aws_login.commands.login.console")
+
+    identity = {
+        "account": "123456789012",
+        "arn": "arn:aws:sts::123456789012:assumed-role/Dev/user",
+    }
+    _show_login_success("dev", identity)
+
+    printed_texts = [str(call) for call in mock_console.print.call_args_list]
+    assert any("typically expire in 1 hour" in t for t in printed_texts)

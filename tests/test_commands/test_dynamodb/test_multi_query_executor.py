@@ -335,3 +335,81 @@ class TestExecuteMultiQuery:
 
         # With no key schema, all items have the same empty key, so only 1 unique
         assert len(result) == 1
+
+
+# ---------------------------------------------------------------------------
+# execute_multi_query — final limit trim (lines 118-119)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestExecuteMultiQueryFinalLimitTrim:
+    def test_final_limit_applied_after_all_queries_run(self):
+        """
+        Lines 118-119: when the combined result exceeds the limit after all queries
+        have been executed (none triggered per-query stop), the list is trimmed.
+        """
+        mock_exporter = MagicMock()
+        # Both queries return 3 unique items each → 6 total, limit = 4
+        mock_exporter.query_table.side_effect = [
+            [{"id": {"S": str(i)}} for i in range(3)],
+            [{"id": {"S": str(i)}} for i in range(10, 13)],
+        ]
+
+        table_info = {"key_schema": [{"AttributeName": "id"}]}
+        result = execute_multi_query(
+            mock_exporter,
+            [
+                {"key_condition": "pk = :val0", "index_name": None},
+                {"key_condition": "pk = :val1", "index_name": None},
+            ],
+            projection_expression=None,
+            expression_attribute_values={":val0": {"S": "a"}, ":val1": {"S": "b"}},
+            expression_attribute_names=None,
+            limit=4,
+            table_info=table_info,
+        )
+
+        # The final trim should have been applied
+        assert len(result) == 4
+
+
+# ---------------------------------------------------------------------------
+# execute_multi_query — final limit trim via mocked _deduplicate_items (lines 118-119)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_execute_multi_query_final_limit_trim_via_mock():
+    """Lines 118-119: final trim applied when _deduplicate_items never stops early."""
+    from unittest.mock import MagicMock, patch
+
+    from cli_tool.commands.dynamodb.core.multi_query_executor import execute_multi_query
+
+    mock_exporter = MagicMock()
+    mock_exporter.query_table.side_effect = [
+        [{"id": {"S": str(i)}} for i in range(5)],
+        [{"id": {"S": str(i + 10)}} for i in range(5)],
+    ]
+
+    def fake_dedup(new_items, all_items, seen_keys, primary_key_attrs, limit):
+        all_items.extend(new_items)
+        return False  # never stop early
+
+    with patch("cli_tool.commands.dynamodb.core.multi_query_executor._deduplicate_items", side_effect=fake_dedup):
+        table_info = {"key_schema": [{"AttributeName": "id"}]}
+        result = execute_multi_query(
+            mock_exporter,
+            [
+                {"key_condition": "pk = :v1", "index_name": None},
+                {"key_condition": "pk = :v2", "index_name": None},
+            ],
+            projection_expression=None,
+            expression_attribute_values={":v1": {"S": "a"}, ":v2": {"S": "b"}},
+            expression_attribute_names=None,
+            limit=3,
+            table_info=table_info,
+        )
+
+    # 10 items were added but trimmed to limit=3
+    assert len(result) == 3

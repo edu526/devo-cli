@@ -1154,3 +1154,125 @@ def test_show_request_preview_calls_console_print():
         ui.show_request_preview("Preview content here")
 
         mock_console.print.assert_called_once()
+
+
+# ============================================================================
+# ConsoleUI — show_import_analysis: more than 3 imports (line 286)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_show_import_analysis_more_than_three_imports_shows_truncation():
+    """show_import_analysis shows '... and N more imports' when imports list exceeds 3 (line 286)."""
+    with patch("cli_tool.core.ui.console_ui.Console") as mock_console_cls:
+        mock_console = MagicMock()
+        mock_console_cls.return_value = mock_console
+        ui = ConsoleUI()
+
+        many_imports = [
+            "Line 1: from pkg import MyClass",
+            "Line 2: from pkg import MyClass",
+            "Line 3: from pkg import MyClass",
+            "Line 4: from pkg import MyClass",
+            "Line 5: from pkg import MyClass",
+        ]
+        # Capture the output_text passed through show_tool_output
+        captured = []
+        ui.show_tool_output = lambda title, text, **kw: captured.append(text)
+
+        ui.show_import_analysis("MyClass", "module.py", many_imports, [])
+
+        assert captured
+        assert "more imports" in captured[0]
+        assert "2" in captured[0]  # 5 imports - 3 shown = 2 more
+
+
+# ============================================================================
+# ConsoleUI — show_analysis_results_table: non-empty issues triggers _show_issues_cards (line 504)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_show_analysis_results_table_with_issues_calls_show_issues_cards():
+    """show_analysis_results_table calls _show_issues_cards when issues list is non-empty (line 504)."""
+    with patch("cli_tool.core.ui.console_ui.Console") as mock_console_cls:
+        mock_console = MagicMock()
+        mock_console_cls.return_value = mock_console
+        ui = ConsoleUI()
+        ui._streaming_manager = MagicMock()
+        ui._show_issues_cards = MagicMock()
+
+        result = {
+            "issues": [
+                {
+                    "severity": "high",
+                    "type": "security",
+                    "file": "auth.py",
+                    "line": 10,
+                    "description": "Weak hashing",
+                    "suggestion": "Use bcrypt",
+                }
+            ],
+            "files_analyzed": [],
+        }
+        ui.show_analysis_results_table(result)
+
+        ui._show_issues_cards.assert_called_once_with(result["issues"])
+
+
+# ============================================================================
+# ConsoleUI — _format_multiline_text: empty line between content lines (lines 545-550)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_format_multiline_text_preserves_empty_lines_between_content():
+    """_format_multiline_text keeps empty lines between content lines (lines 545-550)."""
+    with patch("cli_tool.core.ui.console_ui.Console"):
+        ui = ConsoleUI()
+
+        # An empty line between two content lines should be preserved
+        text = "First line\n\nThird line"
+        result = ui._format_multiline_text(text)
+
+        # Should contain content lines and an empty separator
+        content_lines = [line for line in result if line.strip()]
+        assert len(content_lines) == 2
+        # Empty line between them should be present
+        assert "" in result
+
+
+@pytest.mark.unit
+def test_format_multiline_text_trailing_empty_line_not_preserved():
+    """_format_multiline_text does not add empty line after the last content line (lines 545-550)."""
+    with patch("cli_tool.core.ui.console_ui.Console"):
+        ui = ConsoleUI()
+
+        # Trailing empty line should be dropped
+        text = "Only line\n\n"
+        result = ui._format_multiline_text(text)
+
+        assert result[-1].strip() != "" or len(result) == 1
+
+
+# ============================================================================
+# ConsoleUI — _show_metrics_panel: no accumulated_usage triggers fallback (line 664)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_show_metrics_panel_no_accumulated_usage_shows_fallback():
+    """_show_metrics_panel shows 'No metrics data available' when accumulated_usage is absent (line 664)."""
+    with patch("cli_tool.core.ui.console_ui.Console") as mock_console_cls:
+        mock_console = MagicMock()
+        mock_console_cls.return_value = mock_console
+        ui = ConsoleUI()
+
+        # metrics is non-empty but has no accumulated_usage key → content stays empty → fallback
+        metrics = {"total_duration": 2.5}
+        with patch("cli_tool.core.ui.console_ui.Panel") as mock_panel_cls:
+            ui._show_metrics_panel(metrics)
+            panel_content_arg = mock_panel_cls.call_args[0][0]
+            assert "No metrics data available" in panel_content_arg
+
+        mock_console.print.assert_called_once()

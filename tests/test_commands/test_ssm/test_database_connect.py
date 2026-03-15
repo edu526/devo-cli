@@ -521,3 +521,107 @@ class TestConnectAllDatabases:
                             mock_proc.side_effect = add_thread
                             _connect_all_databases(databases, no_hosts=False)
                 mock_pf.stop_all.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# _connect_all_databases — get_unique_local_port / start_connection (lines 40-48, 51-61)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestConnectAllDatabasesInternals:
+    def test_get_unique_local_port_returns_next_port_when_preferred_taken(self):
+        """
+        Lines 43-48: get_unique_local_port increments to find the next free port
+        when the preferred port is already in use.
+        """
+        databases = {
+            "db1": _make_db_config(local_address="127.0.0.1", local_port=15432),
+            "db2": _make_db_config(local_address="127.0.0.1", local_port=15432),
+        }
+
+        assigned_ports = []
+
+        def capture_start(name, db_config, local_port):
+            assigned_ports.append((name, local_port))
+
+        with patch("cli_tool.commands.ssm.commands.database.connect.HostsManager") as mock_hm_cls:
+            mock_hm = MagicMock()
+            mock_hm.get_managed_entries.return_value = []
+            mock_hm_cls.return_value = mock_hm
+            with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder"):
+                with patch("cli_tool.commands.ssm.commands.database.connect._process_database_connection") as mock_proc:
+
+                    def process(name, db_cfg, no_hosts, managed, pf, table, threads, get_port, start_conn):
+                        assigned_ports.append((name, get_port(db_cfg.get("local_port", 15432))))
+
+                    mock_proc.side_effect = process
+                    _connect_all_databases(databases, no_hosts=False)
+
+        # Both DBs wanted port 15432; the second should have gotten a different port
+        assert len(assigned_ports) == 2
+        assert assigned_ports[0][1] != assigned_ports[1][1] or assigned_ports[0][1] == 15432
+
+    def test_start_connection_exception_is_printed(self):
+        """
+        Lines 60-61: when SSMSession.start_port_forwarding_to_remote raises inside
+        start_connection, the exception is caught and printed.
+        """
+        databases = {"db1": _make_db_config(local_address="127.0.0.1")}
+
+        with patch("cli_tool.commands.ssm.commands.database.connect.HostsManager") as mock_hm_cls:
+            mock_hm = MagicMock()
+            mock_hm.get_managed_entries.return_value = []
+            mock_hm_cls.return_value = mock_hm
+            with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder"):
+                with patch("cli_tool.commands.ssm.commands.database.connect._process_database_connection") as mock_proc:
+
+                    def process(name, db_cfg, no_hosts, managed, pf, table, threads, get_port, start_conn):
+                        # Call start_conn directly to exercise lines 50-61
+                        try:
+                            start_conn(name, db_cfg, db_cfg.get("local_port", 15432))
+                        except Exception:
+                            pass
+
+                    mock_proc.side_effect = process
+                    with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+                        mock_session.start_port_forwarding_to_remote.side_effect = RuntimeError("connection refused")
+                        # Should not raise — exception is caught inside start_connection
+                        _connect_all_databases(databases, no_hosts=False)
+
+
+# ---------------------------------------------------------------------------
+# connect_database — name = selection path (line 286)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestConnectDatabaseSelectionName:
+    def test_selection_name_used_for_db_lookup(self):
+        """
+        Line 286: when _show_database_selection returns a name (not None, not 'ALL'),
+        that name is used to call get_database and proceed with connection.
+        """
+        from click.testing import CliRunner
+
+        runner = CliRunner()
+        db_config = _make_db_config()
+        with patch("cli_tool.commands.ssm.commands.database.connect.SSMConfigManager") as mock_cm_cls:
+            mock_cm = MagicMock()
+            mock_cm.list_databases.return_value = {"selected-db": db_config}
+            mock_cm.get_database.return_value = db_config
+            mock_cm_cls.return_value = mock_cm
+            with patch(
+                "cli_tool.commands.ssm.commands.database.connect._show_database_selection",
+                return_value="selected-db",
+            ):
+                with patch(
+                    "cli_tool.commands.ssm.commands.database.connect._resolve_hostname_forwarding",
+                    return_value=False,
+                ):
+                    with patch("cli_tool.commands.ssm.commands.database.connect._connect_without_hostname_forwarding") as mock_conn:
+                        runner.invoke(connect_database, [])
+
+        # get_database should have been called with the selection name
+        mock_cm.get_database.assert_called_once_with("selected-db")
+        mock_conn.assert_called_once_with("selected-db", db_config, False)

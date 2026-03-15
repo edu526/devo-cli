@@ -478,3 +478,82 @@ class TestCrossPlatformConfigPaths:
         assert (temp_config_dir / "aws").exists()
         assert (temp_config_dir / "aws" / "sso").exists()
         assert (temp_config_dir / "aws" / "sso" / "profiles").exists()
+
+
+# ============================================================================
+# detect_platform — unknown OS / unknown arch (lines 22, 30)
+# ============================================================================
+
+
+@pytest.mark.platform
+class TestDetectPlatformEdgeCases:
+    """Cover the None-return branches of detect_platform."""
+
+    def test_detect_platform_unknown_system_returns_none(self, mocker):
+        """detect_platform returns None when system is not darwin/linux/windows (line 22)."""
+        from cli_tool.commands.upgrade.core.platform import detect_platform
+
+        mocker.patch("platform.system", return_value="FreeBSD")
+        mocker.patch("platform.machine", return_value="x86_64")
+
+        result = detect_platform()
+
+        assert result is None
+
+    def test_detect_platform_unknown_arch_returns_none(self, mocker):
+        """detect_platform returns None when architecture is not x86_64/arm64 (line 30)."""
+        from cli_tool.commands.upgrade.core.platform import detect_platform
+
+        mocker.patch("platform.system", return_value="Linux")
+        mocker.patch("platform.machine", return_value="mips64")
+
+        result = detect_platform()
+
+        assert result is None
+
+    def test_detect_platform_unknown_system_and_arch_returns_none(self, mocker):
+        """detect_platform returns None when both system and arch are unknown."""
+        from cli_tool.commands.upgrade.core.platform import detect_platform
+
+        mocker.patch("platform.system", return_value="SunOS")
+        mocker.patch("platform.machine", return_value="sparc")
+
+        result = detect_platform()
+
+        assert result is None
+
+
+# ============================================================================
+# get_executable_path — not frozen (lines 61-65)
+# ============================================================================
+
+
+@pytest.mark.platform
+class TestGetExecutablePathNotFrozen:
+    """Cover the shutil.which branches of get_executable_path (lines 61-65)."""
+
+    def test_get_executable_path_not_frozen_devo_found_in_path(self, mocker):
+        """get_executable_path returns Path wrapping shutil.which result when found (lines 62-63)."""
+        from pathlib import Path
+
+        from cli_tool.commands.upgrade.core.platform import get_executable_path
+
+        # Ensure sys.frozen is absent (not a PyInstaller bundle)
+        mocker.patch("sys.frozen", False, create=True)
+        mocker.patch("cli_tool.commands.upgrade.core.platform.shutil.which", return_value="/usr/local/bin/devo")
+
+        result = get_executable_path()
+
+        assert isinstance(result, Path)
+        assert result == Path("/usr/local/bin/devo")
+
+    def test_get_executable_path_not_frozen_devo_not_in_path(self, mocker):
+        """get_executable_path returns None when shutil.which('devo') returns None (lines 61, 65)."""
+        from cli_tool.commands.upgrade.core.platform import get_executable_path
+
+        mocker.patch("sys.frozen", False, create=True)
+        mocker.patch("cli_tool.commands.upgrade.core.platform.shutil.which", return_value=None)
+
+        result = get_executable_path()
+
+        assert result is None

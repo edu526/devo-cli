@@ -1418,6 +1418,48 @@ def test_delete_dynamodb_template_nonexistent_returns_false(temp_config_dir, moc
     assert result is False
 
 
+@pytest.mark.unit
+def test_save_dynamodb_template_creates_dynamodb_section_when_missing(temp_config_dir, mocker):
+    """save_dynamodb_template creates dynamodb section when absent from config (line 399)."""
+    from cli_tool.core.utils.config_manager import get_dynamodb_templates, save_dynamodb_template
+
+    config_file = temp_config_dir / "config.json"
+    # Config with no dynamodb section at all
+    with open(config_file, "w") as f:
+        import json as _json
+
+        _json.dump({"bedrock": {"model_id": "test"}}, f)
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+
+    template = {"table": "payments", "region": "eu-west-1"}
+    save_dynamodb_template("payments_export", template)
+
+    templates = get_dynamodb_templates()
+    assert "payments_export" in templates
+    assert templates["payments_export"]["table"] == "payments"
+
+
+@pytest.mark.unit
+def test_save_dynamodb_template_creates_export_templates_when_missing(temp_config_dir, mocker):
+    """save_dynamodb_template creates export_templates when dynamodb section exists but key is absent (line 401)."""
+    from cli_tool.core.utils.config_manager import get_dynamodb_templates, save_dynamodb_template
+
+    config_file = temp_config_dir / "config.json"
+    # Config with dynamodb section but no export_templates key
+    with open(config_file, "w") as f:
+        import json as _json
+
+        _json.dump({"dynamodb": {"some_other_key": "value"}}, f)
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+
+    template = {"table": "orders", "region": "us-west-2"}
+    save_dynamodb_template("orders_export", template)
+
+    templates = get_dynamodb_templates()
+    assert "orders_export" in templates
+    assert templates["orders_export"]["table"] == "orders"
+
+
 # ============================================================================
 # migrate_legacy_configs
 # ============================================================================
@@ -1889,3 +1931,44 @@ def test_import_config_with_sections_missing_from_file(tmp_path, mocker):
 
     saved = _json.loads(config_file.read_text())
     assert "old" in saved.get("ssm", {}).get("databases", {})
+
+
+# ============================================================================
+# Direct load_config mock — cover lines 399 and 401
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_save_dynamodb_template_line_399_no_dynamodb_key(mocker):
+    """Line 399: config['dynamodb'] = {...} when 'dynamodb' absent.
+
+    Mocks load_config directly to bypass deep-merge that always adds the key.
+    """
+    from cli_tool.core.utils.config_manager import save_dynamodb_template
+
+    mocker.patch("cli_tool.core.utils.config_manager.load_config", return_value={"bedrock": {}})
+    mock_save = mocker.patch("cli_tool.core.utils.config_manager.save_config")
+
+    save_dynamodb_template("my-tmpl", {"table": "my-table"})
+
+    call_args = mock_save.call_args[0][0]
+    assert "dynamodb" in call_args
+    assert "my-tmpl" in call_args["dynamodb"]["export_templates"]
+
+
+@pytest.mark.unit
+def test_save_dynamodb_template_line_401_no_export_templates_key(mocker):
+    """Line 401: config['dynamodb']['export_templates'] = {} when key absent.
+
+    Mocks load_config directly with dynamodb section but no export_templates key.
+    """
+    from cli_tool.core.utils.config_manager import save_dynamodb_template
+
+    mocker.patch("cli_tool.core.utils.config_manager.load_config", return_value={"dynamodb": {}})
+    mock_save = mocker.patch("cli_tool.core.utils.config_manager.save_config")
+
+    save_dynamodb_template("tmpl2", {"table": "users"})
+
+    call_args = mock_save.call_args[0][0]
+    assert "export_templates" in call_args["dynamodb"]
+    assert "tmpl2" in call_args["dynamodb"]["export_templates"]

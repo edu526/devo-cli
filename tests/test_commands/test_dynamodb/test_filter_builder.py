@@ -417,3 +417,94 @@ def test_counters_reset_between_calls():
     fb.build_filter("b = 2")
     # After second call, counter restarted from 0 and processed 1 expression
     assert fb.value_counter == 1
+
+
+# ---------------------------------------------------------------------------
+# Missing-line branches (766, 804, 810, 833, 852, 874, 886, 902)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestMissingLineBranches:
+    def test_process_expression_returns_expr_unchanged_when_no_operator_matches(self):
+        """
+        Line 766: _process_expression falls through all checks and returns expr unchanged
+        when the expression does not match any known operator or function.
+        """
+        fb = make_fb()
+        # An expression that has no known operator, function, or IN keyword
+        result = fb._process_expression("somebaretokenwithnoop")
+        # Should return the original string unchanged
+        assert result == "somebaretokenwithnoop"
+
+    def test_split_by_operator_returns_none_when_operator_absent(self):
+        """
+        Line 804: _split_by_operator returns None when the operator pattern is
+        not present at the top level of the expression.
+        """
+        fb = make_fb()
+        result = fb._split_by_operator("a = 1 AND b = 2", "OR")
+        # OR is not present, should return None
+        assert result is None
+
+    def test_process_comparison_returns_expr_when_split_fails(self):
+        """
+        Line 810: _process_comparison returns the original expression unchanged
+        when splitting by operator yields fewer than 2 parts.
+        This can't happen naturally with split(sep,1) unless we call it directly
+        with an operator not in the expr — cover by constructing the edge case.
+        """
+        fb = make_fb()
+        # Call with operator that won't split (no spaces around it), forcing len(parts) == 1
+        result = fb._process_comparison("nooperatorhere", "=")
+        # parts = "nooperatorhere".split(" = ", 1) → ["nooperatorhere"], len == 1 → return expr
+        assert result == "nooperatorhere"
+
+    def test_process_between_returns_expr_when_no_match(self):
+        """
+        Line 833: _process_between returns the original expression when the
+        regex doesn't match (malformed BETWEEN expression).
+        """
+        fb = make_fb()
+        result = fb._process_between("BETWEEN invalid")
+        assert result == "BETWEEN invalid"
+
+    def test_process_in_returns_expr_when_no_match(self):
+        """
+        Line 852: _process_in returns the original expression when the
+        regex doesn't match.
+        """
+        fb = make_fb()
+        result = fb._process_in("IN notvalid")
+        assert result == "IN notvalid"
+
+    def test_process_function_returns_expr_when_no_match(self):
+        """
+        Line 874: _process_function returns original expr when regex doesn't match.
+        """
+        fb = make_fb()
+        result = fb._process_function("attribute_exists invalid no parens", "attribute_exists")
+        assert result == "attribute_exists invalid no parens"
+
+    def test_process_function_with_value_returns_expr_when_no_match(self):
+        """
+        Line 886: _process_function_with_value returns original expr when regex doesn't match.
+        """
+        fb = make_fb()
+        result = fb._process_function_with_value("begins_with invalid", "begins_with")
+        assert result == "begins_with invalid"
+
+    def test_process_size_function_returns_expr_when_no_match(self):
+        """
+        Line 902: _process_size_function returns original expr when regex doesn't match.
+        """
+        fb = make_fb()
+        result = fb._process_size_function("size invalid no comparison")
+        assert result == "size invalid no comparison"
+
+    def test_split_by_operator_returns_none_when_all_matches_inside_parens(self):
+        """Line 804: _split_by_operator returns None when operator exists but only inside parentheses."""
+        fb = make_fb()
+        # AND is inside parentheses, so paren_count > 0 at that position → never returns [left, right]
+        result = fb._split_by_operator("(a AND b)", "AND")
+        assert result is None

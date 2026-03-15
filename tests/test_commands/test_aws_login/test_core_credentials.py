@@ -610,3 +610,41 @@ def test_get_sso_cache_token_returns_none_when_no_expires_at(tmp_path, monkeypat
     result = get_sso_cache_token("https://example.awsapps.com/start")
 
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# write_default_credentials — error writing file (lines 127-129)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_write_default_credentials_returns_none_on_write_error(tmp_path, mocker, monkeypatch):
+    """Returns None when an exception occurs while writing the credentials file (lines 127-129)."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    aws_dir = tmp_path / ".aws"
+    aws_dir.mkdir()
+
+    creds = {
+        "AccessKeyId": "AKIATEST",
+        "SecretAccessKey": "SECRET",
+        "SessionToken": "TOKEN",
+        "Expiration": "2099-01-01T00:00:00+00:00",
+    }
+    mocker.patch("subprocess.run", return_value=mocker.MagicMock(returncode=0, stdout=json.dumps(creds)))
+    mocker.patch(
+        "cli_tool.commands.aws_login.core.credentials.get_profile_config",
+        return_value={"region": "us-east-1"},
+    )
+    # Make the credentials file unwritable by patching open to raise on "a" mode
+    original_open = open
+
+    def patched_open(path, mode="r", **kwargs):
+        if mode == "a":
+            raise OSError("disk full")
+        return original_open(path, mode, **kwargs)
+
+    mocker.patch("builtins.open", side_effect=patched_open)
+
+    result = write_default_credentials("dev")
+
+    assert result is None

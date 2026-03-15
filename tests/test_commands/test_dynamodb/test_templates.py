@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from cli_tool.commands.dynamodb.commands.list_templates import list_templates_command
 from cli_tool.commands.dynamodb.utils.templates import ExportConfigManager, create_template_from_args
 
 # ---------------------------------------------------------------------------
@@ -159,3 +160,19 @@ class TestExportConfigManager:
         manager = ExportConfigManager()
         # Should not raise — template with no mode/compress/limit
         manager.list_templates()
+
+
+# ---------------------------------------------------------------------------
+# list_templates_command
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestListTemplatesCommand:
+    def test_list_templates_command_calls_list_templates(self, mocker):
+        """Test list_templates_command instantiates ExportConfigManager and calls list_templates."""
+        mock_list = mocker.patch.object(ExportConfigManager, "list_templates")
+
+        list_templates_command()
+
+        mock_list.assert_called_once()

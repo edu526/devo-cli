@@ -66,6 +66,27 @@ def test_get_current_version_returns_unknown_on_import_error(mocker):
     assert version_mod.get_current_version() == "unknown"
 
 
+@pytest.mark.unit
+def test_get_current_version_import_error_via_builtins(mocker):
+    """get_current_version returns 'unknown' when _version import raises ImportError (lines 13-14)."""
+    import builtins
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "cli_tool._version":
+            raise ImportError("No module named 'cli_tool._version'")
+        return real_import(name, *args, **kwargs)
+
+    mocker.patch("builtins.__import__", side_effect=fake_import)
+
+    # Re-import the function to exercise the try/except at call time
+    from cli_tool.commands.upgrade.core.version import get_current_version
+
+    result = get_current_version()
+    assert result == "unknown"
+
+
 # ============================================================================
 # get_latest_release — happy path
 # ============================================================================

@@ -466,3 +466,87 @@ def test_show_update_notification_handles_exception_silently(mocker):
 
     # Should not raise
     show_update_notification()
+
+
+# ============================================================================
+# get_cache_file
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_get_cache_file_creates_directory_and_returns_path(tmp_path, mocker):
+    """get_cache_file() creates ~/.devo dir and returns the cache file path (lines 11-13)."""
+    from cli_tool.core.utils.version_check import get_cache_file
+
+    fake_home = tmp_path / "fakehome"
+    fake_home.mkdir()
+    mocker.patch("cli_tool.core.utils.version_check.Path") if False else None  # we patch Path.home instead
+    mocker.patch("pathlib.Path.home", return_value=fake_home)
+
+    result = get_cache_file()
+
+    devo_dir = fake_home / ".devo"
+    assert devo_dir.exists()
+    assert result == devo_dir / "version_check.json"
+
+
+# ============================================================================
+# get_current_version — real ImportError path
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_get_current_version_returns_none_when_version_module_absent(mocker, monkeypatch):
+    """get_current_version returns None when _version raises ImportError (lines 22-23)."""
+    import builtins
+    import sys
+
+    # Remove cached module
+    sys.modules.pop("cli_tool._version", None)
+    monkeypatch.setitem(sys.modules, "cli_tool._version", None)
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "cli_tool._version":
+            raise ImportError("No module named 'cli_tool._version'")
+        return real_import(name, *args, **kwargs)
+
+    mocker.patch("builtins.__import__", side_effect=fake_import)
+
+    from cli_tool.core.utils import version_check as vc
+
+    result = vc.get_current_version()
+    assert result is None
+
+
+# ============================================================================
+# is_cache_valid — invalid date format
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_is_cache_valid_invalid_date_format_returns_false():
+    """is_cache_valid returns False when checked_at has an invalid date format (lines 86-87)."""
+    data = {"checked_at": "not-a-valid-date-at-all!!"}
+    assert is_cache_valid(data) is False
+
+
+@pytest.mark.unit
+def test_clear_cache_exception_returns_false(mocker):
+    """clear_cache returns False when unlink() raises an exception (lines 74-75)."""
+    cache_file = mocker.MagicMock()
+    cache_file.exists.return_value = True
+    cache_file.unlink.side_effect = OSError("Permission denied")
+    mocker.patch("cli_tool.core.utils.version_check.get_cache_file", return_value=cache_file)
+
+    result = clear_cache()
+
+    assert result is False
+
+
+@pytest.mark.unit
+def test_parse_version_none_returns_zeros():
+    """parse_version(None) triggers the except path and returns (0, 0, 0) (lines 86-87)."""
+    result = parse_version(None)
+    assert result == (0, 0, 0)
