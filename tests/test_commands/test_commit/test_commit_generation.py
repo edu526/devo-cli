@@ -649,3 +649,138 @@ def test_commit_with_no_ticket_in_branch_name(cli_runner, fixtures_dir, mock_sub
     # Commit message should not have a ticket prepended
     commit_message = commit_calls[0][0][0][3]
     assert commit_message.startswith("feat(commit)"), "Commit message should start with type, not ticket"
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for CommitMessageGenerator (lines 93-94, 118-124, 206)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_get_git_context_returns_fallback_on_called_process_error(mocker):
+    """get_git_context returns fallback strings when git commands fail (lines 93-94)."""
+    import subprocess
+
+    from cli_tool.commands.commit.core.generator import CommitMessageGenerator
+
+    mocker.patch("cli_tool.core.agents.base_agent.BaseAgent.__init__", return_value=None)
+    gen = CommitMessageGenerator.__new__(CommitMessageGenerator)
+    gen.agent = mocker.MagicMock()
+
+    mocker.patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "git"))
+
+    git_status, recent_commits = gen.get_git_context()
+
+    assert git_status == "Unable to get git status"
+    assert recent_commits == "Unable to get recent commits"
+
+
+@pytest.mark.unit
+def test_parse_commit_message_no_colon_uses_fallback(mocker):
+    """parse_commit_message falls back to chore/general when no colon in first line (lines 118-124)."""
+    from cli_tool.commands.commit.core.generator import CommitMessageGenerator
+
+    mocker.patch("cli_tool.core.agents.base_agent.BaseAgent.__init__", return_value=None)
+    gen = CommitMessageGenerator.__new__(CommitMessageGenerator)
+    gen.agent = mocker.MagicMock()
+
+    commit_type, scope, summary = gen.parse_commit_message("just a plain message without colon")
+
+    assert commit_type == "chore"
+    assert scope == "general"
+    assert summary == "just a plain message without colon"
+
+
+@pytest.mark.unit
+def test_parse_commit_message_colon_no_parens_uses_general_scope(mocker):
+    """parse_commit_message uses 'general' scope when type has no parentheses (lines 118-119)."""
+    from cli_tool.commands.commit.core.generator import CommitMessageGenerator
+
+    mocker.patch("cli_tool.core.agents.base_agent.BaseAgent.__init__", return_value=None)
+    gen = CommitMessageGenerator.__new__(CommitMessageGenerator)
+    gen.agent = mocker.MagicMock()
+
+    commit_type, scope, summary = gen.parse_commit_message("feat: add new feature")
+
+    assert commit_type == "feat"
+    assert scope == "general"
+    assert summary == "add new feature"
+
+
+@pytest.mark.unit
+def test_add_ticket_to_message_returns_message_unchanged_when_ticket_already_present(mocker):
+    """add_ticket_to_message returns original message when ticket already in it (line 206)."""
+    from cli_tool.commands.commit.core.generator import CommitMessageGenerator
+
+    mocker.patch("cli_tool.core.agents.base_agent.BaseAgent.__init__", return_value=None)
+    gen = CommitMessageGenerator.__new__(CommitMessageGenerator)
+    gen.agent = mocker.MagicMock()
+
+    branch = "feature/DEVO-999-my-branch"
+    message = "DEVO-999 feat(scope): do something"
+
+    result = gen.add_ticket_to_message(message, branch)
+
+    assert result == message  # Unchanged — ticket already present
+
+
+@pytest.mark.unit
+def test_add_ticket_to_message_returns_message_unchanged_when_no_ticket_in_branch(mocker):
+    """add_ticket_to_message returns original message when branch has no ticket (line 206)."""
+    from cli_tool.commands.commit.core.generator import CommitMessageGenerator
+
+    mocker.patch("cli_tool.core.agents.base_agent.BaseAgent.__init__", return_value=None)
+    gen = CommitMessageGenerator.__new__(CommitMessageGenerator)
+    gen.agent = mocker.MagicMock()
+
+    result = gen.add_ticket_to_message("feat: some change", "main")
+
+    assert result == "feat: some change"
+
+
+# ============================================================================
+# Unit test for generate.py line 90 — no remote URL when opening PR
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_commit_with_pull_request_no_remote_url(cli_runner, fixtures_dir, mock_subprocess, mock_base_agent_query, mock_select_profile, mocker):
+    """
+    Line 90: when pull_request=True but remote URL cannot be determined,
+    the 'Could not determine remote URL' message is printed.
+    """
+    import json
+
+    with open(fixtures_dir / "git_diffs" / "simple_change.json") as f:
+        diff_data = json.load(f)
+
+    def subprocess_side_effect(*args, **kwargs):
+        cmd = args[0] if args else kwargs.get("args", [])
+        result = MagicMock()
+        result.returncode = 0
+        if cmd == ["git", "diff", "--staged"]:
+            result.stdout = diff_data["diff"]
+        elif cmd == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
+            result.stdout = "feature/DEVO-100-test"
+        elif cmd == ["git", "status", "--porcelain"]:
+            result.stdout = "M  file.py"
+        elif cmd == ["git", "log", "--oneline", "-10"]:
+            result.stdout = "abc1234 Previous commit"
+        elif cmd[:2] == ["git", "commit"]:
+            result.stdout = "[main abc1234] Commit message"
+        elif cmd[:2] == ["git", "push"]:
+            result.stdout = ""
+        elif cmd == ["git", "config", "--get", "remote.origin.url"]:
+            # Return empty string to simulate no remote URL
+            result.stdout = ""
+        else:
+            result.stdout = ""
+        return result
+
+    mock_subprocess.side_effect = subprocess_side_effect
+    mock_base_agent_query.return_value = "feat(test): add coverage"
+
+    result = cli_runner.invoke(commit, ["--all"], input="y\n")
+
+    assert result.exit_code == 0
+    assert "Could not determine remote URL" in result.output

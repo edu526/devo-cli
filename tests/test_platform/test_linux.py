@@ -16,11 +16,13 @@ import pytest
 class TestLinuxBinaryFormat:
     """Test Linux-specific binary format and handling."""
 
-    def test_linux_binary_verification(self, temp_config_dir):
+    def test_linux_binary_verification(self, temp_config_dir, mocker):
         """Test binary file verification on Linux (ELF header).
 
         Validates: Requirements 5.5
         """
+        mocker.patch("cli_tool.commands.upgrade.core.downloader.sys.platform", "linux")
+
         from cli_tool.commands.upgrade.core.downloader import verify_binary
 
         # Create a valid ELF binary (mock) with sufficient size (>10MB)

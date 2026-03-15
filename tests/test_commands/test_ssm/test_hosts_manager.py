@@ -395,3 +395,395 @@ def test_update_existing_entry_not_found_returns_false(monkeypatch):
 
     result = manager._update_existing_entry("127.0.0.9", "nonexistent.local")
     assert result is False
+
+
+# ---------------------------------------------------------------------------
+# get_managed_entries — missing markers returns [] (line 51)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_get_managed_entries_marker_start_present_but_end_missing():
+    """Returns [] when MARKER_START is present but MARKER_END is absent (line 51)."""
+    manager = HostsManager.__new__(HostsManager)
+    manager.HOSTS_FILE = MagicMock()
+    manager.HOSTS_FILE.exists.return_value = True
+    # Content contains MARKER_START but not MARKER_END
+    # NOTE: get_managed_entries uses HOSTS_FILE.read_text() directly (not _read_hosts())
+    content = f"{MARKER_START}\n127.0.0.2 db.local\n"
+    manager.HOSTS_FILE.read_text.return_value = content
+
+    entries = manager.get_managed_entries()
+
+    assert entries == []
+
+
+# ---------------------------------------------------------------------------
+# add_entry — macOS loopback alias configuration (line 97)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_add_entry_darwin_loopback_calls_configure_alias(monkeypatch):
+    """add_entry calls _configure_loopback_alias_macos on Darwin for loopback IPs != 127.0.0.1 (line 97)."""
+    manager = HostsManager.__new__(HostsManager)
+    manager.HOSTS_FILE = MagicMock()
+    manager.HOSTS_FILE.exists.return_value = False
+    written = []
+
+    monkeypatch.setattr(manager, "_read_hosts", lambda: "127.0.0.1 localhost\n")
+    monkeypatch.setattr(manager, "_write_hosts", lambda c: written.append(c))
+    monkeypatch.setattr("platform.system", lambda: "Darwin")
+
+    configure_calls = []
+    monkeypatch.setattr(manager, "_configure_loopback_alias_macos", lambda ip: configure_calls.append(ip))
+
+    manager.add_entry("127.0.0.5", "myhost.local")
+
+    assert "127.0.0.5" in configure_calls
+
+
+@pytest.mark.unit
+def test_add_entry_darwin_standard_localhost_no_alias(monkeypatch):
+    """add_entry does NOT call _configure_loopback_alias_macos for 127.0.0.1 on Darwin."""
+    manager = HostsManager.__new__(HostsManager)
+    manager.HOSTS_FILE = MagicMock()
+    manager.HOSTS_FILE.exists.return_value = False
+    written = []
+
+    monkeypatch.setattr(manager, "_read_hosts", lambda: "127.0.0.1 localhost\n")
+    monkeypatch.setattr(manager, "_write_hosts", lambda c: written.append(c))
+    monkeypatch.setattr("platform.system", lambda: "Darwin")
+
+    configure_calls = []
+    monkeypatch.setattr(manager, "_configure_loopback_alias_macos", lambda ip: configure_calls.append(ip))
+
+    manager.add_entry("127.0.0.1", "localhost")
+
+    assert configure_calls == []
+
+
+# ---------------------------------------------------------------------------
+# remove_entry — macOS loopback alias removal (lines 154-156)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_remove_entry_darwin_calls_remove_loopback_alias(monkeypatch):
+    """remove_entry calls _remove_loopback_alias_macos for loopback IPs on Darwin (lines 154-156)."""
+    manager = HostsManager.__new__(HostsManager)
+    content = _hosts_with_entries(("127.0.0.5", "myhost.local"))
+    removed_ips = []
+
+    monkeypatch.setattr(manager, "_read_hosts", lambda: content)
+    monkeypatch.setattr(manager, "_write_hosts", lambda c: None)
+    monkeypatch.setattr("platform.system", lambda: "Darwin")
+    monkeypatch.setattr(manager, "_remove_loopback_alias_macos", lambda ip: removed_ips.append(ip))
+
+    manager.remove_entry("myhost.local")
+
+    assert "127.0.0.5" in removed_ips
+
+
+@pytest.mark.unit
+def test_remove_entry_darwin_skips_standard_localhost(monkeypatch):
+    """remove_entry does not call _remove_loopback_alias_macos for 127.0.0.1 on Darwin."""
+    manager = HostsManager.__new__(HostsManager)
+    content = _hosts_with_entries(("127.0.0.1", "localhost"))
+    removed_ips = []
+
+    monkeypatch.setattr(manager, "_read_hosts", lambda: content)
+    monkeypatch.setattr(manager, "_write_hosts", lambda c: None)
+    monkeypatch.setattr("platform.system", lambda: "Darwin")
+    monkeypatch.setattr(manager, "_remove_loopback_alias_macos", lambda ip: removed_ips.append(ip))
+
+    manager.remove_entry("localhost")
+
+    assert removed_ips == []
+
+
+# ---------------------------------------------------------------------------
+# clear_all — macOS loopback alias removal (lines 180-182)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_clear_all_darwin_removes_loopback_aliases(monkeypatch):
+    """clear_all calls _remove_loopback_alias_macos for loopback IPs on Darwin (lines 180-182)."""
+    manager = HostsManager.__new__(HostsManager)
+    content = "127.0.0.1 localhost\n" + _hosts_with_entries(
+        ("127.0.0.2", "db.local"),
+        ("127.0.0.3", "api.local"),
+    )
+
+    manager.HOSTS_FILE = MagicMock()
+    manager.HOSTS_FILE.exists.return_value = True
+    manager.HOSTS_FILE.read_text.return_value = content
+
+    removed_ips = []
+
+    monkeypatch.setattr(manager, "_read_hosts", lambda: content)
+    monkeypatch.setattr(manager, "_write_hosts", lambda c: None)
+    monkeypatch.setattr("platform.system", lambda: "Darwin")
+    monkeypatch.setattr(manager, "_remove_loopback_alias_macos", lambda ip: removed_ips.append(ip))
+
+    manager.clear_all()
+
+    assert "127.0.0.2" in removed_ips
+    assert "127.0.0.3" in removed_ips
+
+
+# ---------------------------------------------------------------------------
+# _write_hosts — Windows path (lines 197-209)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_write_hosts_windows_writes_file(monkeypatch, tmp_path):
+    """_write_hosts writes directly to the hosts file on Windows (lines 197-209)."""
+    import subprocess
+
+    manager = HostsManager.__new__(HostsManager)
+    fake_hosts = tmp_path / "hosts"
+    fake_hosts.write_text("original content")
+
+    monkeypatch.setattr("platform.system", lambda: "Windows")
+    monkeypatch.setattr("cli_tool.commands.ssm.utils.hosts_manager.HostsManager.WINDOWS_HOSTS_FILE", str(fake_hosts))
+
+    manager._write_hosts("new content")
+
+    assert fake_hosts.read_text() == "new content"
+
+
+@pytest.mark.unit
+def test_write_hosts_windows_raises_permission_error(monkeypatch, tmp_path):
+    """_write_hosts re-raises PermissionError with instructions on Windows (lines 203-209)."""
+    from pathlib import Path
+
+    manager = HostsManager.__new__(HostsManager)
+
+    monkeypatch.setattr("platform.system", lambda: "Windows")
+
+    mock_path_cls = MagicMock()
+    mock_path_instance = MagicMock()
+    mock_path_instance.write_text.side_effect = PermissionError("Access denied")
+    mock_path_cls.return_value = mock_path_instance
+
+    with patch("cli_tool.commands.ssm.utils.hosts_manager.Path", mock_path_cls):
+        with pytest.raises(PermissionError, match="Permission denied"):
+            manager._write_hosts("content")
+
+
+# ---------------------------------------------------------------------------
+# _write_hosts — Unix path (lines 210-222)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_write_hosts_unix_uses_sudo_tee(monkeypatch):
+    """_write_hosts uses sudo tee on Linux/macOS (lines 210-222)."""
+    import subprocess
+
+    manager = HostsManager.__new__(HostsManager)
+    monkeypatch.setattr("platform.system", lambda: "Linux")
+
+    mock_process = MagicMock()
+    mock_process.returncode = 0
+    mock_process.communicate.return_value = (b"", b"")
+
+    with patch("cli_tool.commands.ssm.utils.hosts_manager.subprocess.Popen", return_value=mock_process) as mock_popen:
+        manager._write_hosts("new content")
+
+    cmd = mock_popen.call_args[0][0]
+    assert "sudo" in cmd
+    assert "tee" in cmd
+    mock_process.communicate.assert_called_once_with(input=b"new content")
+
+
+@pytest.mark.unit
+def test_write_hosts_unix_raises_on_nonzero_return(monkeypatch):
+    """_write_hosts raises OSError when sudo tee exits non-zero (lines 221-222)."""
+    manager = HostsManager.__new__(HostsManager)
+    monkeypatch.setattr("platform.system", lambda: "Linux")
+
+    mock_process = MagicMock()
+    mock_process.returncode = 1
+    mock_process.communicate.return_value = (b"", b"tee: permission denied")
+
+    with patch("cli_tool.commands.ssm.utils.hosts_manager.subprocess.Popen", return_value=mock_process):
+        with pytest.raises(OSError, match="Failed to write hosts file"):
+            manager._write_hosts("new content")
+
+
+# ---------------------------------------------------------------------------
+# _configure_loopback_alias_macos (lines 239-261)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_configure_loopback_alias_macos_already_configured(monkeypatch):
+    """_configure_loopback_alias_macos returns early when alias already exists (lines 248-251)."""
+    import subprocess
+
+    manager = HostsManager.__new__(HostsManager)
+    mock_result = MagicMock()
+    mock_result.stdout = "inet 127.0.0.5 netmask 0xff000000"
+
+    with patch("rich.console.Console"):
+        with patch("cli_tool.commands.ssm.utils.hosts_manager.subprocess.run", return_value=mock_result) as mock_run:
+            manager._configure_loopback_alias_macos("127.0.0.5")
+
+    # Only the check call; no alias-add call
+    assert mock_run.call_count == 1
+
+
+@pytest.mark.unit
+def test_configure_loopback_alias_macos_adds_new_alias(monkeypatch):
+    """_configure_loopback_alias_macos runs sudo ifconfig alias when not yet configured (lines 255-258)."""
+    import subprocess
+
+    manager = HostsManager.__new__(HostsManager)
+    mock_check = MagicMock()
+    mock_check.stdout = "inet 127.0.0.1 netmask 0xff000000"  # 127.0.0.5 not present
+    mock_add = MagicMock()
+
+    with patch("rich.console.Console"):
+        with patch(
+            "cli_tool.commands.ssm.utils.hosts_manager.subprocess.run",
+            side_effect=[mock_check, mock_add],
+        ) as mock_run:
+            manager._configure_loopback_alias_macos("127.0.0.5")
+
+    assert mock_run.call_count == 2
+    add_cmd = mock_run.call_args_list[1][0][0]
+    assert "alias" in add_cmd
+
+
+@pytest.mark.unit
+def test_configure_loopback_alias_macos_raises_on_add_failure():
+    """_configure_loopback_alias_macos raises OSError when sudo ifconfig fails (lines 259-261)."""
+    import subprocess
+
+    manager = HostsManager.__new__(HostsManager)
+    mock_check = MagicMock()
+    mock_check.stdout = "inet 127.0.0.1 netmask 0xff000000"
+
+    add_error = subprocess.CalledProcessError(1, "sudo")
+    add_error.stderr = "Operation not permitted"
+
+    with patch("rich.console.Console"):
+        with patch(
+            "cli_tool.commands.ssm.utils.hosts_manager.subprocess.run",
+            side_effect=[mock_check, add_error],
+        ):
+            with pytest.raises(OSError, match="Failed to configure loopback alias"):
+                manager._configure_loopback_alias_macos("127.0.0.5")
+
+
+@pytest.mark.unit
+def test_configure_loopback_alias_macos_invalid_ip_raises():
+    """_configure_loopback_alias_macos raises ValueError for non-loopback IP (lines 242-243)."""
+    manager = HostsManager.__new__(HostsManager)
+
+    with patch("rich.console.Console"):
+        with pytest.raises(ValueError, match="Invalid loopback IP address"):
+            manager._configure_loopback_alias_macos("192.168.1.1")
+
+
+@pytest.mark.unit
+def test_configure_loopback_alias_macos_check_raises_continues_to_add():
+    """CalledProcessError during ifconfig check is swallowed and alias-add still proceeds (lines 252-253)."""
+    import subprocess
+
+    manager = HostsManager.__new__(HostsManager)
+    check_error = subprocess.CalledProcessError(1, "ifconfig")
+    add_success = MagicMock()
+
+    with patch("rich.console.Console"):
+        with patch(
+            "cli_tool.commands.ssm.utils.hosts_manager.subprocess.run",
+            side_effect=[check_error, add_success],
+        ) as mock_run:
+            manager._configure_loopback_alias_macos("127.0.0.5")
+
+    assert mock_run.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# _remove_loopback_alias_macos (lines 265-275)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_remove_loopback_alias_macos_ip_not_configured_returns_early():
+    """_remove_loopback_alias_macos returns without action when IP not in lo0 (lines 268-269)."""
+    import subprocess
+
+    manager = HostsManager.__new__(HostsManager)
+    mock_result = MagicMock()
+    mock_result.stdout = "inet 127.0.0.1 netmask 0xff000000"  # 127.0.0.5 NOT present
+
+    with patch("cli_tool.commands.ssm.utils.hosts_manager.subprocess.run", return_value=mock_result) as mock_run:
+        manager._remove_loopback_alias_macos("127.0.0.5")
+
+    # Only the check call; no remove call
+    assert mock_run.call_count == 1
+
+
+@pytest.mark.unit
+def test_remove_loopback_alias_macos_removes_existing_alias():
+    """_remove_loopback_alias_macos calls sudo ifconfig -alias when IP is configured (lines 271-272)."""
+    import subprocess
+
+    manager = HostsManager.__new__(HostsManager)
+    mock_check = MagicMock()
+    mock_check.stdout = "inet 127.0.0.5 netmask 0xff000000"
+    mock_remove = MagicMock()
+
+    with patch(
+        "cli_tool.commands.ssm.utils.hosts_manager.subprocess.run",
+        side_effect=[mock_check, mock_remove],
+    ) as mock_run:
+        manager._remove_loopback_alias_macos("127.0.0.5")
+
+    assert mock_run.call_count == 2
+    remove_cmd = mock_run.call_args_list[1][0][0]
+    assert "-alias" in remove_cmd
+
+
+@pytest.mark.unit
+def test_remove_loopback_alias_macos_ignores_errors():
+    """_remove_loopback_alias_macos silently ignores CalledProcessError (lines 273-275)."""
+    import subprocess
+
+    manager = HostsManager.__new__(HostsManager)
+    error = subprocess.CalledProcessError(1, "ifconfig")
+
+    with patch("cli_tool.commands.ssm.utils.hosts_manager.subprocess.run", side_effect=error):
+        # Should not raise
+        manager._remove_loopback_alias_macos("127.0.0.5")
+
+
+@pytest.mark.unit
+def test_read_hosts_returns_empty_when_file_missing(tmp_path):
+    """_read_hosts returns '' when hosts file does not exist (lines 186-188)."""
+    manager = HostsManager.__new__(HostsManager)
+    missing_path = tmp_path / "hosts"
+    manager.get_hosts_file_path = lambda: missing_path
+
+    result = manager._read_hosts()
+
+    assert result == ""
+
+
+@pytest.mark.unit
+def test_read_hosts_returns_content_when_file_exists(tmp_path):
+    """_read_hosts returns file content when hosts file exists (lines 186-189)."""
+    manager = HostsManager.__new__(HostsManager)
+    hosts_file = tmp_path / "hosts"
+    hosts_file.write_text("127.0.0.1 localhost\n::1 localhost\n")
+    manager.get_hosts_file_path = lambda: hosts_file
+
+    result = manager._read_hosts()
+
+    assert "127.0.0.1 localhost" in result

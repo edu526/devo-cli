@@ -878,3 +878,158 @@ def test_base_agent_query_unicode_response(mocker):
     assert response == unicode_response
     assert "世界" in response
     assert "🌍" in response
+
+
+# ============================================================================
+# Event callback handler tests (lines 92-96, 117, 121-122, 126, 130, 139)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_handle_message_event_processes_text_content(mocker):
+    """_handle_message_event calls show_ai_real_response when message has text content (lines 92-96)."""
+    mock_console_ui = MagicMock()
+    mocker.patch("cli_tool.core.agents.base_agent.console_ui", mock_console_ui)
+
+    agent = BaseAgent(name="TestAgent", system_prompt="You are a test assistant")
+
+    kwargs = {
+        "message": {
+            "role": "assistant",
+            "content": [{"text": "Hello from assistant"}],
+        }
+    }
+    agent._handle_message_event(kwargs)
+
+    mock_console_ui._reset_event_grouping.assert_called_once()
+    mock_console_ui.show_ai_real_response.assert_called_once_with("Hello from assistant", is_complete=True)
+
+
+@pytest.mark.unit
+def test_handle_message_event_empty_content_list(mocker):
+    """_handle_message_event handles empty content list without calling show_ai_real_response (lines 92-96)."""
+    mock_console_ui = MagicMock()
+    mocker.patch("cli_tool.core.agents.base_agent.console_ui", mock_console_ui)
+
+    agent = BaseAgent(name="TestAgent", system_prompt="You are a test assistant")
+
+    kwargs = {"message": {"role": "assistant", "content": []}}
+    agent._handle_message_event(kwargs)
+
+    mock_console_ui._reset_event_grouping.assert_called_once()
+    mock_console_ui.show_ai_real_response.assert_not_called()
+
+
+@pytest.mark.unit
+def test_handle_message_event_content_without_text_key(mocker):
+    """_handle_message_event handles content item lacking 'text' key (lines 92-96)."""
+    mock_console_ui = MagicMock()
+    mocker.patch("cli_tool.core.agents.base_agent.console_ui", mock_console_ui)
+
+    agent = BaseAgent(name="TestAgent", system_prompt="You are a test assistant")
+
+    kwargs = {"message": {"role": "assistant", "content": [{"type": "image"}]}}
+    agent._handle_message_event(kwargs)
+
+    mock_console_ui._reset_event_grouping.assert_called_once()
+    mock_console_ui.show_ai_real_response.assert_not_called()
+
+
+@pytest.mark.unit
+def test_console_ui_callback_data_calls_show_ai_real_response(mocker):
+    """_console_ui_callback with 'data' key calls show_ai_real_response (line 117)."""
+    mock_console_ui = MagicMock()
+    mocker.patch("cli_tool.core.agents.base_agent.console_ui", mock_console_ui)
+
+    agent = BaseAgent(name="TestAgent", system_prompt="You are a test assistant")
+
+    agent._console_ui_callback(data="streaming text chunk")
+
+    mock_console_ui.show_ai_real_response.assert_called_once_with("streaming text chunk", is_complete=False)
+
+
+@pytest.mark.unit
+def test_console_ui_callback_tool_use_event(mocker):
+    """_console_ui_callback handles current_tool_use event (lines 121-122)."""
+    mock_console_ui = MagicMock()
+    mocker.patch("cli_tool.core.agents.base_agent.console_ui", mock_console_ui)
+
+    agent = BaseAgent(name="TestAgent", system_prompt="You are a test assistant")
+
+    agent._console_ui_callback(current_tool_use={"name": "read_file", "input": {}})
+
+    mock_console_ui._reset_event_grouping.assert_called_once()
+    mock_console_ui.show_ai_thinking.assert_called_once()
+    call_arg = mock_console_ui.show_ai_thinking.call_args[0][0]
+    assert "read_file" in call_arg
+
+
+@pytest.mark.unit
+def test_console_ui_callback_tool_use_event_without_name_does_not_trigger(mocker):
+    """_console_ui_callback ignores current_tool_use when name is empty/falsy."""
+    mock_console_ui = MagicMock()
+    mocker.patch("cli_tool.core.agents.base_agent.console_ui", mock_console_ui)
+
+    agent = BaseAgent(name="TestAgent", system_prompt="You are a test assistant")
+
+    # No 'data' key, current_tool_use has no name → falls through to lifecycle handler
+    agent._console_ui_callback(current_tool_use={"name": ""})
+
+    mock_console_ui._reset_event_grouping.assert_not_called()
+
+
+@pytest.mark.unit
+def test_console_ui_callback_reasoning_event(mocker):
+    """_console_ui_callback handles reasoning event (line 126)."""
+    mock_console_ui = MagicMock()
+    mocker.patch("cli_tool.core.agents.base_agent.console_ui", mock_console_ui)
+
+    agent = BaseAgent(name="TestAgent", system_prompt="You are a test assistant")
+
+    agent._console_ui_callback(reasoning=True, reasoningText="I need to think about this carefully")
+
+    mock_console_ui.show_ai_thinking.assert_called_once()
+    call_arg = mock_console_ui.show_ai_thinking.call_args[0][0]
+    assert "reasoning" in call_arg.lower() or "I need to think" in call_arg
+
+
+@pytest.mark.unit
+def test_console_ui_callback_complete_assistant_message(mocker):
+    """_console_ui_callback dispatches to _handle_message_event for assistant messages (line 130)."""
+    mock_console_ui = MagicMock()
+    mocker.patch("cli_tool.core.agents.base_agent.console_ui", mock_console_ui)
+
+    agent = BaseAgent(name="TestAgent", system_prompt="You are a test assistant")
+    mock_handle = mocker.patch.object(agent, "_handle_message_event")
+
+    kwargs = {"message": {"role": "assistant", "content": [{"text": "Done"}]}}
+    agent._console_ui_callback(**kwargs)
+
+    mock_handle.assert_called_once_with(kwargs)
+
+
+@pytest.mark.unit
+def test_log_uses_rich_console_when_enabled(mocker):
+    """_log uses rich console.print when enable_rich_logging=True (line 139)."""
+    agent = BaseAgent(
+        name="TestAgent",
+        system_prompt="You are a test assistant",
+        enable_rich_logging=True,
+    )
+    # console is a real Console object when enable_rich_logging=True
+    mock_print = mocker.patch.object(agent.console, "print")
+
+    agent._log("test message")
+
+    mock_print.assert_called_once_with("test message")
+
+
+@pytest.mark.unit
+def test_log_uses_print_when_rich_disabled(mocker):
+    """_log falls back to plain print when enable_rich_logging=False."""
+    agent = BaseAgent(name="TestAgent", system_prompt="You are a test assistant")
+    mock_print = mocker.patch("builtins.print")
+
+    agent._log("plain message")
+
+    mock_print.assert_called_once_with("plain message")

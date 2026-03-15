@@ -212,3 +212,103 @@ def test_connect_database_ssm_session_failure(cli_runner, mock_ssm_config, sampl
 
     assert result.exit_code == 0
     assert "Connection failed" in result.output or "SSM session failed" in result.output
+
+
+# ============================================================================
+# Unit tests for SSM __init__ files (missing pass lines)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_ssm_group_help_invokes_group_pass():
+    """
+    ssm/__init__.py line 24: the 'pass' in the ssm group body is executed
+    when the CLI group is invoked (e.g., --help).
+    """
+    from click.testing import CliRunner
+
+    from cli_tool.commands.ssm import ssm
+
+    runner = CliRunner()
+    result = runner.invoke(ssm, ["--help"])
+    assert result.exit_code == 0
+    assert "SSM" in result.output or "ssm" in result.output.lower()
+
+
+@pytest.mark.unit
+def test_ssm_database_group_help_invokes_pass():
+    """
+    ssm/commands/database/__init__.py line 15: the 'pass' in the database
+    group body is hit when the database subgroup is invoked.
+    """
+    from click.testing import CliRunner
+
+    from cli_tool.commands.ssm import ssm
+
+    runner = CliRunner()
+    result = runner.invoke(ssm, ["database", "--help"])
+    assert result.exit_code == 0
+    assert "database" in result.output.lower()
+
+
+@pytest.mark.unit
+def test_ssm_hosts_group_help_invokes_pass():
+    """
+    ssm/commands/hosts/__init__.py line 16: the 'pass' in the hosts group
+    body is hit when the hosts subgroup is invoked.
+    """
+    from click.testing import CliRunner
+
+    from cli_tool.commands.ssm import ssm
+
+    runner = CliRunner()
+    result = runner.invoke(ssm, ["hosts", "--help"])
+    assert result.exit_code == 0
+    assert "hosts" in result.output.lower()
+
+
+@pytest.mark.unit
+def test_ssm_instance_group_help_invokes_pass():
+    """
+    ssm/commands/instance/__init__.py line 15: the 'pass' in the instance
+    group body is hit when the instance subgroup is invoked.
+    """
+    from click.testing import CliRunner
+
+    from cli_tool.commands.ssm import ssm
+
+    runner = CliRunner()
+    result = runner.invoke(ssm, ["instance", "--help"])
+    assert result.exit_code == 0
+    assert "instance" in result.output.lower()
+
+
+@pytest.mark.unit
+def test_ssm_database_group_callback_invoked():
+    """database/__init__.py line 15: group callback (pass) is executed when a subcommand is requested."""
+    from cli_tool.commands.ssm import ssm
+
+    runner = CliRunner()
+    # Invoking a sub-subcommand causes Click to call the database() group callback
+    result = runner.invoke(ssm, ["database", "list", "--help"])
+    assert result.exit_code == 0
+
+
+@pytest.mark.unit
+def test_ssm_hosts_group_callback_invoked():
+    """hosts/__init__.py line 16: group callback (pass) is executed when a subcommand is requested."""
+    from cli_tool.commands.ssm import ssm
+
+    runner = CliRunner()
+    result = runner.invoke(ssm, ["hosts", "list", "--help"])
+    assert result.exit_code == 0
+
+
+@pytest.mark.unit
+def test_ssm_instance_group_callback_invoked():
+    """instance/__init__.py line 15: group callback (pass) is executed when a subcommand is requested."""
+    from cli_tool.commands.ssm import ssm
+
+    runner = CliRunner()
+    result = runner.invoke(ssm, ["instance", "list", "--help"])
+    assert result.exit_code == 0

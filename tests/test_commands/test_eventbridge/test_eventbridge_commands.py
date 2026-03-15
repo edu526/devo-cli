@@ -826,3 +826,126 @@ def test_list_rules_with_environment_filter_table_title(cli_runner, mock_aws_cli
     # Verify table title includes environment
     assert "DEV" in result.output or "dev" in result.output
     assert "EventBridge Scheduled Rules" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for RulesManager methods (lines 50-51, 65-66, 128, 137)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_get_rule_targets_returns_empty_list_on_client_error(mocker):
+    """get_rule_targets returns [] when AWS raises ClientError (lines 50-51)."""
+    from botocore.exceptions import ClientError
+
+    from cli_tool.commands.eventbridge.core.rules_manager import RulesManager
+
+    mock_client = mocker.MagicMock()
+    mock_client.list_targets_by_rule.side_effect = ClientError(
+        {"Error": {"Code": "ResourceNotFoundException", "Message": "Rule not found"}},
+        "ListTargetsByRule",
+    )
+    mocker.patch(
+        "cli_tool.commands.eventbridge.core.rules_manager.create_aws_client",
+        return_value=mock_client,
+    )
+
+    manager = RulesManager(profile=None, region="us-east-1")
+    result = manager.get_rule_targets("nonexistent-rule")
+
+    assert result == []
+
+
+@pytest.mark.unit
+def test_get_rule_tags_returns_empty_dict_on_client_error(mocker):
+    """get_rule_tags returns {} when AWS raises ClientError (lines 65-66)."""
+    from botocore.exceptions import ClientError
+
+    from cli_tool.commands.eventbridge.core.rules_manager import RulesManager
+
+    mock_client = mocker.MagicMock()
+    mock_client.list_tags_for_resource.side_effect = ClientError(
+        {"Error": {"Code": "ResourceNotFoundException", "Message": "ARN not found"}},
+        "ListTagsForResource",
+    )
+    mocker.patch(
+        "cli_tool.commands.eventbridge.core.rules_manager.create_aws_client",
+        return_value=mock_client,
+    )
+
+    manager = RulesManager(profile=None, region="us-east-1")
+    result = manager.get_rule_tags("arn:aws:events:us-east-1:123456789012:rule/missing")
+
+    assert result == {}
+
+
+@pytest.mark.unit
+def test_matches_environment_returns_true_on_env_tag_match(mocker):
+    """_matches_environment returns True when Env tag matches (line 128)."""
+    from cli_tool.commands.eventbridge.core.rules_manager import RulesManager
+
+    mock_client = mocker.MagicMock()
+    mocker.patch(
+        "cli_tool.commands.eventbridge.core.rules_manager.create_aws_client",
+        return_value=mock_client,
+    )
+
+    manager = RulesManager(profile=None, region="us-east-1")
+    result = manager._matches_environment("prod", targets=[], tags={"Env": "prod"})
+
+    assert result is True
+
+
+@pytest.mark.unit
+def test_matches_environment_returns_true_on_lambda_function_name_part(mocker):
+    """_matches_environment returns True when env matches a part of the Lambda function name (line 137)."""
+    from cli_tool.commands.eventbridge.core.rules_manager import RulesManager
+
+    mock_client = mocker.MagicMock()
+    mocker.patch(
+        "cli_tool.commands.eventbridge.core.rules_manager.create_aws_client",
+        return_value=mock_client,
+    )
+
+    manager = RulesManager(profile=None, region="us-east-1")
+    targets = [{"Arn": "arn:aws:lambda:us-east-1:123456789012:function:myapp-staging-handler"}]
+    result = manager._matches_environment("staging", targets=targets, tags={})
+
+    assert result is True
+
+
+@pytest.mark.unit
+def test_matches_environment_returns_false_when_no_match(mocker):
+    """_matches_environment returns False when env does not match anything."""
+    from cli_tool.commands.eventbridge.core.rules_manager import RulesManager
+
+    mock_client = mocker.MagicMock()
+    mocker.patch(
+        "cli_tool.commands.eventbridge.core.rules_manager.create_aws_client",
+        return_value=mock_client,
+    )
+
+    manager = RulesManager(profile=None, region="us-east-1")
+    targets = [{"Arn": "arn:aws:lambda:us-east-1:123456789012:function:myapp-prod-handler"}]
+    result = manager._matches_environment("dev", targets=targets, tags={"Env": "prod"})
+
+    assert result is False
+
+
+@pytest.mark.unit
+def test_matches_environment_returns_true_on_service_env_pattern(mocker):
+    """_matches_environment returns True when target ARN contains 'service-{env}-' (line 128)."""
+    from cli_tool.commands.eventbridge.core.rules_manager import RulesManager
+
+    mock_client = mocker.MagicMock()
+    mocker.patch(
+        "cli_tool.commands.eventbridge.core.rules_manager.create_aws_client",
+        return_value=mock_client,
+    )
+
+    manager = RulesManager(profile=None, region="us-east-1")
+    # ARN contains 'service-prod-' pattern which matches the line 128 condition
+    targets = [{"Arn": "arn:aws:lambda:us-east-1:123:function:service-prod-handler"}]
+    result = manager._matches_environment("prod", targets=targets, tags={})
+
+    assert result is True

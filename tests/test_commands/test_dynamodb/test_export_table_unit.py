@@ -1123,3 +1123,268 @@ class TestRunExportCore:
                             with patch("cli_tool.commands.dynamodb.commands.export_table._auto_tune_parallel_scan", return_value=(False, 4)):
                                 with patch("cli_tool.commands.dynamodb.commands.export_table._print_dry_run_summary"):
                                     _run_export_core(params, mock_config_manager)
+
+
+# ---------------------------------------------------------------------------
+# _execute_multi_query — final limit trim (lines 277-278)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestExecuteMultiQueryFinalLimitTrim:
+    @patch("cli_tool.commands.dynamodb.core.exporter.Progress")
+    def test_final_limit_trim_applied_after_all_queries(self, mock_progress_cls):
+        """
+        Lines 277-278: when the combined items exceed the limit after all queries,
+        the list is trimmed to the limit value.
+        """
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+
+        from cli_tool.commands.dynamodb.core.exporter import DynamoDBExporter
+
+        mock_client = MagicMock()
+        # Two queries each returning 4 unique items
+        mock_client.query.side_effect = [
+            {"Items": [{"id": {"S": str(i)}} for i in range(4)]},
+            {"Items": [{"id": {"S": str(i)}} for i in range(10, 14)]},
+        ]
+        exporter = DynamoDBExporter("tbl", mock_client, "us-east-1")
+
+        query_configs = [
+            {"key_condition": "pk = :pk1"},
+            {"key_condition": "pk = :pk2"},
+        ]
+        table_info = {"key_schema": [{"AttributeName": "id"}]}
+        result = _execute_multi_query(exporter, query_configs, None, None, None, 5, table_info)
+
+        # Combined = 8 items but limit = 5, so trimmed to 5
+        assert len(result) == 5
+
+
+# ---------------------------------------------------------------------------
+# _run_export_core — estimate_export_size called (line 627)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestRunExportCoreEstimateSize:
+    @patch("cli_tool.commands.dynamodb.core.exporter.Progress")
+    def test_estimate_export_size_called_when_not_yes_and_not_dry_run(self, mock_progress_cls):
+        """
+        Line 627: estimate_export_size is called when yes=False and dry_run=False.
+        """
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+
+        from cli_tool.commands.dynamodb.commands.export_table import _run_export_core
+        from cli_tool.core.utils import aws as aws_utils
+
+        # yes=False, dry_run=False → should call estimate_export_size
+        params = _make_export_params(yes=False, dry_run=False)
+        mock_config_manager = MagicMock()
+
+        with patch.object(aws_utils, "create_aws_client", return_value=MagicMock()):
+            with patch("cli_tool.commands.dynamodb.commands.export_table.validate_table_exists", return_value=True):
+                with patch("cli_tool.commands.dynamodb.commands.export_table.DynamoDBExporter") as mock_exp_cls:
+                    mock_exp = MagicMock()
+                    mock_exp.get_table_info.return_value = {"key_schema": [], "item_count": 0}
+                    mock_exp_cls.return_value = mock_exp
+                    with patch("cli_tool.commands.dynamodb.commands.export_table.estimate_export_size") as mock_estimate:
+                        with patch("cli_tool.commands.dynamodb.commands.export_table._fetch_items", return_value=[]):
+                            with patch(
+                                "cli_tool.commands.dynamodb.commands.export_table._auto_detect_query_strategy",
+                                return_value=(False, None, None, None, False, []),
+                            ):
+                                with patch("cli_tool.commands.dynamodb.commands.export_table._auto_tune_parallel_scan", return_value=(False, 4)):
+                                    _run_export_core(params, mock_config_manager)
+
+        mock_estimate.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# _run_export_core — user cancels large item confirm (lines 678-680)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestRunExportCoreLargeItemConfirm:
+    @patch("cli_tool.commands.dynamodb.core.exporter.Progress")
+    def test_user_cancels_large_item_export(self, mock_progress_cls):
+        """
+        Lines 678-680: when yes=False and item count > 10000 and user declines,
+        the function returns early without exporting.
+        """
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+
+        from cli_tool.commands.dynamodb.commands.export_table import _run_export_core
+        from cli_tool.core.utils import aws as aws_utils
+
+        params = _make_export_params(yes=False)
+        mock_config_manager = MagicMock()
+        # 10001 items so the confirm prompt triggers
+        large_items = [{"id": str(i)} for i in range(10001)]
+
+        with patch.object(aws_utils, "create_aws_client", return_value=MagicMock()):
+            with patch("cli_tool.commands.dynamodb.commands.export_table.validate_table_exists", return_value=True):
+                with patch("cli_tool.commands.dynamodb.commands.export_table.DynamoDBExporter") as mock_exp_cls:
+                    mock_exp = MagicMock()
+                    mock_exp.get_table_info.return_value = {"key_schema": [], "item_count": 0}
+                    mock_exp_cls.return_value = mock_exp
+                    with patch("cli_tool.commands.dynamodb.commands.export_table.estimate_export_size"):
+                        with patch("cli_tool.commands.dynamodb.commands.export_table._fetch_items", return_value=large_items):
+                            with patch(
+                                "cli_tool.commands.dynamodb.commands.export_table._auto_detect_query_strategy",
+                                return_value=(False, None, None, None, False, []),
+                            ):
+                                with patch("cli_tool.commands.dynamodb.commands.export_table._auto_tune_parallel_scan", return_value=(False, 4)):
+                                    with patch(
+                                        "cli_tool.commands.dynamodb.commands.export_table.click.confirm",
+                                        return_value=False,
+                                    ):
+                                        _run_export_core(params, mock_config_manager)
+
+        # Export should not have been attempted
+        mock_exp.export_to_csv.assert_not_called()
+        mock_exp.export_to_json.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _run_export_core — _warn_large_export cancels export (lines 685-687)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestRunExportCoreWarnLargeExport:
+    @patch("cli_tool.commands.dynamodb.core.exporter.Progress")
+    def test_warn_large_export_cancels_when_user_declines(self, mock_progress_cls):
+        """
+        Lines 685-687: when _warn_large_export returns False, the function
+        returns early without calling _do_export.
+        """
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+
+        from cli_tool.commands.dynamodb.commands.export_table import _run_export_core
+        from cli_tool.core.utils import aws as aws_utils
+
+        params = _make_export_params(yes=False)
+        mock_config_manager = MagicMock()
+
+        with patch.object(aws_utils, "create_aws_client", return_value=MagicMock()):
+            with patch("cli_tool.commands.dynamodb.commands.export_table.validate_table_exists", return_value=True):
+                with patch("cli_tool.commands.dynamodb.commands.export_table.DynamoDBExporter") as mock_exp_cls:
+                    mock_exp = MagicMock()
+                    mock_exp.get_table_info.return_value = {"key_schema": [], "item_count": 0}
+                    mock_exp_cls.return_value = mock_exp
+                    with patch("cli_tool.commands.dynamodb.commands.export_table.estimate_export_size"):
+                        with patch("cli_tool.commands.dynamodb.commands.export_table._fetch_items", return_value=[{"id": "1"}]):
+                            with patch(
+                                "cli_tool.commands.dynamodb.commands.export_table._auto_detect_query_strategy",
+                                return_value=(False, None, None, None, False, []),
+                            ):
+                                with patch("cli_tool.commands.dynamodb.commands.export_table._auto_tune_parallel_scan", return_value=(False, 4)):
+                                    with patch(
+                                        "cli_tool.commands.dynamodb.commands.export_table._warn_large_export",
+                                        return_value=False,
+                                    ):
+                                        with patch("cli_tool.commands.dynamodb.commands.export_table._do_export") as mock_do_export:
+                                            _run_export_core(params, mock_config_manager)
+
+        mock_do_export.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _run_export_core — save_template path (lines 694-716)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestRunExportCoreSaveTemplate:
+    @patch("cli_tool.commands.dynamodb.core.exporter.Progress")
+    def test_save_template_called_when_save_template_set(self, mock_progress_cls):
+        """
+        Lines 694-716: when p.save_template is set, create_template_from_args is
+        called and config_manager.save_template is called with the result.
+        """
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress_cls.return_value = mock_progress
+
+        from cli_tool.commands.dynamodb.commands.export_table import _run_export_core
+        from cli_tool.core.utils import aws as aws_utils
+
+        params = _make_export_params(save_template="my-template")
+        mock_config_manager = MagicMock()
+
+        with patch.object(aws_utils, "create_aws_client", return_value=MagicMock()):
+            with patch("cli_tool.commands.dynamodb.commands.export_table.validate_table_exists", return_value=True):
+                with patch("cli_tool.commands.dynamodb.commands.export_table.DynamoDBExporter") as mock_exp_cls:
+                    mock_exp = MagicMock()
+                    mock_exp.get_table_info.return_value = {"key_schema": [], "item_count": 0}
+                    mock_exp_cls.return_value = mock_exp
+                    with patch("cli_tool.commands.dynamodb.commands.export_table._fetch_items", return_value=[{"id": "1"}]):
+                        with patch(
+                            "cli_tool.commands.dynamodb.commands.export_table._auto_detect_query_strategy",
+                            return_value=(False, None, None, None, False, []),
+                        ):
+                            with patch("cli_tool.commands.dynamodb.commands.export_table._auto_tune_parallel_scan", return_value=(False, 4)):
+                                with patch("cli_tool.commands.dynamodb.commands.export_table._warn_large_export", return_value=True):
+                                    with patch(
+                                        "cli_tool.commands.dynamodb.commands.export_table._do_export",
+                                        return_value=Path("/tmp/output.json"),
+                                    ):
+                                        with patch("cli_tool.commands.dynamodb.commands.export_table.create_template_from_args") as mock_create:
+                                            mock_create.return_value = {"format": "json"}
+                                            _run_export_core(params, mock_config_manager)
+
+        mock_create.assert_called_once()
+        mock_config_manager.save_template.assert_called_once_with("my-template", {"format": "json"})
+
+
+# ---------------------------------------------------------------------------
+# _execute_multi_query — final limit trim via mocked _append_unique_items (lines 277-278)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_execute_multi_query_final_limit_trim_via_mock():
+    """Lines 277-278: final trim applied when _append_unique_items never stops early."""
+    from unittest.mock import MagicMock, patch
+
+    from cli_tool.commands.dynamodb.commands.export_table import _execute_multi_query
+
+    mock_exporter = MagicMock()
+
+    def fake_execute_query(*args, **kwargs):
+        return [{"id": {"S": str(i)}} for i in range(5)]
+
+    def fake_append(all_items, seen_keys, query_items, primary_key_attrs, limit):
+        all_items.extend(query_items)
+        return False  # never stop early, even if over limit
+
+    with patch("cli_tool.commands.dynamodb.commands.export_table._execute_query_with_retry", side_effect=fake_execute_query):
+        with patch("cli_tool.commands.dynamodb.commands.export_table._append_unique_items", side_effect=fake_append):
+            table_info = {"key_schema": [{"AttributeName": "id"}]}
+            result = _execute_multi_query(
+                mock_exporter,
+                [{"key_condition": "pk = :v1"}, {"key_condition": "pk = :v2"}],
+                None,
+                None,
+                None,
+                3,
+                table_info,
+            )
+
+    # 10 items were added but trimmed to limit=3
+    assert len(result) == 3

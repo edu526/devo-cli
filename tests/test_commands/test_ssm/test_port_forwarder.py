@@ -390,3 +390,46 @@ def test_ensure_loopback_alias_macos_raises_on_add_failure(mocker):
     with patch("rich.console.Console"):
         with pytest.raises(OSError, match="Failed to configure loopback alias"):
             pf._ensure_loopback_alias_macos("127.0.0.5")
+
+
+# ============================================================================
+# _start_forward_unix — FileNotFoundError after Popen (line 76)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_start_forward_unix_raises_file_not_found_if_popen_raises(mocker):
+    """Raises FileNotFoundError wrapping the unexpected Popen FileNotFoundError (line 76)."""
+    pf = _make_forwarder("Linux")
+    mocker.patch.object(pf, "_is_command_available", return_value=True)
+    # Popen raises FileNotFoundError even though we checked availability — covers line 76
+    mocker.patch("subprocess.Popen", side_effect=FileNotFoundError("socat not found"))
+    mocker.patch("time.sleep")
+
+    with pytest.raises(FileNotFoundError, match="socat command not found"):
+        pf.start_forward("127.0.0.2", 5432, 15432)
+
+
+# ============================================================================
+# _ensure_loopback_alias_macos — CalledProcessError on ifconfig check (lines 193-194)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_ensure_loopback_alias_macos_ifconfig_check_fails_continues(mocker):
+    """CalledProcessError on initial ifconfig lo0 check is caught and alias-add proceeds (lines 193-194)."""
+    pf = _make_forwarder("Darwin")
+
+    # First call (ifconfig lo0 check) raises CalledProcessError → pass
+    # Second call (sudo ifconfig alias add) succeeds
+    check_error = subprocess.CalledProcessError(1, "ifconfig")
+    add_success = MagicMock()
+
+    with patch("rich.console.Console"):
+        mock_run = mocker.patch("subprocess.run", side_effect=[check_error, add_success])
+        pf._ensure_loopback_alias_macos("127.0.0.5")
+
+    assert mock_run.call_count == 2
+    # Second call should be the alias-add command
+    second_call_cmd = mock_run.call_args_list[1][0][0]
+    assert "alias" in second_call_cmd

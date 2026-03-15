@@ -441,3 +441,158 @@ def test_codeartifact_login_displays_credential_info(cli_runner, mock_aws_utils,
     assert "Account: 123456789012" in result.output
     assert "User: arn:aws:iam::123456789012:role/Developer" in result.output
     assert "Region: us-east-1" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for CodeArtifactAuthenticator methods (lines 117-118, 167, 174-176, 214-215)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_list_packages_returns_empty_on_exception(mocker):
+    """list_packages returns [] when subprocess raises an exception (lines 117-118)."""
+    from cli_tool.commands.codeartifact.core.authenticator import CodeArtifactAuthenticator
+
+    auth = CodeArtifactAuthenticator(region="us-east-1", domains=[])
+    mocker.patch("subprocess.run", side_effect=Exception("unexpected error"))
+
+    result = auth.list_packages("domain", "repo")
+
+    assert result == []
+
+
+@pytest.mark.unit
+def test_list_packages_appends_profile_flag(mocker):
+    """list_packages extends cmd with --profile when profile is provided (line 167)."""
+    from unittest.mock import MagicMock
+
+    from cli_tool.commands.codeartifact.core.authenticator import CodeArtifactAuthenticator
+
+    auth = CodeArtifactAuthenticator(region="us-east-1", domains=[])
+    mock_run = mocker.patch("subprocess.run")
+    mock_run.return_value = MagicMock(returncode=0, stdout="ns\tpkg1\n")
+
+    result = auth.list_packages("domain", "repo", profile="my-profile")
+
+    assert result == [("ns", "pkg1")]
+    call_cmd = mock_run.call_args[0][0]
+    assert "--profile" in call_cmd
+    assert "my-profile" in call_cmd
+
+
+@pytest.mark.unit
+def test_get_package_version_returns_none_on_exception(mocker):
+    """get_package_version returns None when subprocess raises an exception (lines 174-176)."""
+    from cli_tool.commands.codeartifact.core.authenticator import CodeArtifactAuthenticator
+
+    auth = CodeArtifactAuthenticator(region="us-east-1", domains=[])
+    mocker.patch("subprocess.run", side_effect=Exception("timeout"))
+
+    result = auth.get_package_version("domain", "repo", "pkg", "@ns")
+
+    assert result is None
+
+
+@pytest.mark.unit
+def test_get_package_version_returns_none_on_empty_stdout(mocker):
+    """get_package_version returns None when subprocess succeeds but stdout is empty (line 174)."""
+    from unittest.mock import MagicMock
+
+    from cli_tool.commands.codeartifact.core.authenticator import CodeArtifactAuthenticator
+
+    auth = CodeArtifactAuthenticator(region="us-east-1", domains=[])
+    mocker.patch("subprocess.run", return_value=MagicMock(returncode=0, stdout=""))
+
+    result = auth.get_package_version("domain", "repo", "pkg", "@ns")
+
+    assert result is None
+
+
+@pytest.mark.unit
+def test_list_packages_with_versions_handles_future_exception(mocker):
+    """list_packages_with_versions sets None when a future raises an exception (lines 214-215)."""
+    from concurrent.futures import Future
+
+    from cli_tool.commands.codeartifact.core.authenticator import CodeArtifactAuthenticator
+
+    auth = CodeArtifactAuthenticator(region="us-east-1", domains=[])
+
+    # list_packages returns one package
+    mocker.patch.object(auth, "list_packages", return_value=[("testns", "testpkg")])
+
+    # get_package_version raises when called via executor
+    failing_future = Future()
+    failing_future.set_exception(RuntimeError("version fetch failed"))
+
+    mock_executor = mocker.MagicMock()
+    mock_executor.__enter__ = mocker.MagicMock(return_value=mock_executor)
+    mock_executor.__exit__ = mocker.MagicMock(return_value=False)
+    mock_executor.submit = mocker.MagicMock(return_value=failing_future)
+
+    mocker.patch(
+        "cli_tool.commands.codeartifact.core.authenticator.ThreadPoolExecutor",
+        return_value=mock_executor,
+    )
+
+    result = auth.list_packages_with_versions("domain", "repo", "@testns")
+
+    assert "@testns/testpkg" in result
+    assert result["@testns/testpkg"] is None
+
+
+# ============================================================================
+# Unit tests for _list_available_packages — package without version (line 58)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_list_available_packages_prints_package_without_version(mocker):
+    """
+    Line 58: when a package has no version (None or empty), it is printed
+    without the '@version' suffix.
+    """
+    from unittest.mock import MagicMock
+
+    from cli_tool.commands.codeartifact.commands.login import _list_available_packages
+
+    mocker.patch(
+        "cli_tool.commands.codeartifact.commands.login.CODEARTIFACT_DOMAINS",
+        [("test-domain", "test-repo", "@test")],
+    )
+
+    mock_auth = MagicMock()
+    # Return one package with a version and one without
+    mock_auth.list_packages_with_versions.return_value = {
+        "pkg-with-version": "1.2.3",
+        "pkg-without-version": None,
+    }
+
+    mock_console = mocker.patch("cli_tool.commands.codeartifact.commands.login.console")
+    mock_echo = mocker.patch("click.echo")
+
+    _list_available_packages(mock_auth, profile=None)
+
+    echo_calls = [str(c) for c in mock_echo.call_args_list]
+    # Package with version should include '@'
+    assert any("pkg-with-version@1.2.3" in call for call in echo_calls)
+    # Package without version should appear without '@'
+    assert any("pkg-without-version" in call and "@" not in call.split("pkg-without-version")[1].split("\n")[0] for call in echo_calls)
+
+
+@pytest.mark.unit
+def test_get_package_version_appends_profile_flag(mocker):
+    """get_package_version extends cmd with --profile when profile is provided (line 167)."""
+    from unittest.mock import MagicMock
+
+    from cli_tool.commands.codeartifact.core.authenticator import CodeArtifactAuthenticator
+
+    auth = CodeArtifactAuthenticator(region="us-east-1", domains=[])
+    mock_run = mocker.patch("subprocess.run")
+    mock_run.return_value = MagicMock(returncode=0, stdout="1.2.3\n")
+
+    result = auth.get_package_version("domain", "repo", "pkg", "@ns", profile="my-profile")
+
+    assert result == "1.2.3"
+    call_cmd = mock_run.call_args[0][0]
+    assert "--profile" in call_cmd
+    assert "my-profile" in call_cmd
