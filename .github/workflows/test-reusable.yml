@@ -13,10 +13,6 @@ on:
         required: false
         type: string
         default: 'ubuntu-latest'
-    secrets:
-      CODECOV_TOKEN:
-        description: 'Codecov token for uploading coverage'
-        required: false
 
 jobs:
   test:
@@ -44,12 +40,3 @@ jobs:
       - name: Run tests with coverage
         run: pytest --cov=cli_tool --cov-report=xml --cov-report=term-missing --cov-fail-under=40 -v
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        if: always()
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.xml
-          flags: ${{ inputs.os }}-python${{ inputs.python-version }}
-          fail_ci_if_error: false
-          verbose: true
