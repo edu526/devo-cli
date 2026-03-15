@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v3.4.4 (2026-03-15)
+
+### Bug Fixes
+
+- **ci**: Remove invalid CODECOV_TOKEN secret from release workflow
+  ([`9a67973`](https://github.com/edu526/devo-cli/commit/9a67973f910a5108f342791d60e9c2b7ee2aa599))
+
+### Chores
+
+- **ci**: Add SonarCloud badges, remove Codecov, align coverage config
+  ([`be1b08b`](https://github.com/edu526/devo-cli/commit/be1b08b874ea96a372cce0c6fd1ba7edfcd45d28))
+
+### Testing
+
+- **coverage**: Achieve 100% test coverage across all modules
+  ([`2296ce6`](https://github.com/edu526/devo-cli/commit/2296ce60f2c983cd566f6d89d00eec9b714c462b))
+
+
 ## v3.4.3 (2026-03-15)
 
 ### Bug Fixes
