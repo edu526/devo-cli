@@ -143,20 +143,10 @@ addopts = [
 ]
 
 # Note: Coverage threshold is enforced in CI
-# Current baseline: ~43% (as of 2025)
-# Target progression:
-# - Phase 1: 40% (current baseline, allows CI to pass)
-# - Phase 2: 50% (add tests for uncovered commands)
-# - Phase 3: 60% (improve core module coverage)
-# - Phase 4: 70% (comprehensive coverage)
-#
-# Priority areas for improvement:
-# - cli_tool/core/ modules (business logic)
-# - cli_tool/commands/ modules (command handlers)
+# Current baseline: ~88% (aligned with SonarQube)
+# Target: 100%
 #
 # Excluded from coverage:
-# - __init__.py files (usually empty or just imports)
-# - cli.py (entry point, tested via integration)
 # - _version.py (auto-generated)
 # - Platform-specific code (if sys.platform checks)
 
@@ -164,9 +154,6 @@ addopts = [
 omit = [
   "*/tests/*",
   "*/_version.py",
-  "*/setup.py",
-  "*/__init__.py",
-  "*/cli_tool/cli.py",  # Entry point, tested via integration tests
 ]
 
 [tool.coverage.report]
