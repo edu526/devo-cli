@@ -313,6 +313,46 @@ def _backup_legacy_file(legacy_path, backup_dir, backup_name: str, console) -> N
     console.print(f"[dim]Backed up to {backup_path}[/dim]")
 
 
+def _migrate_ssm_config(legacy_ssm, new_config: Dict, console) -> bool:
+    """Migrate SSM legacy config into new_config. Returns True on success."""
+    if not legacy_ssm.exists():
+        return False
+    try:
+        with open(legacy_ssm, "r", encoding="utf-8") as f:
+            new_config["ssm"] = json.load(f)
+        console.print(f"[green]✓ Migrated SSM config from {legacy_ssm}[/green]")
+        return True
+    except Exception as e:
+        console.print(f"[red]✗ Failed to migrate SSM config: {e}[/red]")
+        return False
+
+
+def _migrate_dynamodb_config(legacy_dynamodb, new_config: Dict, console) -> bool:
+    """Migrate DynamoDB legacy config into new_config. Returns True on success."""
+    if not legacy_dynamodb.exists():
+        return False
+    try:
+        with open(legacy_dynamodb, "r", encoding="utf-8") as f:
+            new_config["dynamodb"]["export_templates"] = json.load(f)
+        console.print(f"[green]✓ Migrated DynamoDB config from {legacy_dynamodb}[/green]")
+        return True
+    except Exception as e:
+        console.print(f"[red]✗ Failed to migrate DynamoDB config: {e}[/red]")
+        return False
+
+
+def _backup_migrated_files(legacy_ssm, legacy_dynamodb, status: Dict, console) -> None:
+    """Back up successfully migrated legacy files to the backup directory."""
+    backup_dir = get_config_dir() / "backup"
+    backup_dir.mkdir(exist_ok=True)
+
+    if legacy_ssm.exists() and status["ssm"]:
+        _backup_legacy_file(legacy_ssm, backup_dir, "ssm-config.json.bak", console)
+
+    if legacy_dynamodb.exists() and status["dynamodb"]:
+        _backup_legacy_file(legacy_dynamodb, backup_dir, "export_templates.json.bak", console)
+
+
 def migrate_legacy_configs(backup: bool = True) -> Dict[str, bool]:
     """
     Manually migrate legacy config files to consolidated format.
@@ -340,37 +380,15 @@ def migrate_legacy_configs(backup: bool = True) -> Dict[str, bool]:
 
     new_config = load_config() if config_file.exists() else get_default_config()
 
-    if legacy_ssm.exists():
-        try:
-            with open(legacy_ssm, "r", encoding="utf-8") as f:
-                new_config["ssm"] = json.load(f)
-            status["ssm"] = True
-            console.print(f"[green]✓ Migrated SSM config from {legacy_ssm}[/green]")
-        except Exception as e:
-            console.print(f"[red]✗ Failed to migrate SSM config: {e}[/red]")
-
-    if legacy_dynamodb.exists():
-        try:
-            with open(legacy_dynamodb, "r", encoding="utf-8") as f:
-                new_config["dynamodb"]["export_templates"] = json.load(f)
-            status["dynamodb"] = True
-            console.print(f"[green]✓ Migrated DynamoDB config from {legacy_dynamodb}[/green]")
-        except Exception as e:
-            console.print(f"[red]✗ Failed to migrate DynamoDB config: {e}[/red]")
+    status["ssm"] = _migrate_ssm_config(legacy_ssm, new_config, console)
+    status["dynamodb"] = _migrate_dynamodb_config(legacy_dynamodb, new_config, console)
 
     if status["ssm"] or status["dynamodb"]:
         save_config(new_config)
         console.print(f"\n[green]✓ Consolidated config saved to {config_file}[/green]")
 
         if backup:
-            backup_dir = get_config_dir() / "backup"
-            backup_dir.mkdir(exist_ok=True)
-
-            if legacy_ssm.exists() and status["ssm"]:
-                _backup_legacy_file(legacy_ssm, backup_dir, "ssm-config.json.bak", console)
-
-            if legacy_dynamodb.exists() and status["dynamodb"]:
-                _backup_legacy_file(legacy_dynamodb, backup_dir, "export_templates.json.bak", console)
+            _backup_migrated_files(legacy_ssm, legacy_dynamodb, status, console)
 
     return status
 

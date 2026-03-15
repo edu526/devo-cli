@@ -9,6 +9,52 @@ import click
 from botocore.config import Config
 
 
+def _format_source_label(source: str) -> str:
+    """Return a styled source label for an AWS profile."""
+    if source == "sso":
+        return click.style("[sso]", fg="cyan")
+    if source == "static":
+        return click.style("[static]", fg="yellow")
+    if source == "both":
+        return click.style("[sso+static]", fg="green")
+    return click.style("[config]", fg="white")
+
+
+def _print_profile_list(profiles: list) -> None:
+    """Print numbered list of available profiles with source labels."""
+    click.echo(click.style("Available profiles:", fg="blue"))
+    for i, (profile_name, source) in enumerate(profiles, 1):
+        source_label = _format_source_label(source)
+        if profile_name == "default":
+            click.echo(f"  {i}. {profile_name} {source_label} [default]")
+        else:
+            click.echo(f"  {i}. {profile_name} {source_label}")
+    click.echo("")
+
+
+def _prompt_profile_choice(profiles: list, default_choice: int) -> Optional[str]:
+    """Prompt the user to choose a profile by number. Returns the profile name or None on abort."""
+    while True:
+        try:
+            choice_str = click.prompt("Select profile number", type=str, default=str(default_choice))
+            # Strip any whitespace and non-numeric characters (handles escape codes)
+            choice_str = "".join(c for c in choice_str if c.isdigit())
+
+            choice = default_choice if not choice_str else int(choice_str)
+
+            if 1 <= choice <= len(profiles):
+                profile_name, source = profiles[choice - 1]
+                click.echo(click.style(f"✓ Using profile: {profile_name} [{source}]", fg="green"))
+                click.echo("")
+                return profile_name
+
+            click.echo(click.style(f"Invalid selection. Please enter a number between 1 and {len(profiles)}", fg="red"))
+        except (ValueError, KeyboardInterrupt):
+            click.echo(click.style("\nInvalid input. Please enter a number.", fg="red"))
+        except click.Abort:
+            raise  # re-raise to propagate user interrupt
+
+
 def select_profile(current_profile: Optional[str] = None, allow_none: bool = False) -> Optional[str]:
     """
     Select AWS profile interactively if not provided.
@@ -44,52 +90,13 @@ def select_profile(current_profile: Optional[str] = None, allow_none: bool = Fal
         return profile_name
 
     # Multiple profiles - prompt user to select
-    click.echo(click.style("Available profiles:", fg="blue"))
-    for i, (profile_name, source) in enumerate(profiles, 1):
-        # Format source label
-        if source == "sso":
-            source_label = click.style("[sso]", fg="cyan")
-        elif source == "static":
-            source_label = click.style("[static]", fg="yellow")
-        elif source == "both":
-            source_label = click.style("[sso+static]", fg="green")
-        else:
-            source_label = click.style("[config]", fg="white")
-
-        # Highlight default profile if it exists
-        if profile_name == "default":
-            click.echo(f"  {i}. {profile_name} {source_label} [default]")
-        else:
-            click.echo(f"  {i}. {profile_name} {source_label}")
-    click.echo("")
+    _print_profile_list(profiles)
 
     # Set default choice to "default" profile if it exists, otherwise first
     profile_names = [p[0] for p in profiles]
     default_choice = profile_names.index("default") + 1 if "default" in profile_names else 1
 
-    # Loop until we get valid input
-    while True:
-        try:
-            choice_str = click.prompt("Select profile number", type=str, default=str(default_choice))
-            # Strip any whitespace and non-numeric characters (handles escape codes)
-            choice_str = "".join(c for c in choice_str if c.isdigit())
-
-            if not choice_str:
-                choice = default_choice
-            else:
-                choice = int(choice_str)
-
-            if 1 <= choice <= len(profiles):
-                profile_name, source = profiles[choice - 1]
-                click.echo(click.style(f"✓ Using profile: {profile_name} [{source}]", fg="green"))
-                click.echo("")
-                return profile_name
-            else:
-                click.echo(click.style(f"Invalid selection. Please enter a number between 1 and {len(profiles)}", fg="red"))
-        except (ValueError, KeyboardInterrupt):
-            click.echo(click.style("\nInvalid input. Please enter a number.", fg="red"))
-        except click.Abort:
-            raise  # re-raise to propagate user interrupt
+    return _prompt_profile_choice(profiles, default_choice)
 
 
 def check_aws_cli() -> bool:
@@ -126,7 +133,8 @@ def _get_credentials_from_cli(profile_name: Optional[str] = None):
                 "token": creds.get("SessionToken"),
                 "expiry_time": creds.get("Expiration"),
             }
-    except Exception:
+    except Exception as e:
+        click.echo(f"Warning: Could not retrieve credentials via AWS CLI: {e}", err=True)
         return None
 
     return None

@@ -63,6 +63,30 @@ def should_exclude_path(file_path: str, excludes: List[str]) -> bool:
     return False
 
 
+def _collect_files_from_dir(pattern_path: Path, recursive: bool, excludes: List[str], max_files: int) -> List[str]:
+    """Collect non-excluded files from a directory, respecting max_files limit."""
+    matching_files = []
+    iterator = pattern_path.rglob("*") if recursive else pattern_path.iterdir()
+    for fp in iterator:
+        if fp.is_file() and not should_exclude_path(str(fp), excludes):
+            matching_files.append(str(fp))
+            if len(matching_files) >= max_files:
+                break
+    return matching_files
+
+
+def _collect_files_from_glob(pattern: str, recursive: bool, excludes: List[str], max_files: int) -> List[str]:
+    """Collect non-excluded files using a glob pattern, respecting max_files limit."""
+    matching_files = []
+    effective_pattern = f"**/{pattern}" if recursive and "**" not in pattern else pattern
+    for fp in glob.glob(effective_pattern, recursive=recursive):
+        if Path(fp).is_file() and not should_exclude_path(fp, excludes):
+            matching_files.append(fp)
+            if len(matching_files) >= max_files:
+                break
+    return matching_files
+
+
 def find_files(pattern: str, recursive: bool = True, max_files: int = 1000) -> List[str]:
     """Find files matching a pattern with gitignore exclusion support."""
     excludes = get_gitignore_excludes()
@@ -74,27 +98,9 @@ def find_files(pattern: str, recursive: bool = True, max_files: int = 1000) -> L
             if not should_exclude_path(pattern, excludes):
                 matching_files.append(pattern)
         elif path_obj.is_dir():
-            pattern_path = Path(pattern)
-            if recursive:
-                for fp in pattern_path.rglob("*"):
-                    if fp.is_file() and not should_exclude_path(str(fp), excludes):
-                        matching_files.append(str(fp))
-                        if len(matching_files) >= max_files:
-                            break
-            else:
-                for fp in pattern_path.iterdir():
-                    if fp.is_file() and not should_exclude_path(str(fp), excludes):
-                        matching_files.append(str(fp))
-                        if len(matching_files) >= max_files:
-                            break
+            matching_files = _collect_files_from_dir(path_obj, recursive, excludes, max_files)
         else:
-            if recursive and "**" not in pattern:
-                pattern = f"**/{pattern}"
-            for fp in glob.glob(pattern, recursive=recursive):
-                if Path(fp).is_file() and not should_exclude_path(fp, excludes):
-                    matching_files.append(fp)
-                    if len(matching_files) >= max_files:
-                        break
+            matching_files = _collect_files_from_glob(pattern, recursive, excludes, max_files)
     except Exception:
         pass
 
@@ -270,6 +276,25 @@ def generate_file_preview(file_path: str, max_lines: int = 20) -> str:
     return "\n".join(preview_lines)
 
 
+def _update_line_stats(stripped: str, line_num: int, stats: Dict[str, Any]) -> None:
+    """Update per-line counters in the stats dict for a single file line."""
+    if stripped:
+        stats["non_empty_lines"] += 1
+    if stripped.startswith(("#", "//", "/*", "*", "<!--")):
+        stats["comment_lines"] += 1
+    if any(keyword in stripped for keyword in ["def ", "function ", "func ", "async def"]):
+        stats["function_lines"].append(line_num)
+    if any(keyword in stripped for keyword in ["class ", "interface ", "struct "]):
+        stats["class_lines"].append(line_num)
+
+
+def _format_size_human(size_bytes: int) -> str:
+    """Return a human-readable file size string."""
+    if size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.2f} KB"
+    return f"{size_bytes / (1024 * 1024):.2f} MB"
+
+
 def get_file_stats(file_path: str, include_preview: bool = False, preview_lines: int = 20) -> Dict[str, Any]:
     """Get comprehensive file statistics."""
     file_path_obj = Path(file_path).expanduser()
@@ -293,28 +318,201 @@ def get_file_stats(file_path: str, include_preview: bool = False, preview_lines:
             preview_content = []
             for i, line in enumerate(f, 1):
                 stripped = line.strip()
-                if stripped:
-                    stats["non_empty_lines"] += 1
+                _update_line_stats(stripped, i, stats)
                 if include_preview and i <= preview_lines:
                     preview_content.append(line.rstrip())
-                if stripped.startswith(("#", "//", "/*", "*", "<!--")):
-                    stats["comment_lines"] += 1
-                if any(keyword in stripped for keyword in ["def ", "function ", "func ", "async def"]):
-                    stats["function_lines"].append(i)
-                if any(keyword in stripped for keyword in ["class ", "interface ", "struct "]):
-                    stats["class_lines"].append(i)
 
             stats["line_count"] = i
 
         stats["preview"] = "\n".join(preview_content) if include_preview else ""
-        if stats["size_bytes"] < 1024 * 1024:
-            stats["size_human"] = f"{stats['size_bytes'] / 1024:.2f} KB"
-        else:
-            stats["size_human"] = f"{stats['size_bytes'] / (1024 * 1024):.2f} MB"
+        stats["size_human"] = _format_size_human(stats["size_bytes"])
     except Exception as e:
         stats["error"] = str(e)
 
     return stats
+
+
+# ---------------------------------------------------------------------------
+# Private mode handlers for get_file_content
+# ---------------------------------------------------------------------------
+
+
+def _handle_find_mode(all_files: List[str], paths: List[str], search_pattern: Optional[str]) -> str:
+    """Handle 'find' mode: list discovered files grouped by directory."""
+    if all_files:
+        result = f"Found {len(all_files)} files:\n\n"
+        dirs: dict = {}
+        for fp in all_files:
+            dir_path = str(Path(fp).parent)
+            if dir_path not in dirs:
+                dirs[dir_path] = []
+            dirs[dir_path].append(Path(fp).name)
+
+        tree_text = "📁 File Tree:\n"
+        for dir_path, files in sorted(dirs.items()):
+            tree_text += "  📁 {}/\n".format(dir_path)
+            for file_name in sorted(files):
+                tree_text += "    📄 {}\n".format(file_name)
+
+        result += tree_text + "\n"
+        result += "📋 Full Paths:\n" + "\n".join(["  {}".format(fp) for fp in all_files])
+        console_ui.show_tool_output("File Search Results", result)
+    else:
+        result = f"No files found matching pattern(s): {', '.join(paths)}"
+        console_ui.show_tool_output("No Files Found", result, success=True)
+    return result
+
+
+def _handle_view_mode(file_path: str) -> str:
+    """Handle 'view' mode: read and return the full file content."""
+    with Path(file_path).open("r", encoding="utf-8", errors="ignore") as f:
+        content = f.read()
+    language = detect_language_from_path(file_path)
+    console_ui.show_code_content(file_path, content, 1, language)
+    return f"Content of {file_path}:\n{content}"
+
+
+def _handle_lines_mode(
+    file_path: str,
+    start_line: Optional[int],
+    end_line: Optional[int],
+    lines_count: Optional[int],
+    show_line_numbers: bool,
+) -> str:
+    """Handle 'lines' mode: read a specific line range from the file."""
+    actual_start = start_line or 1
+    actual_end = end_line
+    if lines_count and not actual_end:
+        actual_end = actual_start + lines_count - 1
+
+    lines, metadata = read_file_lines(file_path, actual_start, actual_end)
+    if show_line_numbers:
+        formatted_lines = []
+        for i, line in enumerate(lines, start=metadata["start_line"]):
+            formatted_lines.append(f"{i:4d}: {line.rstrip()}")
+        content = "\n".join(formatted_lines)
+    else:
+        content = "".join(lines)
+
+    language = detect_language_from_path(file_path)
+    title = f"{file_path} (lines {metadata['start_line']}-{metadata['end_line']})"
+    console_ui.show_code_content(title, content, metadata["start_line"], language)
+    return content
+
+
+def _build_search_result_entry(file_path: str, search_pattern: str, matches: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Build a structured search result dict for a single file."""
+    if not matches:
+        return {
+            "file_path": file_path,
+            "matches": [],
+            "search_result": f"No matches found for '{search_pattern}' in {file_path}",
+        }
+
+    search_result = f"Found {len(matches)} matches in {file_path}:\n"
+    for i, match in enumerate(matches[:5], 1):
+        search_result += f"  Match {i} (line {match['line_number']}):\n"
+        for ctx_line in match["context_before"]:
+            search_result += f"    {ctx_line}\n"
+        search_result += f"  > {match['match_line']} <-- MATCH\n"
+        for ctx_line in match["context_after"]:
+            search_result += f"    {ctx_line}\n"
+        search_result += "\n"
+
+    if len(matches) > 5:
+        search_result += f"    ... and {len(matches) - 5} more matches\n"
+
+    return {"file_path": file_path, "matches": matches, "search_result": search_result}
+
+
+def _handle_search_mode(file_path: str, search_pattern: Optional[str], context_lines: int, search_mode: str) -> Dict[str, Any]:
+    """Handle 'search' mode: search for a pattern inside the file."""
+    if not search_pattern:
+        raise ValueError("search_pattern is required for search mode")
+    matches = search_in_file(file_path, search_pattern, context_lines, search_mode)
+    return _build_search_result_entry(file_path, search_pattern, matches)
+
+
+def _handle_stats_mode(file_path: str) -> str:
+    """Handle 'stats' mode: compute and display file statistics."""
+    stats = get_file_stats(file_path)
+    stats_text = f"""File Statistics for {file_path}:
+Size: {stats['size_human']} ({stats['size_bytes']:,} bytes)
+Lines: {stats['line_count']:,} total, {stats['non_empty_lines']:,} non-empty
+Functions: {len(stats['function_lines'])} at lines {stats['function_lines'][:5]}
+Classes: {len(stats['class_lines'])} at lines {stats['class_lines'][:5]}"""
+    console_ui.show_tool_output(f"File Statistics - {Path(file_path).name}", stats_text)
+    return json.dumps(stats, indent=2)
+
+
+def _handle_preview_mode(file_path: str) -> str:
+    """Handle 'preview' mode: show the first 20 lines of the file."""
+    stats = get_file_stats(file_path, include_preview=True, preview_lines=20)
+    preview_content = stats["preview"]
+    language = detect_language_from_path(file_path)
+    title = f"{file_path} - Preview (first 20 lines of {stats['line_count']} total)"
+    console_ui.show_code_content(title, preview_content, 1, language)
+    return f"Preview of {file_path} ({stats['size_human']}, {stats['line_count']} lines):\n{preview_content}"
+
+
+def _dispatch_mode(
+    mode: str,
+    file_path: str,
+    start_line: Optional[int],
+    end_line: Optional[int],
+    lines_count: Optional[int],
+    show_line_numbers: bool,
+    search_pattern: Optional[str],
+    search_mode: str,
+    context_lines: int,
+) -> Any:
+    """Dispatch a single file to the appropriate mode handler and return the raw result."""
+    if mode == "view":
+        return _handle_view_mode(file_path)
+    elif mode == "lines":
+        return _handle_lines_mode(file_path, start_line, end_line, lines_count, show_line_numbers)
+    elif mode == "search":
+        return _handle_search_mode(file_path, search_pattern, context_lines, search_mode)
+    elif mode == "stats":
+        return _handle_stats_mode(file_path)
+    elif mode == "preview":
+        return _handle_preview_mode(file_path)
+    else:
+        raise ValueError(f"Unknown mode: {mode}")
+
+
+def _consolidate_search_results(results: List[Any], all_files: List[str], search_pattern: Optional[str], search_mode: str) -> str:
+    """Consolidate per-file search results into a single summary string."""
+    file_results = [r for r in results if isinstance(r, dict)]
+    if not file_results:
+        return "\n\n".join(results) if results else "No results for mode 'search'"
+
+    total_matches = sum(len(result.get("matches", [])) for result in file_results)
+    files_with_matches = [result for result in file_results if result.get("matches")]
+
+    consolidated = f"🔍 Search Results for '{search_pattern}' ({search_mode} mode):\n"
+    consolidated += f"Files searched: {len(all_files)}, Files with matches: {len(files_with_matches)}, Total matches: {total_matches}\n\n"
+
+    for result in files_with_matches[:3]:
+        consolidated += f"📄 {result['file_path']}:\n{result['search_result']}\n"
+
+    if len(files_with_matches) > 3:
+        consolidated += f"... and {len(files_with_matches) - 3} more files with matches\n"
+
+    console_ui.show_tool_output(f"Search Results - {search_pattern}", consolidated)
+    return consolidated
+
+
+def _resolve_file_list(paths: List[str], mode: str, recursive: bool, max_files: int) -> List[str]:
+    """Resolve a list of path patterns into a deduplicated sorted list of matching files."""
+    all_files = []
+    for path_pattern in paths:
+        if mode != "find" and Path(path_pattern).is_file():
+            all_files.append(path_pattern)
+        else:
+            files = find_files(path_pattern, recursive=recursive, max_files=max_files)
+            all_files.extend(files)
+    return sorted(set(all_files))
 
 
 @tool
@@ -352,10 +550,6 @@ def get_file_content(
         get_file_content("main.py", mode="lines", start_line=10, lines_count=20)
         get_file_content("src/", mode="search", search_pattern="createTrip", search_mode="smart")
     """
-    # [Implementation remains the same but with reduced docstring]
-    # ... [keeping all the existing implementation code] ...
-
-    # Show tool input
     tool_params = {
         "path": path,
         "mode": mode,
@@ -373,16 +567,7 @@ def get_file_content(
 
     try:
         paths = split_path_list(path)
-        all_files = []
-
-        for path_pattern in paths:
-            if mode != "find" and Path(path_pattern).is_file():
-                all_files.append(path_pattern)
-            else:
-                files = find_files(path_pattern, recursive=recursive, max_files=max_files)
-                all_files.extend(files)
-
-        all_files = sorted(set(all_files))
+        all_files = _resolve_file_list(paths, mode, recursive, max_files)
 
         if not all_files and mode != "find":
             error_msg = f"No files found matching pattern(s): {', '.join(paths)}"
@@ -390,140 +575,22 @@ def get_file_content(
             return error_msg
 
         if mode == "find":
-            if all_files:
-                result = f"Found {len(all_files)} files:\n\n"
-                dirs: dict = {}
-                for fp in all_files:
-                    dir_path = str(Path(fp).parent)
-                    if dir_path not in dirs:
-                        dirs[dir_path] = []
-                    dirs[dir_path].append(Path(fp).name)
-
-                tree_text = "📁 File Tree:\n"
-                for dir_path, files in sorted(dirs.items()):
-                    tree_text += "  📁 {}/\n".format(dir_path)
-                    for file_name in sorted(files):
-                        tree_text += "    📄 {}\n".format(file_name)
-
-                result += tree_text + "\n"
-                result += "📋 Full Paths:\n" + "\n".join(["  {}".format(fp) for fp in all_files])
-                console_ui.show_tool_output("File Search Results", result)
-            else:
-                result = f"No files found matching pattern(s): {', '.join(paths)}"
-                console_ui.show_tool_output("No Files Found", result, success=True)
-            return result
+            return _handle_find_mode(all_files, paths, search_pattern)
 
         results = []
         for file_path in all_files[:max_files]:
             try:
-                if mode == "view":
-                    with Path(file_path).open("r", encoding="utf-8", errors="ignore") as f:
-                        content = f.read()
-                    language = detect_language_from_path(file_path)
-                    console_ui.show_code_content(file_path, content, 1, language)
-                    results.append(f"Content of {file_path}:\n{content}")
-
-                elif mode == "lines":
-                    actual_start = start_line or 1
-                    actual_end = end_line
-                    if lines_count and not actual_end:
-                        actual_end = actual_start + lines_count - 1
-
-                    lines, metadata = read_file_lines(file_path, actual_start, actual_end)
-                    if show_line_numbers:
-                        formatted_lines = []
-                        for i, line in enumerate(lines, start=metadata["start_line"]):
-                            formatted_lines.append(f"{i:4d}: {line.rstrip()}")
-                        content = "\n".join(formatted_lines)
-                    else:
-                        content = "".join(lines)
-
-                    language = detect_language_from_path(file_path)
-                    title = f"{file_path} (lines {metadata['start_line']}-{metadata['end_line']})"
-                    console_ui.show_code_content(title, content, metadata["start_line"], language)
-                    results.append(content)
-
-                elif mode == "search":
-                    if not search_pattern:
-                        raise ValueError("search_pattern is required for search mode")
-                    matches = search_in_file(file_path, search_pattern, context_lines, search_mode)
-
-                    if matches:
-                        search_result = f"Found {len(matches)} matches in {file_path}:\n"
-                        for i, match in enumerate(matches[:5], 1):
-                            search_result += f"  Match {i} (line {match['line_number']}):\n"
-                            for ctx_line in match["context_before"]:
-                                search_result += f"    {ctx_line}\n"
-                            search_result += f"  > {match['match_line']} <-- MATCH\n"
-                            for ctx_line in match["context_after"]:
-                                search_result += f"    {ctx_line}\n"
-                            search_result += "\n"
-
-                        if len(matches) > 5:
-                            search_result += f"    ... and {len(matches) - 5} more matches\n"
-
-                        file_search_result = {
-                            "file_path": file_path,
-                            "matches": matches,
-                            "search_result": search_result,
-                        }
-                        results.append(file_search_result)
-                    else:
-                        no_match_msg = f"No matches found for '{search_pattern}' in {file_path}"
-                        file_search_result = {
-                            "file_path": file_path,
-                            "matches": [],
-                            "search_result": no_match_msg,
-                        }
-                        results.append(file_search_result)
-
-                elif mode == "stats":
-                    stats = get_file_stats(file_path)
-                    stats_text = f"""File Statistics for {file_path}:
-Size: {stats['size_human']} ({stats['size_bytes']:,} bytes)
-Lines: {stats['line_count']:,} total, {stats['non_empty_lines']:,} non-empty
-Functions: {len(stats['function_lines'])} at lines {stats['function_lines'][:5]}
-Classes: {len(stats['class_lines'])} at lines {stats['class_lines'][:5]}"""
-                    console_ui.show_tool_output(f"File Statistics - {Path(file_path).name}", stats_text)
-                    results.append(json.dumps(stats, indent=2))
-
-                elif mode == "preview":
-                    stats = get_file_stats(file_path, include_preview=True, preview_lines=20)
-                    preview_content = stats["preview"]
-
-                    language = detect_language_from_path(file_path)
-                    title = f"{file_path} - Preview (first 20 lines of {stats['line_count']} total)"
-                    console_ui.show_code_content(title, preview_content, 1, language)
-
-                    preview_text = f"Preview of {file_path} ({stats['size_human']}, {stats['line_count']} lines):\n{preview_content}"
-                    results.append(preview_text)
-
-                else:
-                    raise ValueError(f"Unknown mode: {mode}")
-
+                result = _dispatch_mode(
+                    mode, file_path, start_line, end_line, lines_count, show_line_numbers, search_pattern, search_mode, context_lines
+                )
+                results.append(result)
             except Exception as e:
                 error_msg = f"Error processing {file_path}: {str(e)}"
                 console_ui.show_file_error(file_path, str(e))
                 results.append(error_msg)
 
         if mode == "search" and results:
-            # Consolidate search results
-            file_results = [r for r in results if isinstance(r, dict)]
-            if file_results:
-                total_matches = sum(len(result.get("matches", [])) for result in file_results)
-                files_with_matches = [result for result in file_results if result.get("matches")]
-
-                consolidated = f"🔍 Search Results for '{search_pattern}' ({search_mode} mode):\n"
-                consolidated += f"Files searched: {len(all_files)}, Files with matches: {len(files_with_matches)}, Total matches: {total_matches}\n\n"
-
-                for result in files_with_matches[:3]:  # Limit to 3 files for readability
-                    consolidated += f"📄 {result['file_path']}:\n{result['search_result']}\n"
-
-                if len(files_with_matches) > 3:
-                    consolidated += f"... and {len(files_with_matches) - 3} more files with matches\n"
-
-                console_ui.show_tool_output(f"Search Results - {search_pattern}", consolidated)
-                return consolidated
+            return _consolidate_search_results(results, all_files, search_pattern, search_mode)
 
         return "\n\n".join(results) if results else f"No results for mode '{mode}'"
 

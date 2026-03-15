@@ -253,16 +253,22 @@ class ConsoleUI:
                 success=True,
             )
 
+    def _format_definition_result(self, result: str) -> str:
+        """Format a single definition result entry into displayable text lines."""
+        lines = result.strip().split("\n")
+        output = ""
+        for line in lines[:2]:
+            if ":" in line:
+                file_part, content = line.split(":", 1)
+                output += f"📍 {file_part}: {content[:80]}{'...' if len(content) > 80 else ''}\n"
+        return output
+
     def show_function_definitions(self, function_name: str, results: list):
         """Display function definition search results."""
         if results:
             output_text = f"Found {len(results)} definition(s) for '{function_name}'\n\n"
-            for i, result in enumerate(results[:3], 1):
-                lines = result.strip().split("\n")
-                for line in lines[:2]:
-                    if ":" in line:
-                        file_part, content = line.split(":", 1)
-                        output_text += f"📍 {file_part}: {content[:80]}{'...' if len(content) > 80 else ''}\n"
+            for result in results[:3]:
+                output_text += self._format_definition_result(result)
             if len(results) > 3:
                 output_text += f"\n... and {len(results) - 3} more definitions"
 
@@ -551,6 +557,64 @@ class ConsoleUI:
 
         return formatted_lines
 
+    def _build_issue_card_header(self, index: int, type_info: dict, severity_info: dict) -> list:
+        """Build the header lines for an issue card."""
+        header = f"[bold]{type_info['icon']} Issue #{index}: [{type_info['color']}]{type_info['name']}[/{type_info['color']}][/bold]"
+        header += f"   {severity_info['icon']} [{severity_info['color']}]{severity_info['text']}[/{severity_info['color']}]"
+        return [header, ""]
+
+    def _build_issue_card_location(self, file_path: str, line_number) -> list:
+        """Build location lines for an issue card."""
+        lines = [f"📍 [cyan]Location:[/cyan] {file_path}"]
+        if line_number != "-":
+            lines.append(f"📏 [cyan]Line:[/cyan] {line_number}")
+        lines.append("")
+        return lines
+
+    def _build_issue_card_optional_sections(self, issue: Dict[str, Any]) -> list:
+        """Build optional card sections: impact, affected references, security reference."""
+        lines = []
+
+        impact = issue.get("impact", None)
+        if impact and impact.strip():
+            lines.append("💥 [cyan]Impact:[/cyan]")
+            lines.extend(self._format_multiline_text(impact))
+            lines.append("")
+
+        affected_references = issue.get("affected_references", None)
+        if affected_references:
+            lines.append("")
+            lines.append("🔗 [cyan]Affected References:[/cyan]")
+            if isinstance(affected_references, list):
+                for ref in affected_references:
+                    lines.append(f"   • {ref}")
+            else:
+                lines.extend(self._format_multiline_text(str(affected_references)))
+
+        security_reference = issue.get("security_reference", None)
+        if security_reference and security_reference.strip():
+            lines.append("")
+            lines.append("🔒 [cyan]Security Reference:[/cyan]")
+            lines.extend(self._format_multiline_text(security_reference))
+
+        return lines
+
+    def _build_issue_card_content(self, index: int, issue: Dict[str, Any], type_info: dict, severity_info: dict) -> list:
+        """Assemble the full card content lines for a single issue."""
+        card_content = self._build_issue_card_header(index, type_info, severity_info)
+        card_content.extend(self._build_issue_card_location(issue.get("file", "N/A"), issue.get("line", "-")))
+
+        card_content.append("📝 [cyan]Description:[/cyan]")
+        card_content.extend(self._format_multiline_text(issue.get("description", "No description provided")))
+        card_content.append("")
+
+        card_content.extend(self._build_issue_card_optional_sections(issue))
+
+        card_content.append("💡 [cyan]Suggestion:[/cyan]")
+        card_content.extend(self._format_multiline_text(issue.get("suggestion", "No suggestion provided")))
+
+        return card_content
+
     def _show_issues_cards(self, issues: List[Dict[str, Any]]):
         """Display issues as individual cards for better readability."""
         self.console.print(f"\n[bold magenta]🚨 Issues Found ({len(issues)} total)[/bold magenta]\n")
@@ -563,51 +627,7 @@ class ConsoleUI:
             issue_type_normalized = issue_type.replace(" ", "").replace("_", "").replace("-", "")
             type_info = _ISSUE_TYPE_INFO.get(issue_type_normalized, {"icon": "⚠️", "name": issue_type.title(), "color": "white"})
 
-            file_path = issue.get("file", "N/A")
-            line_number = issue.get("line", "-")
-            description = issue.get("description", "No description provided")
-            suggestion = issue.get("suggestion", "No suggestion provided")
-            impact = issue.get("impact", None)
-
-            card_content = []
-
-            header = f"[bold]{type_info['icon']} Issue #{i}: [{type_info['color']}]{type_info['name']}[/{type_info['color']}][/bold]"
-            header += f"   {severity_info['icon']} [{severity_info['color']}]{severity_info['text']}[/{severity_info['color']}]"
-            card_content.append(header)
-            card_content.append("")
-
-            card_content.append(f"📍 [cyan]Location:[/cyan] {file_path}")
-            if line_number != "-":
-                card_content.append(f"📏 [cyan]Line:[/cyan] {line_number}")
-            card_content.append("")
-
-            card_content.append("📝 [cyan]Description:[/cyan]")
-            card_content.extend(self._format_multiline_text(description))
-            card_content.append("")
-
-            if impact and impact.strip():
-                card_content.append("💥 [cyan]Impact:[/cyan]")
-                card_content.extend(self._format_multiline_text(impact))
-                card_content.append("")
-
-            card_content.append("💡 [cyan]Suggestion:[/cyan]")
-            card_content.extend(self._format_multiline_text(suggestion))
-
-            affected_references = issue.get("affected_references", None)
-            if affected_references:
-                card_content.append("")
-                card_content.append("🔗 [cyan]Affected References:[/cyan]")
-                if isinstance(affected_references, list):
-                    for ref in affected_references:
-                        card_content.append(f"   • {ref}")
-                else:
-                    card_content.extend(self._format_multiline_text(str(affected_references)))
-
-            security_reference = issue.get("security_reference", None)
-            if security_reference and security_reference.strip():
-                card_content.append("")
-                card_content.append("🔒 [cyan]Security Reference:[/cyan]")
-                card_content.extend(self._format_multiline_text(security_reference))
+            card_content = self._build_issue_card_content(i, issue, type_info, severity_info)
 
             border_style = _SEVERITY_BORDER.get(severity, "white")
             self.console.print(Panel("\n".join(card_content), border_style=border_style, padding=(0, 1), expand=False))

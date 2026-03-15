@@ -6,7 +6,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from strands import tool
 
@@ -57,10 +57,35 @@ def get_smart_search_patterns(symbol_name: str) -> List[str]:
     return unique_patterns
 
 
+def _gitignore_line_to_excludes(line: str) -> List[str]:
+    """Convert a single .gitignore pattern line into grep exclude flags."""
+    if line.endswith("/"):
+        return [f"--exclude-dir='{line.rstrip('/')}'"]
+    if "*" in line or "?" in line:
+        return [f"--exclude='{line}'"]
+    return [f"--exclude-dir='{line}'", f"--exclude='{line}'"]
+
+
+def _read_gitignore_lines(gitignore_path: Path) -> List[str]:
+    """Read and return non-empty, non-comment lines from a .gitignore file."""
+    try:
+        with open(gitignore_path, "r", encoding="utf-8") as f:
+            return [line.strip() for line in f if line.strip() and not line.strip().startswith("#")]
+    except Exception:
+        return []
+
+
+def _parse_gitignore_patterns(gitignore_path: Path) -> List[str]:
+    """Parse .gitignore file and return grep exclude flags for each pattern."""
+    excludes = []
+    for line in _read_gitignore_lines(gitignore_path):
+        excludes.extend(_gitignore_line_to_excludes(line))
+    return excludes
+
+
 def get_gitignore_excludes() -> str:
     """Generate grep exclude patterns from .gitignore file."""
     gitignore_path = Path(".gitignore")
-    excludes = []
     default_excludes = [
         ".git",
         ".venv",
@@ -81,24 +106,11 @@ def get_gitignore_excludes() -> str:
         "Thumbs.db",
     ]
 
-    for pattern in default_excludes:
-        excludes.append(f"--exclude-dir='{pattern}'")
+    excludes = [f"--exclude-dir='{pattern}'" for pattern in default_excludes]
 
     if gitignore_path.exists():
-        try:
-            with open(gitignore_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#"):
-                        if line.endswith("/"):
-                            excludes.append(f"--exclude-dir='{line.rstrip('/')}'")
-                        elif "*" in line or "?" in line:
-                            excludes.append(f"--exclude='{line}'")
-                        else:
-                            excludes.append(f"--exclude-dir='{line}'")
-                            excludes.append(f"--exclude='{line}'")
-        except Exception:
-            pass
+        excludes.extend(_parse_gitignore_patterns(gitignore_path))
+
     return " ".join(excludes)
 
 
@@ -125,6 +137,95 @@ def parse_grep_results(output: str, _symbol_name: str) -> List[Dict[str, Any]]:
             except (ValueError, IndexError):
                 continue
     return results
+
+
+def _run_grep_search(pattern: str, include_pattern: str, exclude_pattern: str, case_sensitive: bool) -> List[Dict[str, Any]]:
+    """Run a single grep search and return parsed results."""
+    case_flag = "" if case_sensitive else "-i"
+    cmd = f"grep -r -n -E {case_flag} {include_pattern} {exclude_pattern} '{pattern}' ."
+    result = subprocess.run(
+        cmd,
+        shell=True,
+        capture_output=True,
+        text=True,
+        cwd=os.getcwd(),
+        encoding="utf-8",
+        errors="ignore",
+    )
+    if result.returncode == 0 and result.stdout and result.stdout.strip():
+        return parse_grep_results(result.stdout, pattern)
+    return []
+
+
+def _collect_unique_results(
+    search_patterns: List[str],
+    include_pattern: str,
+    exclude_pattern: str,
+    case_sensitive: bool,
+    symbol_or_pattern: str,
+) -> List[Dict[str, Any]]:
+    """Run all grep patterns and collect deduplicated results."""
+    all_results = []
+    seen_locations: set = set()
+    for pattern in search_patterns:
+        parsed_results = _run_grep_search(pattern, include_pattern, exclude_pattern, case_sensitive)
+        for res in parsed_results:
+            location_key = f"{res['file_path']}:{res['line_number']}"
+            if location_key not in seen_locations:
+                all_results.append(res)
+                seen_locations.add(location_key)
+    return all_results
+
+
+def _group_results_by_file(results: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    """Group a list of result dicts by their file_path key."""
+    files_dict: Dict[str, List[Dict[str, Any]]] = {}
+    for res in results:
+        file_path = res["file_path"]
+        if file_path not in files_dict:
+            files_dict[file_path] = []
+        files_dict[file_path].append(res)
+    return files_dict
+
+
+def _build_search_response(
+    all_results: List[Dict[str, Any]],
+    max_results: int,
+    symbol_or_pattern: str,
+    use_regex: bool,
+    file_extensions: str,
+) -> str:
+    """Build formatted response string for search_code_references results."""
+    if not all_results:
+        search_type = "regex pattern" if use_regex else "symbol"
+        search_label = f"Regex: {symbol_or_pattern}" if use_regex else symbol_or_pattern
+        console_ui.show_search_results(search_label, [])
+        return f"No matches found for {search_type} '{symbol_or_pattern}' in files with extensions: {file_extensions}"
+
+    limited_results = all_results[:max_results]
+    files_dict = _group_results_by_file(limited_results)
+    search_type = "regex pattern" if use_regex else "symbol"
+    response = f"Found {len(limited_results)} matches for {search_type} '{symbol_or_pattern}' in {len(files_dict)} files:\n\n"
+
+    for file_path, file_results in files_dict.items():
+        response += f"📄 {file_path} ({len(file_results)} matches):\n"
+        for res in file_results:
+            response += f"  Line {res['line_number']}: {res['preview']}\n"
+        response += "\n"
+
+    if len(all_results) > max_results:
+        response += f"... and {len(all_results) - max_results} more results\n"
+
+    formatted_ui_results = [
+        f"📄 {res['file_path']}:{res['line_number']}: {res['preview']}" for file_results in files_dict.values() for res in file_results
+    ]
+    search_label = f"Regex: {symbol_or_pattern}" if use_regex else symbol_or_pattern
+    console_ui.show_search_results(
+        search_label,
+        formatted_ui_results,
+        f"✅ Found {len(limited_results)} matches",
+    )
+    return response
 
 
 @tool
@@ -167,76 +268,145 @@ def search_code_references(
         exclude_pattern = get_gitignore_excludes()
 
         search_patterns = [symbol_or_pattern] if use_regex else get_smart_search_patterns(symbol_or_pattern)
-        all_results = []
-        seen_locations = set()
+        all_results = _collect_unique_results(search_patterns, include_pattern, exclude_pattern, case_sensitive, symbol_or_pattern)
+        all_results.sort(key=lambda x: (x["file_path"], x["line_number"]))
 
-        for pattern in search_patterns:
-            case_flag = "" if case_sensitive else "-i"
-            cmd = f"grep -r -n -E {case_flag} {include_pattern} {exclude_pattern} '{pattern}' ."
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                capture_output=True,
-                text=True,
-                cwd=os.getcwd(),
-                encoding="utf-8",
-                errors="ignore",
-            )
-
-            if result.returncode == 0 and result.stdout and result.stdout.strip():
-                parsed_results = parse_grep_results(result.stdout, symbol_or_pattern)
-                for res in parsed_results:
-                    location_key = f"{res['file_path']}:{res['line_number']}"
-                    if location_key not in seen_locations:
-                        all_results.append(res)
-                        seen_locations.add(location_key)
-
-        if all_results:
-            all_results.sort(key=lambda x: (x["file_path"], x["line_number"]))
-            limited_results = all_results[:max_results]
-
-            files_dict = {}
-            for res in limited_results:
-                file_path = res["file_path"]
-                if file_path not in files_dict:
-                    files_dict[file_path] = []
-                files_dict[file_path].append(res)
-
-            search_type = "regex pattern" if use_regex else "symbol"
-            response = f"Found {len(limited_results)} matches for {search_type} '{symbol_or_pattern}' in {len(files_dict)} files:\n\n"
-
-            for file_path, file_results in files_dict.items():
-                response += f"📄 {file_path} ({len(file_results)} matches):\n"
-                for res in file_results:
-                    response += f"  Line {res['line_number']}: {res['preview']}\n"
-                response += "\n"
-
-            if len(all_results) > max_results:
-                response += f"... and {len(all_results) - max_results} more results\n"
-
-            formatted_ui_results = []
-            for file_path, file_results in files_dict.items():
-                for res in file_results:
-                    formatted_ui_results.append(f"📄 {res['file_path']}:{res['line_number']}: {res['preview']}")
-
-            search_label = f"Regex: {symbol_or_pattern}" if use_regex else symbol_or_pattern
-            console_ui.show_search_results(
-                search_label,
-                formatted_ui_results,
-                f"✅ Found {len(limited_results)} matches",
-            )
-        else:
-            search_type = "regex pattern" if use_regex else "symbol"
-            response = f"No matches found for {search_type} '{symbol_or_pattern}' in files with extensions: {file_extensions}"
-            search_label = f"Regex: {symbol_or_pattern}" if use_regex else symbol_or_pattern
-            console_ui.show_search_results(search_label, [])
-
-        return response
+        return _build_search_response(all_results, max_results, symbol_or_pattern, use_regex, file_extensions)
 
     except Exception as e:
         error_response = f"Error searching for {'regex pattern' if use_regex else 'symbol'}: {str(e)}"
         console_ui.show_tool_error("search_code_references", str(e))
         return error_response
+
+
+def _build_definition_patterns(function_name: str) -> Dict[str, List[str]]:
+    """Build language-specific grep patterns for function/class definitions."""
+    escaped_name = re.escape(function_name)
+    return {
+        "py": [
+            f"def {escaped_name}\\s*\\(",
+            f"async def {escaped_name}\\s*\\(",
+            f"class {escaped_name}\\s*[\\(:]",
+        ],
+        "js": [
+            f"function {escaped_name}\\s*\\(",
+            f"const {escaped_name}\\s*=",
+            f"class {escaped_name}\\s*{{",
+        ],
+        "ts": [
+            f"function {escaped_name}\\s*\\(",
+            f"const {escaped_name}\\s*=",
+            f"class {escaped_name}\\s*{{",
+        ],
+    }
+
+
+def _try_parse_numbered_line(line: str) -> Optional[Dict[str, Any]]:
+    """Parse a grep output line (file:lineno:content) into a dict, or return None."""
+    if ":" not in line:
+        return None
+    parts = line.split(":", 2)
+    if len(parts) < 3:
+        return None
+    try:
+        line_number = int(parts[1])
+        return {"file": parts[0], "line_number": line_number, "content": parts[2]}
+    except ValueError:
+        return None
+
+
+def _flush_current_match(
+    current_match: Dict[str, Any],
+    current_file: Optional[str],
+    seen_locations: set,
+    results: List[Dict[str, Any]],
+) -> None:
+    """Append current_match to results if it's valid and not already seen."""
+    if current_match and current_file:
+        location_key = f"{current_file}:{current_match.get('line_number', 0)}"
+        if location_key not in seen_locations:
+            results.append(current_match)
+            seen_locations.add(location_key)
+
+
+def _process_grep_context_output(output: str, results: List[Dict[str, Any]], seen_locations: set) -> None:
+    """Parse grep -A/-B context output and append unique matches to results."""
+    lines = output.split("\n")
+    current_file: Optional[str] = None
+    current_match: Dict[str, Any] = {}
+
+    for line in lines:
+        if line.strip() == "--":
+            _flush_current_match(current_match, current_file, seen_locations, results)
+            current_match = {}
+            current_file = None
+            continue
+
+        parsed = _try_parse_numbered_line(line)
+        if parsed is None:
+            continue
+
+        file_candidate = parsed["file"]
+        line_number = parsed["line_number"]
+        content = parsed["content"]
+
+        # Detect whether this is a match line or a context line.
+        # grep uses ':' as separator for match lines and '-' for context lines.
+        # We identify match lines by checking the raw separator character.
+        raw_sep = line[len(file_candidate) : len(file_candidate) + 1] if len(line) > len(file_candidate) else ""
+
+        if raw_sep == ":" and (not current_match or file_candidate != current_file):
+            # New match line — start a fresh match entry
+            _flush_current_match(current_match, current_file, seen_locations, results)
+            current_file = file_candidate
+            current_match = {
+                "file_path": current_file,
+                "line_number": line_number,
+                "definition_line": content.strip(),
+                "context": [],
+            }
+        elif current_match:
+            current_match["context"].append({"line_number": line_number, "content": content.rstrip()})
+
+    _flush_current_match(current_match, current_file, seen_locations, results)
+
+
+def _run_definition_grep(pattern: str, ext: str, context_lines: int, exclude_pattern: str) -> str:
+    """Run grep for a single definition pattern and return raw stdout."""
+    cmd = f"grep -r -n -A {context_lines} -B {context_lines} -E --include='*.{ext}' {exclude_pattern} '{pattern}' ."
+    result = subprocess.run(
+        cmd,
+        shell=True,
+        capture_output=True,
+        text=True,
+        cwd=os.getcwd(),
+        encoding="utf-8",
+        errors="ignore",
+    )
+    if result.returncode == 0 and result.stdout and result.stdout.strip():
+        return result.stdout
+    return ""
+
+
+def _build_definition_response(results: List[Dict[str, Any]], function_name: str) -> str:
+    """Format search_function_definition results into a human-readable string."""
+    if not results:
+        console_ui.show_function_definitions(function_name, [])
+        return f"No definitions found for function '{function_name}'"
+
+    response = f"Found {len(results)} definition(s) for '{function_name}':\n\n"
+    for i, match in enumerate(results, 1):
+        response += f"Definition {i}: {match['file_path']}:{match['line_number']}\n"
+        for ctx in match.get("context", []):
+            if ctx["line_number"] == match["line_number"]:
+                response += f">>> {ctx['line_number']:4d}: {ctx['content']} <<<\n"
+            else:
+                response += f"    {ctx['line_number']:4d}: {ctx['content']}\n"
+        response += "\n"
+
+    ui_results = [f"📍 {match['file_path']}:{match['line_number']}: {match['definition_line'][:80]}..." for match in results]
+    console_ui.show_function_definitions(function_name, ui_results)
+    return response
 
 
 @tool
@@ -266,119 +436,136 @@ def search_function_definition(function_name: str, file_extensions: str = "py,js
     try:
         extensions = [ext.strip() for ext in file_extensions.split(",")]
         exclude_pattern = get_gitignore_excludes()
+        patterns = _build_definition_patterns(function_name)
 
-        # Language-specific definition patterns
-        escaped_name = re.escape(function_name)
-        patterns = {
-            "py": [
-                f"def {escaped_name}\\s*\\(",
-                f"async def {escaped_name}\\s*\\(",
-                f"class {escaped_name}\\s*[\\(:]",
-            ],
-            "js": [
-                f"function {escaped_name}\\s*\\(",
-                f"const {escaped_name}\\s*=",
-                f"class {escaped_name}\\s*{{",
-            ],
-            "ts": [
-                f"function {escaped_name}\\s*\\(",
-                f"const {escaped_name}\\s*=",
-                f"class {escaped_name}\\s*{{",
-            ],
-        }
-
-        results = []
-        seen_locations = set()
+        results: List[Dict[str, Any]] = []
+        seen_locations: set = set()
 
         for ext in extensions:
-            if ext in patterns:
-                for pattern in patterns[ext]:
-                    cmd = f"grep -r -n -A {context_lines} -B {context_lines} -E --include='*.{ext}' {exclude_pattern} '{pattern}' ."
-                    result = subprocess.run(
-                        cmd,
-                        shell=True,
-                        capture_output=True,
-                        text=True,
-                        cwd=os.getcwd(),
-                        encoding="utf-8",
-                        errors="ignore",
-                    )
+            if ext not in patterns:
+                continue
+            for pattern in patterns[ext]:
+                raw_output = _run_definition_grep(pattern, ext, context_lines, exclude_pattern)
+                if raw_output:
+                    _process_grep_context_output(raw_output, results, seen_locations)
 
-                    if result.returncode == 0 and result.stdout and result.stdout.strip():
-                        lines = result.stdout.split("\n")
-                        current_file = None
-                        current_match = {}
-
-                        for line in lines:
-                            if line.strip() == "--":
-                                if current_match and current_file:
-                                    location_key = f"{current_file}:{current_match.get('line_number', 0)}"
-                                    if location_key not in seen_locations:
-                                        results.append(current_match)
-                                        seen_locations.add(location_key)
-                                current_match = {}
-                                current_file = None
-                            elif ":" in line and "-" not in line.split(":", 1)[1][:3]:
-                                parts = line.split(":", 2)
-                                if len(parts) >= 3:
-                                    current_file = parts[0]
-                                    try:
-                                        line_number = int(parts[1])
-                                        content = parts[2]
-                                        current_match = {
-                                            "file_path": current_file,
-                                            "line_number": line_number,
-                                            "definition_line": content.strip(),
-                                            "context": [],
-                                        }
-                                    except ValueError:
-                                        continue
-                            elif current_match and ":" in line:
-                                parts = line.split(":", 2)
-                                if len(parts) >= 3:
-                                    try:
-                                        ctx_line_num = int(parts[1])
-                                        ctx_content = parts[2]
-                                        current_match["context"].append(
-                                            {
-                                                "line_number": ctx_line_num,
-                                                "content": ctx_content.rstrip(),
-                                            }
-                                        )
-                                    except ValueError:
-                                        continue
-
-                        if current_match and current_file:
-                            location_key = f"{current_file}:{current_match.get('line_number', 0)}"
-                            if location_key not in seen_locations:
-                                results.append(current_match)
-                                seen_locations.add(location_key)
-
-        if results:
-            response = f"Found {len(results)} definition(s) for '{function_name}':\n\n"
-            for i, match in enumerate(results, 1):
-                response += f"Definition {i}: {match['file_path']}:{match['line_number']}\n"
-                for ctx in match.get("context", []):
-                    if ctx["line_number"] == match["line_number"]:
-                        response += f">>> {ctx['line_number']:4d}: {ctx['content']} <<<\n"
-                    else:
-                        response += f"    {ctx['line_number']:4d}: {ctx['content']}\n"
-                response += "\n"
-
-            ui_results = []
-            for match in results:
-                ui_results.append(f"📍 {match['file_path']}:{match['line_number']}: {match['definition_line'][:80]}...")
-            console_ui.show_function_definitions(function_name, ui_results)
-        else:
-            response = f"No definitions found for function '{function_name}'"
-            console_ui.show_function_definitions(function_name, [])
-
-        return response
+        return _build_definition_response(results, function_name)
 
     except Exception as e:
         error_response = f"Error searching for function definition: {str(e)}"
         console_ui.show_tool_error("search_function_definition", str(e))
         return error_response
+
+
+def _build_import_patterns(escaped_symbol: str, is_python: bool, is_javascript: bool) -> List[str]:
+    """Return language-specific regex patterns for detecting import statements."""
+    if is_python:
+        return [
+            rf"from\s+.*\s+import\s+.*\b{escaped_symbol}\b",
+            rf"import\s+.*\b{escaped_symbol}\b",
+            rf"from\s+\b{escaped_symbol}\b",
+            rf"import\s+\b{escaped_symbol}\b",
+        ]
+    if is_javascript:
+        return [
+            rf"import\s+.*\b{escaped_symbol}\b.*from",
+            rf"import\s+\b{escaped_symbol}\b",
+            rf'require\s*\(\s*[\'"`].*{escaped_symbol}',
+            rf"const\s+.*\b{escaped_symbol}\b.*=.*require",
+        ]
+    return []
+
+
+def _classify_usage_type(symbol_name: str, line_stripped: str) -> str:
+    """Determine the usage category of a symbol occurrence in a line of code."""
+    if "(" in line_stripped and symbol_name in line_stripped.split("(")[0]:
+        return "function_call"
+    if "=" in line_stripped and symbol_name in line_stripped.split("=")[0]:
+        return "assignment"
+    if "." in line_stripped and f"{symbol_name}." in line_stripped:
+        return "attribute_access"
+    if line_stripped.startswith("class ") and symbol_name in line_stripped:
+        return "inheritance"
+    if any(keyword in line_stripped for keyword in ["def ", "function "]):
+        return "in_definition"
+    return "reference"
+
+
+def _is_import_line(line_stripped: str, symbol_name: str, import_patterns: List[str]) -> bool:
+    """Return True if the given line matches any import pattern for symbol_name."""
+    if import_patterns:
+        return any(re.search(p, line_stripped, re.IGNORECASE) for p in import_patterns)
+    has_import = "import" in line_stripped and symbol_name in line_stripped
+    has_from = "from" in line_stripped and symbol_name in line_stripped
+    has_require = "require" in line_stripped and symbol_name in line_stripped
+    return has_import or has_from or has_require
+
+
+def _scan_lines_for_symbol(
+    lines: List[str],
+    symbol_name: str,
+    import_patterns: List[str],
+) -> tuple:
+    """Scan file lines and return (imports list, usages list) for symbol_name."""
+    imports = []
+    usages = []
+    escaped_symbol = re.escape(symbol_name)
+
+    for i, line in enumerate(lines, 1):
+        line_stripped = line.strip()
+        if _is_import_line(line_stripped, symbol_name, import_patterns):
+            imports.append({"line_number": i, "content": line_stripped, "type": "import"})
+        elif symbol_name in line_stripped and re.search(rf"\b{escaped_symbol}\b", line_stripped):
+            usage_type = _classify_usage_type(symbol_name, line_stripped)
+            usages.append({"line_number": i, "content": line_stripped, "type": usage_type})
+
+    return imports, usages
+
+
+def _build_usage_section(symbol_name: str, usages: List[Dict[str, Any]]) -> str:
+    """Format the USAGES section of the analyze_import_usage response."""
+    if not usages:
+        return f"🔍 No usages found for '{symbol_name}'\n\n"
+
+    usage_by_type: Dict[str, List[Dict[str, Any]]] = {}
+    for usage in usages:
+        usage_type = usage.get("type", "unknown")
+        if usage_type not in usage_by_type:
+            usage_by_type[usage_type] = []
+        usage_by_type[usage_type].append(usage)
+
+    section = f"🔍 USAGES ({len(usages)}):\n"
+    for usage_type, type_usages in usage_by_type.items():
+        section += f"  {usage_type.upper()} ({len(type_usages)}):\n"
+        for usage in type_usages[:5]:
+            section += f"    Line {usage['line_number']:3d}: {usage['content']}\n"
+        if len(type_usages) > 5:
+            section += f"    ... and {len(type_usages) - 5} more\n"
+        section += "\n"
+    return section
+
+
+def _build_summary_section(imports: List[Dict[str, Any]], usages: List[Dict[str, Any]]) -> str:
+    """Format the SUMMARY section including any detected issues."""
+    section = "📊 SUMMARY:\n"
+    section += f"  Total imports: {len(imports)}\n"
+    section += f"  Total usages: {len(usages)}\n"
+
+    issues = []
+    if imports and not usages:
+        issues.append("⚠️ Symbol imported but never used")
+    elif usages and not imports:
+        issues.append("⚠️ Symbol used but no imports found")
+    elif len(imports) > 1:
+        issues.append("⚠️ Symbol imported multiple times")
+
+    if issues:
+        section += "  Issues:\n"
+        for issue in issues:
+            section += f"    {issue}\n"
+    else:
+        section += "  ✅ No issues detected\n"
+    return section
 
 
 @tool
@@ -419,73 +606,10 @@ def analyze_import_usage(symbol_name: str, file_path: str, show_context: bool = 
         is_python = file_ext == ".py"
         is_javascript = file_ext in [".js", ".jsx", ".ts", ".tsx"]
 
-        imports = []
-        usages = []
-
         escaped_symbol = re.escape(symbol_name)
+        import_patterns = _build_import_patterns(escaped_symbol, is_python, is_javascript)
+        imports, usages = _scan_lines_for_symbol(lines, symbol_name, import_patterns)
 
-        # Language-specific import patterns
-        import_patterns = []
-        if is_python:
-            import_patterns = [
-                rf"from\s+.*\s+import\s+.*\b{escaped_symbol}\b",
-                rf"import\s+.*\b{escaped_symbol}\b",
-                rf"from\s+\b{escaped_symbol}\b",
-                rf"import\s+\b{escaped_symbol}\b",
-            ]
-        elif is_javascript:
-            import_patterns = [
-                rf"import\s+.*\b{escaped_symbol}\b.*from",
-                rf"import\s+\b{escaped_symbol}\b",
-                rf'require\s*\(\s*[\'"`].*{escaped_symbol}',
-                rf"const\s+.*\b{escaped_symbol}\b.*=.*require",
-            ]
-
-        for i, line in enumerate(lines, 1):
-            line_stripped = line.strip()
-            is_import_line = False
-
-            # Check for imports
-            if import_patterns:
-                for pattern in import_patterns:
-                    if re.search(pattern, line_stripped, re.IGNORECASE):
-                        imports.append(
-                            {
-                                "line_number": i,
-                                "content": line_stripped,
-                                "type": "import",
-                            }
-                        )
-                        is_import_line = True
-                        break
-            else:
-                has_import = "import" in line_stripped and symbol_name in line_stripped
-                has_from = "from" in line_stripped and symbol_name in line_stripped
-                has_require = "require" in line_stripped and symbol_name in line_stripped
-                if has_import or has_from or has_require:
-                    imports.append({"line_number": i, "content": line_stripped, "type": "import"})
-                    is_import_line = True
-
-            # Check for usages (excluding import lines)
-            if not is_import_line and symbol_name in line_stripped:
-                if re.search(rf"\b{re.escape(symbol_name)}\b", line_stripped):
-                    usage_type = "unknown"
-                    if "(" in line_stripped and symbol_name in line_stripped.split("(")[0]:
-                        usage_type = "function_call"
-                    elif "=" in line_stripped and symbol_name in line_stripped.split("=")[0]:
-                        usage_type = "assignment"
-                    elif "." in line_stripped and f"{symbol_name}." in line_stripped:
-                        usage_type = "attribute_access"
-                    elif line_stripped.startswith("class ") and symbol_name in line_stripped:
-                        usage_type = "inheritance"
-                    elif any(keyword in line_stripped for keyword in ["def ", "function "]):
-                        usage_type = "in_definition"
-                    else:
-                        usage_type = "reference"
-
-                    usages.append({"line_number": i, "content": line_stripped, "type": usage_type})
-
-        # Build analysis result
         result = f"Analysis of '{symbol_name}' in {file_path}:\n"
         result += f"{'=' * 60}\n\n"
 
@@ -497,45 +621,8 @@ def analyze_import_usage(symbol_name: str, file_path: str, show_context: bool = 
         else:
             result += f"📥 No imports found for '{symbol_name}'\n\n"
 
-        if usages:
-            result += f"🔍 USAGES ({len(usages)}):\n"
-            usage_by_type = {}
-            for usage in usages:
-                usage_type = usage.get("type", "unknown")
-                if usage_type not in usage_by_type:
-                    usage_by_type[usage_type] = []
-                usage_by_type[usage_type].append(usage)
-
-            for usage_type, type_usages in usage_by_type.items():
-                result += f"  {usage_type.upper()} ({len(type_usages)}):\n"
-                for usage in type_usages[:5]:  # Limit to 5 per type
-                    result += f"    Line {usage['line_number']:3d}: {usage['content']}\n"
-                if len(type_usages) > 5:
-                    result += f"    ... and {len(type_usages) - 5} more\n"
-                result += "\n"
-        else:
-            result += f"🔍 No usages found for '{symbol_name}'\n\n"
-
-        # Summary
-        result += "📊 SUMMARY:\n"
-        result += f"  Total imports: {len(imports)}\n"
-        result += f"  Total usages: {len(usages)}\n"
-
-        # Issues
-        issues = []
-        if imports and not usages:
-            issues.append("⚠️ Symbol imported but never used")
-        elif usages and not imports:
-            issues.append("⚠️ Symbol used but no imports found")
-        elif len(imports) > 1:
-            issues.append("⚠️ Symbol imported multiple times")
-
-        if issues:
-            result += "  Issues:\n"
-            for issue in issues:
-                result += f"    {issue}\n"
-        else:
-            result += "  ✅ No issues detected\n"
+        result += _build_usage_section(symbol_name, usages)
+        result += _build_summary_section(imports, usages)
 
         import_lines = [f"Line {imp['line_number']}: {imp['content']}" for imp in imports]
         usage_lines = [f"Line {usage['line_number']}: {usage['content']}" for usage in usages]

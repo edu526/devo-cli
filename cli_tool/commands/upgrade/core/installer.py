@@ -95,64 +95,90 @@ def _replace_unix_archive(extracted_dir, target_path, backup_path, temp_extract)
     return True
 
 
+def _prepare_archive_backup(target_path) -> tuple:
+    """Create a backup of the target directory and return (backup_path,).
+
+    Removes any existing backup before copying.
+    """
+    backup_path = target_path.parent / f"{target_path.name}.backup"
+    if backup_path.exists():
+        try:
+            shutil.rmtree(backup_path)
+        except OSError as e:
+            click.echo(f"Warning: Could not remove old backup: {e}", err=True)
+
+    shutil.copytree(str(target_path), str(backup_path))
+    click.echo(f"Backup created: {backup_path}")
+    return backup_path
+
+
+def _prepare_temp_extract_dir(target_path):
+    """Create (or recreate) the temporary extraction directory. Returns the path."""
+    temp_extract = target_path.parent / "devo_new"
+    if temp_extract.exists():
+        try:
+            shutil.rmtree(temp_extract)
+        except OSError as e:
+            click.echo(f"Warning: Could not remove old temp directory: {e}", err=True)
+    temp_extract.mkdir()
+    return temp_extract
+
+
+def _cleanup_temp_extract(temp_extract) -> None:
+    """Remove the temporary extraction directory if it exists."""
+    if temp_extract.exists():
+        try:
+            shutil.rmtree(temp_extract)
+        except OSError:
+            pass
+
+
+def _replace_archive_binary(new_binary_path, target_path, archive_type: str, system: str) -> bool:
+    """Handle the archive-based binary replacement (macOS / Windows)."""
+    backup_path = _prepare_archive_backup(target_path)
+    temp_extract = _prepare_temp_extract_dir(target_path)
+
+    try:
+        _extract_archive(new_binary_path, archive_type, temp_extract)
+        extracted_dir = _find_extracted_dir(temp_extract)
+
+        if system == "windows":
+            return _replace_windows_archive(extracted_dir, target_path, temp_extract, os.getpid())
+        return _replace_unix_archive(extracted_dir, target_path, backup_path, temp_extract)
+
+    except Exception as e:
+        click.echo(f"Error preparing upgrade: {e}", err=True)
+        _cleanup_temp_extract(temp_extract)
+        return False
+
+
+def _replace_linux_binary(new_binary_path, target_path) -> bool:
+    """Handle Linux single-file binary replacement (onefile mode)."""
+    os.chmod(new_binary_path, 0o755)
+
+    backup_path = target_path.with_suffix(".backup")
+    if backup_path.exists():
+        backup_path.unlink()
+
+    shutil.copy2(str(target_path), str(backup_path))
+    click.echo(f"Backup created: {backup_path}")
+
+    shutil.move(str(new_binary_path), str(target_path))
+
+    click.echo("\nTo restore backup if needed:")
+    click.echo(f"  mv {backup_path} {target_path}")
+    return True
+
+
 def replace_binary(new_binary_path, target_path, archive_type=None):
     """Replace current binary with new one"""
     try:
         system = platform.system().lower()
 
         if archive_type:
-            backup_path = target_path.parent / f"{target_path.name}.backup"
-            if backup_path.exists():
-                try:
-                    shutil.rmtree(backup_path)
-                except OSError as e:
-                    click.echo(f"Warning: Could not remove old backup: {e}", err=True)
+            return _replace_archive_binary(new_binary_path, target_path, archive_type, system)
 
-            shutil.copytree(str(target_path), str(backup_path))
-            click.echo(f"Backup created: {backup_path}")
-
-            temp_extract = target_path.parent / "devo_new"
-            if temp_extract.exists():
-                try:
-                    shutil.rmtree(temp_extract)
-                except OSError as e:
-                    click.echo(f"Warning: Could not remove old temp directory: {e}", err=True)
-            temp_extract.mkdir()
-
-            try:
-                _extract_archive(new_binary_path, archive_type, temp_extract)
-                extracted_dir = _find_extracted_dir(temp_extract)
-
-                if system == "windows":
-                    return _replace_windows_archive(extracted_dir, target_path, temp_extract, os.getpid())
-                else:
-                    return _replace_unix_archive(extracted_dir, target_path, backup_path, temp_extract)
-
-            except Exception as e:
-                click.echo(f"Error preparing upgrade: {e}", err=True)
-                if temp_extract.exists():
-                    try:
-                        shutil.rmtree(temp_extract)
-                    except OSError:
-                        pass
-                return False
-
-        # Linux: single binary replacement (onefile mode)
-        os.chmod(new_binary_path, 0o755)
-
-        backup_path = target_path.with_suffix(".backup")
-        if backup_path.exists():
-            backup_path.unlink()
-
-        shutil.copy2(str(target_path), str(backup_path))
-        click.echo(f"Backup created: {backup_path}")
-
-        shutil.move(str(new_binary_path), str(target_path))
-
-        click.echo("\nTo restore backup if needed:")
-        click.echo(f"  mv {backup_path} {target_path}")
-
-        return True
+        return _replace_linux_binary(new_binary_path, target_path)
     except Exception as e:
         click.echo(f"Error replacing binary: {str(e)}", err=True)
         return False

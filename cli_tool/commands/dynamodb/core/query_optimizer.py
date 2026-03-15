@@ -42,6 +42,58 @@ def detect_usable_index(
     )
 
 
+def _match_equality_to_key(
+    key_name: str,
+    equality_matches: list,
+    expression_attribute_names: Optional[Dict[str, str]],
+    index_name: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    """Return an indexed-attribute entry if any equality match resolves to key_name, else None."""
+    for attr, value_placeholder in equality_matches:
+        resolved_attr = _resolve_attribute_name(attr, expression_attribute_names)
+        if resolved_attr == key_name:
+            return {
+                "key_attribute": key_name,
+                "index_name": index_name,
+                "attr_ref": attr,
+                "value_ref": value_placeholder,
+            }
+    return None
+
+
+def _collect_gsi_indexed_attrs(
+    table_info: Dict[str, Any],
+    equality_matches: list,
+    expression_attribute_names: Optional[Dict[str, str]],
+) -> list:
+    """Collect indexed attribute entries from active GSIs matching any equality condition."""
+    indexed_attrs = []
+    for gsi in table_info.get("global_indexes", []):
+        if gsi.get("IndexStatus", "ACTIVE") != "ACTIVE":
+            continue
+        for key in gsi.get("KeySchema", []):
+            if key.get("KeyType") == "HASH":
+                entry = _match_equality_to_key(key.get("AttributeName"), equality_matches, expression_attribute_names, gsi.get("IndexName"))
+                if entry:
+                    indexed_attrs.append(entry)
+    return indexed_attrs
+
+
+def _collect_main_table_indexed_attrs(
+    table_info: Dict[str, Any],
+    equality_matches: list,
+    expression_attribute_names: Optional[Dict[str, str]],
+) -> list:
+    """Collect indexed attribute entries from the main table partition key matching any equality condition."""
+    indexed_attrs = []
+    for key in table_info.get("key_schema", []):
+        if key.get("KeyType") == "HASH":
+            entry = _match_equality_to_key(key.get("AttributeName"), equality_matches, expression_attribute_names, None)
+            if entry:
+                indexed_attrs.append(entry)
+    return indexed_attrs
+
+
 def _detect_or_indexed_attributes(
     filter_expression: str,
     expression_attribute_names: Optional[Dict[str, str]],
@@ -54,45 +106,8 @@ def _detect_or_indexed_attributes(
     if not equality_matches:
         return None
 
-    indexed_attrs = []
-
-    # Check GSIs
-    for gsi in table_info.get("global_indexes", []):
-        gsi_status = gsi.get("IndexStatus", "ACTIVE")
-        if gsi_status != "ACTIVE":
-            continue
-
-        key_schema = gsi.get("KeySchema", [])
-        for key in key_schema:
-            if key.get("KeyType") == "HASH":
-                key_name = key.get("AttributeName")
-                for attr, value_placeholder in equality_matches:
-                    resolved_attr = _resolve_attribute_name(attr, expression_attribute_names)
-                    if resolved_attr == key_name:
-                        indexed_attrs.append(
-                            {
-                                "key_attribute": key_name,
-                                "index_name": gsi.get("IndexName"),
-                                "attr_ref": attr,
-                                "value_ref": value_placeholder,
-                            }
-                        )
-
-    # Check main table key
-    for key in table_info.get("key_schema", []):
-        if key.get("KeyType") == "HASH":
-            key_name = key.get("AttributeName")
-            for attr, value_placeholder in equality_matches:
-                resolved_attr = _resolve_attribute_name(attr, expression_attribute_names)
-                if resolved_attr == key_name:
-                    indexed_attrs.append(
-                        {
-                            "key_attribute": key_name,
-                            "index_name": None,
-                            "attr_ref": attr,
-                            "value_ref": value_placeholder,
-                        }
-                    )
+    indexed_attrs = _collect_gsi_indexed_attrs(table_info, equality_matches, expression_attribute_names)
+    indexed_attrs.extend(_collect_main_table_indexed_attrs(table_info, equality_matches, expression_attribute_names))
 
     if indexed_attrs:
         return {
@@ -101,6 +116,62 @@ def _detect_or_indexed_attributes(
             "filter_expression": filter_expression,
         }
 
+    return None
+
+
+def _build_equality_conditions(
+    equality_matches: list,
+    expression_attribute_names: Optional[Dict[str, str]],
+) -> Dict[str, Dict[str, str]]:
+    """Build a map of resolved attribute name -> {attr_ref, value_ref} from equality matches."""
+    conditions = {}
+    for attr, value_placeholder in equality_matches:
+        resolved_attr = _resolve_attribute_name(attr, expression_attribute_names)
+        conditions[resolved_attr] = {"attr_ref": attr, "value_ref": value_placeholder}
+    return conditions
+
+
+def _build_index_result(key_name: str, condition_info: dict, filter_expression: str, index_name: Optional[str]) -> Dict[str, Any]:
+    """Build the result dict for a matched indexed attribute."""
+    key_condition = f"{condition_info['attr_ref']} = {condition_info['value_ref']}"
+    remaining_filter = _remove_condition_from_filter(filter_expression, condition_info["attr_ref"], condition_info["value_ref"])
+    return {
+        "has_or": False,
+        "index_name": index_name,
+        "key_condition": key_condition,
+        "remaining_filter": remaining_filter,
+        "key_attribute": key_name,
+    }
+
+
+def _find_gsi_match(
+    table_info: Dict[str, Any],
+    equality_conditions: Dict[str, Dict[str, str]],
+    filter_expression: str,
+) -> Optional[Dict[str, Any]]:
+    """Check GSIs for a matching hash key in equality_conditions. Returns result dict or None."""
+    for gsi in table_info.get("global_indexes", []):
+        if gsi.get("IndexStatus", "ACTIVE") != "ACTIVE":
+            continue
+        for key in gsi.get("KeySchema", []):
+            if key.get("KeyType") == "HASH":
+                key_name = key.get("AttributeName")
+                if key_name in equality_conditions:
+                    return _build_index_result(key_name, equality_conditions[key_name], filter_expression, gsi.get("IndexName"))
+    return None
+
+
+def _find_main_table_match(
+    table_info: Dict[str, Any],
+    equality_conditions: Dict[str, Dict[str, str]],
+    filter_expression: str,
+) -> Optional[Dict[str, Any]]:
+    """Check main table key schema for a matching hash key in equality_conditions. Returns result dict or None."""
+    for key in table_info.get("key_schema", []):
+        if key.get("KeyType") == "HASH":
+            key_name = key.get("AttributeName")
+            if key_name in equality_conditions:
+                return _build_index_result(key_name, equality_conditions[key_name], filter_expression, None)
     return None
 
 
@@ -116,66 +187,15 @@ def _detect_single_indexed_attribute(
     if not equality_matches:
         return None
 
-    # Build map of attribute -> value placeholder
-    equality_conditions = {}
-    for attr, value_placeholder in equality_matches:
-        resolved_attr = _resolve_attribute_name(attr, expression_attribute_names)
-        equality_conditions[resolved_attr] = {
-            "attr_ref": attr,
-            "value_ref": value_placeholder,
-        }
+    equality_conditions = _build_equality_conditions(equality_matches, expression_attribute_names)
 
     # Check GSIs first (usually more specific)
-    for gsi in table_info.get("global_indexes", []):
-        gsi_status = gsi.get("IndexStatus", "ACTIVE")
-        if gsi_status != "ACTIVE":
-            continue
-
-        gsi_name = gsi.get("IndexName")
-        key_schema = gsi.get("KeySchema", [])
-
-        for key in key_schema:
-            if key.get("KeyType") == "HASH":
-                key_name = key.get("AttributeName")
-                if key_name in equality_conditions:
-                    condition_info = equality_conditions[key_name]
-                    key_condition = f"{condition_info['attr_ref']} = {condition_info['value_ref']}"
-                    remaining_filter = _remove_condition_from_filter(
-                        filter_expression,
-                        condition_info["attr_ref"],
-                        condition_info["value_ref"],
-                    )
-
-                    return {
-                        "has_or": False,
-                        "index_name": gsi_name,
-                        "key_condition": key_condition,
-                        "remaining_filter": remaining_filter,
-                        "key_attribute": key_name,
-                    }
+    gsi_result = _find_gsi_match(table_info, equality_conditions, filter_expression)
+    if gsi_result:
+        return gsi_result
 
     # Check table's main partition key
-    for key in table_info.get("key_schema", []):
-        if key.get("KeyType") == "HASH":
-            key_name = key.get("AttributeName")
-            if key_name in equality_conditions:
-                condition_info = equality_conditions[key_name]
-                key_condition = f"{condition_info['attr_ref']} = {condition_info['value_ref']}"
-                remaining_filter = _remove_condition_from_filter(
-                    filter_expression,
-                    condition_info["attr_ref"],
-                    condition_info["value_ref"],
-                )
-
-                return {
-                    "has_or": False,
-                    "index_name": None,
-                    "key_condition": key_condition,
-                    "remaining_filter": remaining_filter,
-                    "key_attribute": key_name,
-                }
-
-    return None
+    return _find_main_table_match(table_info, equality_conditions, filter_expression)
 
 
 def _resolve_attribute_name(

@@ -100,6 +100,43 @@ def _build_projection_expression(attributes: str) -> Tuple[Optional[str], Option
     return ", ".join(escaped_attrs), expression_attribute_names
 
 
+def _parse_filter_values_json(filter_values: str) -> Dict:
+    """Parse filter_values JSON string into DynamoDB expression attribute values.
+
+    Each value is either kept as-is (if already in DynamoDB typed format) or
+    serialized via TypeSerializer.
+    """
+    from boto3.dynamodb.types import TypeSerializer
+
+    _DYNAMODB_TYPE_KEYS = ("S", "N", "BOOL", "NULL", "M", "L", "SS", "NS", "BS")
+
+    try:
+        parsed_values = json.loads(filter_values)
+    except json.JSONDecodeError as e:
+        console.print(f"[red]✗ Invalid filter-values JSON: {e}[/red]")
+        sys.exit(1)
+
+    serializer = TypeSerializer()
+    expression_attribute_values = {}
+    for key, value in parsed_values.items():
+        # If value is already in DynamoDB format (has type keys like 'S', 'N', 'BOOL'), keep it
+        if isinstance(value, dict) and len(value) == 1 and list(value.keys())[0] in _DYNAMODB_TYPE_KEYS:
+            expression_attribute_values[key] = value
+        else:
+            # Otherwise, serialize Python value to DynamoDB format
+            expression_attribute_values[key] = serializer.serialize(value)
+    return expression_attribute_values
+
+
+def _parse_filter_names_json(filter_names: str) -> Dict:
+    """Parse filter_names JSON string into expression attribute names dict."""
+    try:
+        return json.loads(filter_names)
+    except json.JSONDecodeError as e:
+        console.print(f"[red]✗ Invalid filter-names JSON: {e}[/red]")
+        sys.exit(1)
+
+
 def _parse_filter_expressions(
     filter_expr: Optional[str],
     filter_values: Optional[str],
@@ -120,30 +157,10 @@ def _parse_filter_expressions(
             console.print(f"[red]✗ Invalid filter syntax: {e}[/red]")
             sys.exit(1)
     elif filter_values:
-        from boto3.dynamodb.types import TypeSerializer
-
-        try:
-            parsed_values = json.loads(filter_values)
-            # Convert Python values to DynamoDB typed format
-            serializer = TypeSerializer()
-            expression_attribute_values = {}
-            for key, value in parsed_values.items():
-                # If value is already in DynamoDB format (has type keys like 'S', 'N', 'BOOL'), keep it
-                if isinstance(value, dict) and len(value) == 1 and list(value.keys())[0] in ("S", "N", "BOOL", "NULL", "M", "L", "SS", "NS", "BS"):
-                    expression_attribute_values[key] = value
-                else:
-                    # Otherwise, serialize Python value to DynamoDB format
-                    expression_attribute_values[key] = serializer.serialize(value)
-        except json.JSONDecodeError as e:
-            console.print(f"[red]✗ Invalid filter-values JSON: {e}[/red]")
-            sys.exit(1)
+        expression_attribute_values = _parse_filter_values_json(filter_values)
 
     if filter_names and not expression_attribute_names:
-        try:
-            expression_attribute_names = json.loads(filter_names)
-        except json.JSONDecodeError as e:
-            console.print(f"[red]✗ Invalid filter-names JSON: {e}[/red]")
-            sys.exit(1)
+        expression_attribute_names = _parse_filter_names_json(filter_names)
 
     return filter_expr, expression_attribute_values, expression_attribute_names
 
