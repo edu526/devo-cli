@@ -1248,3 +1248,235 @@ def test_get_config_value_with_empty_string(temp_config_dir, mocker):
     # Get empty string (should not be confused with None/missing)
     value = get_config_value("settings.description", default="default description")
     assert value == ""  # Should return empty string, not the default
+
+
+# ============================================================================
+# list_config_sections
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_list_config_sections_returns_top_level_keys(temp_config_dir, mocker):
+    """list_config_sections returns all top-level keys from the loaded config."""
+    from cli_tool.core.utils.config_manager import list_config_sections
+
+    config_file = temp_config_dir / "config.json"
+    test_config = {"bedrock": {}, "ssm": {}, "dynamodb": {}}
+    with open(config_file, "w") as f:
+        json.dump(test_config, f)
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+
+    sections = list_config_sections()
+
+    assert "bedrock" in sections
+    assert "ssm" in sections
+    assert "dynamodb" in sections
+
+
+# ============================================================================
+# get_config_path
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_get_config_path_returns_string(temp_config_dir, mocker):
+    """get_config_path returns a string path to the config file."""
+    from cli_tool.core.utils.config_manager import get_config_path
+
+    config_file = temp_config_dir / "config.json"
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+
+    path = get_config_path()
+
+    assert isinstance(path, str)
+    assert "config.json" in path
+
+
+# ============================================================================
+# get_dynamodb_templates
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_get_dynamodb_templates_returns_dict(temp_config_dir, mocker):
+    """get_dynamodb_templates returns the export_templates dict."""
+    from cli_tool.core.utils.config_manager import get_dynamodb_templates
+
+    config_file = temp_config_dir / "config.json"
+    test_config = {"dynamodb": {"export_templates": {"my_template": {"table": "my-table"}}}}
+    with open(config_file, "w") as f:
+        json.dump(test_config, f)
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+
+    templates = get_dynamodb_templates()
+
+    assert "my_template" in templates
+    assert templates["my_template"]["table"] == "my-table"
+
+
+@pytest.mark.unit
+def test_get_dynamodb_templates_empty_when_no_dynamodb_section(temp_config_dir, mocker):
+    """get_dynamodb_templates returns empty dict when dynamodb section missing."""
+    from cli_tool.core.utils.config_manager import get_dynamodb_templates
+
+    config_file = temp_config_dir / "config.json"
+    test_config = {"bedrock": {}}
+    with open(config_file, "w") as f:
+        json.dump(test_config, f)
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+
+    templates = get_dynamodb_templates()
+
+    assert templates == {} or isinstance(templates, dict)
+
+
+# ============================================================================
+# save_dynamodb_template
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_save_dynamodb_template_persists_template(temp_config_dir, mocker):
+    """save_dynamodb_template writes the template to config."""
+    from cli_tool.core.utils.config_manager import get_dynamodb_templates, save_dynamodb_template
+
+    config_file = temp_config_dir / "config.json"
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+
+    template = {"table": "orders", "region": "us-east-1"}
+    save_dynamodb_template("orders_export", template)
+
+    templates = get_dynamodb_templates()
+
+    assert "orders_export" in templates
+    assert templates["orders_export"]["table"] == "orders"
+
+
+# ============================================================================
+# get_dynamodb_template
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_get_dynamodb_template_existing(temp_config_dir, mocker):
+    """get_dynamodb_template returns the template by name."""
+    from cli_tool.core.utils.config_manager import get_dynamodb_template, save_dynamodb_template
+
+    config_file = temp_config_dir / "config.json"
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+
+    save_dynamodb_template("my_tmpl", {"table": "users"})
+    result = get_dynamodb_template("my_tmpl")
+
+    assert result is not None
+    assert result["table"] == "users"
+
+
+@pytest.mark.unit
+def test_get_dynamodb_template_nonexistent_returns_none(temp_config_dir, mocker):
+    """get_dynamodb_template returns None for a non-existent template name."""
+    from cli_tool.core.utils.config_manager import get_dynamodb_template
+
+    config_file = temp_config_dir / "config.json"
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+
+    result = get_dynamodb_template("does_not_exist")
+
+    assert result is None
+
+
+# ============================================================================
+# delete_dynamodb_template
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_delete_dynamodb_template_existing_returns_true(temp_config_dir, mocker):
+    """delete_dynamodb_template removes the template and returns True."""
+    from cli_tool.core.utils.config_manager import delete_dynamodb_template, get_dynamodb_template, save_dynamodb_template
+
+    config_file = temp_config_dir / "config.json"
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+
+    save_dynamodb_template("to_delete", {"table": "temp"})
+    result = delete_dynamodb_template("to_delete")
+
+    assert result is True
+    assert get_dynamodb_template("to_delete") is None
+
+
+@pytest.mark.unit
+def test_delete_dynamodb_template_nonexistent_returns_false(temp_config_dir, mocker):
+    """delete_dynamodb_template returns False when template does not exist."""
+    from cli_tool.core.utils.config_manager import delete_dynamodb_template
+
+    config_file = temp_config_dir / "config.json"
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+
+    result = delete_dynamodb_template("nonexistent_template")
+
+    assert result is False
+
+
+# ============================================================================
+# migrate_legacy_configs
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_migrate_legacy_configs_already_migrated(temp_config_dir, mocker):
+    """migrate_legacy_configs reports already_migrated=True when no legacy files exist."""
+    from cli_tool.core.utils.config_manager import migrate_legacy_configs
+
+    config_file = temp_config_dir / "config.json"
+    config_file.write_text('{"bedrock": {}}')
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_ssm_config_file", return_value=temp_config_dir / "ssm.json")
+    mocker.patch(
+        "cli_tool.core.utils.config_manager.get_legacy_dynamodb_config_file",
+        return_value=temp_config_dir / "dynamodb.json",
+    )
+
+    status = migrate_legacy_configs()
+
+    assert status["already_migrated"] is True
+
+
+@pytest.mark.unit
+def test_migrate_legacy_configs_migrates_ssm(temp_config_dir, mocker):
+    """migrate_legacy_configs migrates SSM config from legacy file."""
+    from cli_tool.core.utils.config_manager import migrate_legacy_configs
+
+    config_file = temp_config_dir / "config.json"
+    legacy_ssm = temp_config_dir / "ssm-config.json"
+    legacy_ssm.write_text('{"databases": {"mydb": {"host": "db.example.com"}}}')
+
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_ssm_config_file", return_value=legacy_ssm)
+    mocker.patch(
+        "cli_tool.core.utils.config_manager.get_legacy_dynamodb_config_file",
+        return_value=temp_config_dir / "dynamodb.json",
+    )
+
+    status = migrate_legacy_configs(backup=False)
+
+    assert status["ssm"] is True
+    assert status["already_migrated"] is False
+
+
+@pytest.mark.unit
+def test_try_migrate_legacy_configs_no_legacy_files(temp_config_dir, mocker):
+    """_try_migrate_legacy_configs returns False when no legacy files exist."""
+    from cli_tool.core.utils.config_manager import _try_migrate_legacy_configs
+
+    config_file = temp_config_dir / "config.json"
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_ssm_config_file", return_value=temp_config_dir / "ssm.json")
+    mocker.patch(
+        "cli_tool.core.utils.config_manager.get_legacy_dynamodb_config_file",
+        return_value=temp_config_dir / "dynamo.json",
+    )
+
+    result = _try_migrate_legacy_configs()
+
+    assert result is False

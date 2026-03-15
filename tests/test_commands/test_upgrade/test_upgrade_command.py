@@ -305,3 +305,117 @@ def test_upgrade_general_exception_handled(mocker):
 
     assert result.exit_code == 1
     assert "unexpected error" in result.output or "Error" in result.output
+
+
+@pytest.mark.unit
+def test_upgrade_successful_install_exits_0(mocker, tmp_path):
+    """Full upgrade flow succeeds: download, verify, install, exit 0."""
+    current_exe = tmp_path / "devo"
+    current_exe.write_text("old binary")
+
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.get_current_version", return_value="1.0.0")
+    mocker.patch(
+        "cli_tool.commands.upgrade.commands.upgrade.get_latest_release",
+        return_value={
+            "tag_name": "v1.5.0",
+            "assets": [{"name": "devo-linux-amd64", "browser_download_url": "https://example.com/devo-linux-amd64"}],
+        },
+    )
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.detect_platform", return_value=("linux", "amd64"))
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.get_binary_name", return_value="devo-linux-amd64")
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.get_executable_path", return_value=current_exe)
+    mocker.patch("os.access", return_value=True)
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.download_binary", return_value=True)
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.verify_binary", return_value=True)
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.replace_binary", return_value=True)
+    # os._exit raises SystemExit so Click runner can catch it
+    mocker.patch("os._exit", side_effect=SystemExit(0))
+
+    runner = CliRunner()
+    result = runner.invoke(upgrade, ["--force"])
+
+    assert result.exit_code == 0
+
+
+@pytest.mark.unit
+def test_upgrade_replace_binary_fails_exits_1(mocker, tmp_path):
+    """Exits with code 1 when replace_binary returns False."""
+    current_exe = tmp_path / "devo"
+    current_exe.write_text("binary")
+
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.get_current_version", return_value="1.0.0")
+    mocker.patch(
+        "cli_tool.commands.upgrade.commands.upgrade.get_latest_release",
+        return_value={
+            "tag_name": "v1.5.0",
+            "assets": [{"name": "devo-linux-amd64", "browser_download_url": "https://example.com/devo-linux-amd64"}],
+        },
+    )
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.detect_platform", return_value=("linux", "amd64"))
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.get_binary_name", return_value="devo-linux-amd64")
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.get_executable_path", return_value=current_exe)
+    mocker.patch("os.access", return_value=True)
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.download_binary", return_value=True)
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.verify_binary", return_value=True)
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.replace_binary", return_value=False)
+
+    runner = CliRunner()
+    result = runner.invoke(upgrade, ["--force"])
+
+    assert result.exit_code == 1
+
+
+@pytest.mark.unit
+def test_determine_archive_suffix_other_platform():
+    """Any platform other than windows/darwin returns .tmp."""
+    assert _determine_archive_suffix("freebsd") == ".tmp"
+    assert _determine_archive_suffix("") == ".tmp"
+
+
+@pytest.mark.unit
+def test_download_and_verify_success_returns_path(mocker, tmp_path):
+    """Returns a Path when download and verification both succeed."""
+    tmp_file = tmp_path / "binary.tmp"
+    tmp_file.write_text("content")
+
+    mock_ntf = MagicMock()
+    mock_ntf.__enter__ = MagicMock(return_value=MagicMock(name=str(tmp_file)))
+    mock_ntf.__exit__ = MagicMock(return_value=False)
+    mocker.patch("tempfile.NamedTemporaryFile", return_value=mock_ntf)
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.download_binary", return_value=True)
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.verify_binary", return_value=True)
+
+    result = _download_and_verify("https://example.com/binary", None)
+
+    assert result is not None
+    assert isinstance(result, Path)
+
+
+@pytest.mark.unit
+def test_upgrade_force_flag_reinstalls_same_version(mocker, tmp_path):
+    """--force reinstalls even when already on latest version."""
+    current_exe = tmp_path / "devo"
+    current_exe.write_text("binary")
+
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.get_current_version", return_value="1.5.0")
+    mocker.patch(
+        "cli_tool.commands.upgrade.commands.upgrade.get_latest_release",
+        return_value={
+            "tag_name": "v1.5.0",
+            "assets": [{"name": "devo-linux-amd64", "browser_download_url": "https://example.com/devo-linux-amd64"}],
+        },
+    )
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.detect_platform", return_value=("linux", "amd64"))
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.get_binary_name", return_value="devo-linux-amd64")
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.get_executable_path", return_value=current_exe)
+    mocker.patch("os.access", return_value=True)
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.download_binary", return_value=True)
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.verify_binary", return_value=True)
+    mocker.patch("cli_tool.commands.upgrade.commands.upgrade.replace_binary", return_value=True)
+    mocker.patch("os._exit", side_effect=SystemExit(0))
+
+    runner = CliRunner()
+    result = runner.invoke(upgrade, ["--force"])
+
+    # Should attempt install even though already latest
+    assert result.exit_code == 0

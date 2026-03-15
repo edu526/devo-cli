@@ -487,3 +487,257 @@ def test_flush_sso_session_skips_when_empty_config():
     sessions = {}
     _flush_sso_session("my-org", {}, sessions)
     assert sessions == {}
+
+
+# ---------------------------------------------------------------------------
+# remove_section_from_file
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_remove_section_from_file_removes_named_section(tmp_path):
+    """Removes a section and its key-value lines from an INI file."""
+    from cli_tool.commands.aws_login.core.config import remove_section_from_file
+
+    ini_file = tmp_path / "config"
+    ini_file.write_text("[profile dev]\nregion = us-east-1\n\n[profile prod]\nregion = eu-west-1\n")
+
+    remove_section_from_file(ini_file, "[profile dev]")
+
+    content = ini_file.read_text()
+    assert "[profile dev]" not in content
+    assert "region = us-east-1" not in content
+    assert "[profile prod]" in content
+    assert "region = eu-west-1" in content
+
+
+@pytest.mark.unit
+def test_remove_section_from_file_noop_when_section_missing(tmp_path):
+    """File remains unchanged when the target section does not exist."""
+    from cli_tool.commands.aws_login.core.config import remove_section_from_file
+
+    ini_file = tmp_path / "config"
+    original = "[profile dev]\nregion = us-east-1\n"
+    ini_file.write_text(original)
+
+    remove_section_from_file(ini_file, "[profile nonexistent]")
+
+    assert ini_file.read_text() == original
+
+
+@pytest.mark.unit
+def test_remove_section_from_file_noop_when_file_missing(tmp_path):
+    """Does nothing and does not raise when the file does not exist."""
+    from cli_tool.commands.aws_login.core.config import remove_section_from_file
+
+    non_existent = tmp_path / "does_not_exist"
+    # Must not raise
+    remove_section_from_file(non_existent, "[profile dev]")
+
+
+@pytest.mark.unit
+def test_remove_section_from_file_removes_last_section(tmp_path):
+    """Correctly removes a section that appears at the end of the file."""
+    from cli_tool.commands.aws_login.core.config import remove_section_from_file
+
+    ini_file = tmp_path / "config"
+    ini_file.write_text("[profile keep]\nregion = us-east-1\n\n[profile remove-me]\noutput = json\n")
+
+    remove_section_from_file(ini_file, "[profile remove-me]")
+
+    content = ini_file.read_text()
+    assert "[profile remove-me]" not in content
+    assert "output = json" not in content
+    assert "[profile keep]" in content
+
+
+@pytest.mark.unit
+def test_remove_section_from_file_removes_default_section(tmp_path):
+    """Removes the [default] section correctly."""
+    from cli_tool.commands.aws_login.core.config import remove_section_from_file
+
+    ini_file = tmp_path / "config"
+    ini_file.write_text("[default]\nregion = us-east-1\n\n[profile dev]\nregion = eu-west-1\n")
+
+    remove_section_from_file(ini_file, "[default]")
+
+    content = ini_file.read_text()
+    assert "[default]" not in content
+    assert "[profile dev]" in content
+
+
+# ---------------------------------------------------------------------------
+# remove_profile_section
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_remove_profile_section_named_profile(tmp_path, monkeypatch):
+    """Removes [profile <name>] section from the AWS config file."""
+    from cli_tool.commands.aws_login.core.config import remove_profile_section
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    aws_dir = tmp_path / ".aws"
+    aws_dir.mkdir()
+    config = aws_dir / "config"
+    config.write_text("[profile dev]\nregion = us-east-1\n\n[profile prod]\nregion = eu-west-1\n")
+
+    remove_profile_section("dev")
+
+    content = config.read_text()
+    assert "[profile dev]" not in content
+    assert "[profile prod]" in content
+
+
+@pytest.mark.unit
+def test_remove_profile_section_default_profile(tmp_path, monkeypatch):
+    """Removes [default] section from the AWS config file."""
+    from cli_tool.commands.aws_login.core.config import remove_profile_section
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    aws_dir = tmp_path / ".aws"
+    aws_dir.mkdir()
+    config = aws_dir / "config"
+    config.write_text("[default]\nregion = us-east-1\n\n[profile dev]\nregion = eu-west-1\n")
+
+    remove_profile_section("default")
+
+    content = config.read_text()
+    assert "[default]" not in content
+    assert "[profile dev]" in content
+
+
+# ---------------------------------------------------------------------------
+# parse_sso_config — additional branches
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_parse_sso_config_default_profile(tmp_path, monkeypatch):
+    """Parses SSO config from [default] section."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    aws_dir = tmp_path / ".aws"
+    aws_dir.mkdir()
+    (aws_dir / "config").write_text("[default]\nsso_start_url = https://default.awsapps.com/start\nsso_region = us-east-1\n")
+
+    result = parse_sso_config("default")
+
+    assert result is not None
+    assert result["sso_start_url"] == "https://default.awsapps.com/start"
+
+
+@pytest.mark.unit
+def test_parse_sso_config_does_not_bleed_keys_from_next_section(tmp_path, monkeypatch):
+    """Does not include keys from a subsequent profile section."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    aws_dir = tmp_path / ".aws"
+    aws_dir.mkdir()
+    (aws_dir / "config").write_text(
+        "[profile dev]\nsso_start_url = https://dev.awsapps.com/start\n\n" "[profile prod]\nsso_start_url = https://prod.awsapps.com/start\n"
+    )
+
+    result = parse_sso_config("dev")
+
+    assert result is not None
+    assert result["sso_start_url"] == "https://dev.awsapps.com/start"
+
+
+# ---------------------------------------------------------------------------
+# get_profile_config — additional branches
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_get_profile_config_merges_sso_session_into_result(tmp_path, monkeypatch):
+    """When profile has sso_session key, merges start_url from sso-session block."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    aws_dir = tmp_path / ".aws"
+    aws_dir.mkdir()
+    (aws_dir / "config").write_text(
+        "[profile dev]\nsso_session = my-org\nsso_account_id = 123456789012\n\n"
+        "[sso-session my-org]\nsso_start_url = https://org.awsapps.com/start\nsso_region = us-east-1\n"
+    )
+
+    result = get_profile_config("dev")
+
+    assert result is not None
+    assert result["sso_start_url"] == "https://org.awsapps.com/start"
+    assert result["sso_region"] == "us-east-1"
+
+
+@pytest.mark.unit
+def test_get_profile_config_does_not_bleed_keys_from_next_section(tmp_path, monkeypatch):
+    """Does not include keys from the next profile section."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    aws_dir = tmp_path / ".aws"
+    aws_dir.mkdir()
+    (aws_dir / "config").write_text("[profile dev]\nregion = us-east-1\n\n[profile prod]\nregion = eu-west-1\n")
+
+    result = get_profile_config("dev")
+
+    assert result is not None
+    assert result["region"] == "us-east-1"
+    assert len(result) == 1
+
+
+# ---------------------------------------------------------------------------
+# _merge_sso_session — additional branches
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_merge_sso_session_graceful_on_missing_file(tmp_path):
+    """Does not raise when config file cannot be opened."""
+    non_existent = tmp_path / "no_config"
+    target = {}
+
+    _merge_sso_session(non_existent, "my-org", target)
+
+    assert target == {}
+
+
+@pytest.mark.unit
+def test_merge_sso_session_ignores_non_url_region_keys(tmp_path):
+    """Only merges sso_start_url and sso_region, not other keys."""
+    config = tmp_path / "config"
+    config.write_text(
+        "[sso-session my-org]\n" "sso_start_url = https://org.awsapps.com/start\n" "sso_region = us-east-1\n" "other_key = should_be_ignored\n"
+    )
+    target = {}
+
+    _merge_sso_session(config, "my-org", target)
+
+    assert "other_key" not in target
+    assert "sso_start_url" in target
+    assert "sso_region" in target
+
+
+# ---------------------------------------------------------------------------
+# _read_config_profiles — additional branches
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_read_config_profiles_saves_last_profile_in_file(tmp_path):
+    """Last profile in the file is saved even without a trailing section."""
+    config = tmp_path / "config"
+    config.write_text("[profile alpha]\nregion = us-east-1\n\n[profile beta]\nsso_start_url = https://x.com\n")
+
+    result = _read_config_profiles(config)
+
+    assert "alpha" in result
+    assert result["alpha"] is False
+    assert "beta" in result
+    assert result["beta"] is True
+
+
+@pytest.mark.unit
+def test_read_config_profiles_sso_session_section_flushes_current_profile(tmp_path):
+    """[sso-session] header causes the current profile to be saved."""
+    config = tmp_path / "config"
+    config.write_text("[profile dev]\nsso_session = my-org\n\n[sso-session my-org]\nsso_start_url = https://x.com\n")
+
+    result = _read_config_profiles(config)
+
+    assert "dev" in result
+    assert "my-org" not in result

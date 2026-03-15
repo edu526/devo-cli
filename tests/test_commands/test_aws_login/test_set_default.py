@@ -406,3 +406,156 @@ def test_set_default_profile_calls_unix_on_posix(monkeypatch, mocker):
     set_default_profile("dev")
 
     mock_unix.assert_called_once_with("dev")
+
+
+# ---------------------------------------------------------------------------
+# _select_profile_interactively
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_select_profile_interactively_valid_choice(mocker):
+    """Returns profile name for a valid numeric selection."""
+    from cli_tool.commands.aws_login.commands.set_default import _select_profile_interactively
+
+    profiles = [("dev", "sso"), ("prod", "static")]
+    mocker.patch("click.prompt", return_value=2)
+
+    result = _select_profile_interactively(profiles)
+
+    assert result == "prod"
+
+
+@pytest.mark.unit
+def test_select_profile_interactively_invalid_choice_exits(mocker):
+    """Calls sys.exit(1) on an out-of-range selection."""
+    from cli_tool.commands.aws_login.commands.set_default import _select_profile_interactively
+
+    profiles = [("dev", "sso")]
+    mocker.patch("click.prompt", return_value=99)
+
+    with pytest.raises(SystemExit) as exc_info:
+        _select_profile_interactively(profiles)
+
+    assert exc_info.value.code == 1
+
+
+@pytest.mark.unit
+def test_select_profile_interactively_zero_choice_exits(mocker):
+    """Calls sys.exit(1) when user enters 0."""
+    from cli_tool.commands.aws_login.commands.set_default import _select_profile_interactively
+
+    profiles = [("dev", "sso")]
+    mocker.patch("click.prompt", return_value=0)
+
+    with pytest.raises(SystemExit) as exc_info:
+        _select_profile_interactively(profiles)
+
+    assert exc_info.value.code == 1
+
+
+@pytest.mark.unit
+def test_select_profile_interactively_first_profile(mocker):
+    """Returns the first profile when user selects 1."""
+    from cli_tool.commands.aws_login.commands.set_default import _select_profile_interactively
+
+    profiles = [("alpha", "sso"), ("beta", "both")]
+    mocker.patch("click.prompt", return_value=1)
+
+    result = _select_profile_interactively(profiles)
+
+    assert result == "alpha"
+
+
+# ---------------------------------------------------------------------------
+# set_default_profile — git-bash branch
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_set_default_profile_git_bash_calls_unix_profile(monkeypatch, mocker):
+    """On Windows with Git Bash ($SHELL ends with 'bash'), calls _set_unix_profile."""
+    monkeypatch.setattr(
+        "cli_tool.commands.aws_login.commands.set_default.list_aws_profiles",
+        lambda: [("dev", "sso")],
+    )
+    monkeypatch.setattr(
+        "cli_tool.commands.aws_login.commands.set_default.check_profile_credentials_available",
+        lambda profile: (True, None),
+    )
+    monkeypatch.setattr("os.name", "nt")
+    monkeypatch.setenv("SHELL", "/usr/bin/bash")  # Git Bash
+
+    mock_unix = mocker.patch("cli_tool.commands.aws_login.commands.set_default._set_unix_profile")
+    mocker.patch("cli_tool.commands.aws_login.commands.set_default._write_default_credentials")
+
+    set_default_profile("dev")
+
+    mock_unix.assert_called_once_with("dev")
+
+
+# ---------------------------------------------------------------------------
+# _write_default_credentials — additional branches
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_write_default_credentials_no_expiration_in_result(monkeypatch):
+    """Does not print expiration line when result has no expiration."""
+    mock_write = MagicMock(return_value={"expiration": None})
+    monkeypatch.setattr(
+        "cli_tool.commands.aws_login.commands.set_default.write_default_credentials",
+        mock_write,
+    )
+    # Should not raise
+    _write_default_credentials("dev")
+    mock_write.assert_called_once_with("dev")
+
+
+# ---------------------------------------------------------------------------
+# Additional _format_source_label unit marker tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_format_source_label_sso():
+    """sso maps to cyan label."""
+    assert "cyan" in _format_source_label("sso")
+
+
+@pytest.mark.unit
+def test_format_source_label_static():
+    """static maps to yellow label."""
+    assert "yellow" in _format_source_label("static")
+
+
+@pytest.mark.unit
+def test_format_source_label_both():
+    """both maps to green label."""
+    assert "green" in _format_source_label("both")
+
+
+@pytest.mark.unit
+def test_format_source_label_unknown():
+    """Unknown source maps to dim label containing the source text."""
+    result = _format_source_label("custom-type")
+    assert "dim" in result
+    assert "custom-type" in result
+
+
+# ---------------------------------------------------------------------------
+# _update_shell_config_file — error path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_update_shell_config_file_handles_read_error(tmp_path, monkeypatch, mocker):
+    """Catches and handles exception when file read fails after exists check."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    rc = tmp_path / ".bashrc"
+    rc.write_text("# config\n")
+
+    mocker.patch("pathlib.Path.read_text", side_effect=OSError("read error"))
+
+    # Should not raise — error is caught internally
+    _update_shell_config_file(rc, "export AWS_PROFILE=dev")

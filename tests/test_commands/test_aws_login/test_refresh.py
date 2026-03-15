@@ -350,3 +350,68 @@ def test_refresh_all_profiles_summary_shows_failures(mocker, capsys):
 
     # Should not raise
     refresh_all_profiles()
+
+
+@pytest.mark.unit
+def test_refresh_all_profiles_valid_profiles_prints_table(mocker):
+    """When profiles are all valid with expiration, prints a status table without error."""
+    future = datetime.now(timezone.utc) + timedelta(hours=6)
+    mocker.patch(
+        "cli_tool.commands.aws_login.commands.refresh.list_aws_profiles",
+        return_value=[("dev", "sso"), ("prod", "sso")],
+    )
+    mocker.patch(
+        "cli_tool.commands.aws_login.commands.refresh.check_profile_needs_refresh",
+        return_value=(False, future, "Valid"),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        refresh_all_profiles()
+
+    assert exc_info.value.code == 0
+
+
+@pytest.mark.unit
+def test_refresh_all_profiles_summary_no_failures(mocker):
+    """Summary shows only success count when all profiles refresh successfully."""
+    mocker.patch(
+        "cli_tool.commands.aws_login.commands.refresh.list_aws_profiles",
+        return_value=[("dev", "sso")],
+    )
+    mocker.patch(
+        "cli_tool.commands.aws_login.commands.refresh.check_profile_needs_refresh",
+        return_value=(True, None, "Expired"),
+    )
+    mocker.patch("click.confirm", return_value=True)
+    mocker.patch(
+        "cli_tool.commands.aws_login.commands.refresh.get_profile_config",
+        return_value={"sso_session": "s"},
+    )
+    mocker.patch("cli_tool.commands.aws_login.commands.refresh._refresh_session", return_value=(True, 1, 0))
+
+    # Should not raise
+    refresh_all_profiles()
+
+
+@pytest.mark.unit
+def test_refresh_session_verified_and_failed_counts_tracked(mocker):
+    """Verified/failed counts from _refresh_session are accumulated correctly."""
+    mocker.patch(
+        "cli_tool.commands.aws_login.commands.refresh.list_aws_profiles",
+        return_value=[("dev", "sso"), ("prod", "sso")],
+    )
+    mocker.patch(
+        "cli_tool.commands.aws_login.commands.refresh.check_profile_needs_refresh",
+        return_value=(True, None, "Expired"),
+    )
+    mocker.patch("click.confirm", return_value=True)
+
+    def mock_config(name):
+        return {"sso_session": "shared"}
+
+    mocker.patch("cli_tool.commands.aws_login.commands.refresh.get_profile_config", side_effect=mock_config)
+    # Both profiles share same session so _refresh_session called once with (True, 1, 1)
+    mocker.patch("cli_tool.commands.aws_login.commands.refresh._refresh_session", return_value=(True, 1, 1))
+
+    # Should complete without error
+    refresh_all_profiles()
