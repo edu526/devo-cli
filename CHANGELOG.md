@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v3.4.2 (2026-03-15)
+
+### Bug Fixes
+
+- **security**: Replace dict-based path construction with explicit if/elif in _get_shell_config
+  ([`13a6f6c`](https://github.com/edu526/devo-cli/commit/13a6f6c4f400fb1b64d9d70e2844ef924add4620))
+
+- **security**: Use resolved path for all I/O in set_default and hosts_manager
+  ([`6b99887`](https://github.com/edu526/devo-cli/commit/6b99887cf892dae23ea3615d8d0be8af06252078))
+
+### Testing
+
+- **coverage**: Add unit tests across dynamodb, eventbridge, ssm, core, and code_reviewer modules
+  ([`a38331b`](https://github.com/edu526/devo-cli/commit/a38331b796e005ec839daf3ee35af139de1211c2))
+
+- **coverage**: Add unit tests for aws_login, upgrade, and core utils modules
+  ([`92b59cb`](https://github.com/edu526/devo-cli/commit/92b59cbb7a81132a792d083dc00972b345d6f52a))
+
+- **upgrade**: Mock os.chmod to fix permission test on Windows
+  ([`2a79ec1`](https://github.com/edu526/devo-cli/commit/2a79ec12657314077d77fb3ead992a9c8321dcb4))
+
+
 ## v3.4.1 (2026-03-14)
 
 ### Bug Fixes
