@@ -24,7 +24,7 @@ from cli_tool.core.agents.base_agent import BaseAgent
 from cli_tool.core.ui.console_ui import console_ui
 
 # Pre-compiled regex for JSON block extraction (S5857)
-_JSON_BLOCK_RE = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
+_JSON_BLOCK_RE = re.compile(r"```json\s*(\{[^}]*\})\s*```", re.DOTALL)
 
 
 class CodeReviewAnalyzer:

@@ -89,7 +89,7 @@ def select_profile(current_profile: Optional[str] = None, allow_none: bool = Fal
         except (ValueError, KeyboardInterrupt):
             click.echo(click.style("\nInvalid input. Please enter a number.", fg="red"))
         except click.Abort:
-            raise
+            raise  # re-raise to propagate user interrupt
 
 
 def check_aws_cli() -> bool:

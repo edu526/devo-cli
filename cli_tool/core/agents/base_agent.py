@@ -1,4 +1,4 @@
-from typing import Any, Callable, List, Optional, Type, TypeVar
+from typing import Any, Callable, List, Optional, Type
 
 from pydantic import BaseModel
 from rich.console import Console
@@ -7,8 +7,6 @@ from strands.models import BedrockModel
 
 from cli_tool.config import BEDROCK_MODEL_ID, FALLBACK_MODEL_ID
 from cli_tool.core.ui.console_ui import console_ui
-
-T = TypeVar("T", bound=BaseModel)
 
 
 class BaseAgent:
@@ -236,7 +234,7 @@ class BaseAgent:
             return metrics.get_summary()
         return {}
 
-    def query_structured(self, input_text: str, response_model: Type[T]) -> T:
+    def query_structured[T: BaseModel](self, input_text: str, response_model: Type[T]) -> T:
         """
         Run the agent with structured output using Pydantic models.
 

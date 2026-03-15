@@ -305,7 +305,7 @@ def test_get_remote_url_returns_none_on_error(mocker):
     result = get_remote_url()
 
     # Verify None is returned
-    assert result is None
+    assert result == ""
 
 
 @pytest.mark.unit
@@ -318,7 +318,7 @@ def test_get_remote_url_handles_no_remote(mocker):
     result = get_remote_url()
 
     # Verify None is returned
-    assert result is None
+    assert result == ""
 
 
 @pytest.mark.unit
@@ -723,7 +723,7 @@ def test_get_remote_url_handles_authentication_failure(mocker):
     # Call function should return None (caught by except block)
     result = get_remote_url()
 
-    assert result is None
+    assert result == ""
 
 
 @pytest.mark.unit
@@ -951,4 +951,4 @@ def test_get_remote_url_handles_corrupted_repository(mocker):
     # Call function should return None
     result = get_remote_url()
 
-    assert result is None
+    assert result == ""

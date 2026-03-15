@@ -376,17 +376,13 @@ def get_file_content(
         all_files = []
 
         for path_pattern in paths:
-            if mode == "find":
+            if mode != "find" and Path(path_pattern).is_file():
+                all_files.append(path_pattern)
+            else:
                 files = find_files(path_pattern, recursive=recursive, max_files=max_files)
                 all_files.extend(files)
-            else:
-                if Path(path_pattern).is_file():
-                    all_files.append(path_pattern)
-                else:
-                    files = find_files(path_pattern, recursive=recursive, max_files=max_files)
-                    all_files.extend(files)
 
-        all_files = sorted(list(set(all_files)))
+        all_files = sorted(set(all_files))
 
         if not all_files and mode != "find":
             error_msg = f"No files found matching pattern(s): {', '.join(paths)}"

@@ -31,7 +31,7 @@ def get_aws_profiles():
     return profiles if profiles else []
 
 
-def verify_aws_credentials(profile=None, required_account=None):  # noqa: ARG001
+def verify_aws_credentials(profile=None, _required_account=None):
     """Verify AWS credentials and account.
 
     Args:

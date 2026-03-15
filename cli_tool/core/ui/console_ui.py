@@ -57,6 +57,11 @@ class StreamingDisplayManager:
                 self.live_display.update(Group(*self.event_panels.values()), refresh=True)
 
 
+_BROKEN_REFERENCES = "Broken References"
+_CODE_QUALITY = "Code Quality"
+_BEST_PRACTICES = "Best Practices"
+_BREAKING_CHANGE = "Breaking Change"
+
 _ISSUE_TYPE_INFO = {
     # Dependencies
     "dependencies": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
@@ -69,22 +74,22 @@ _ISSUE_TYPE_INFO = {
     "package": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
     "packages": {"icon": "📦", "name": "Dependencies", "color": "cyan"},
     # Broken references
-    "brokenreferences": {"icon": "🔗", "name": "Broken References", "color": "red"},
-    "brokenreference": {"icon": "🔗", "name": "Broken References", "color": "red"},
-    "reference": {"icon": "🔗", "name": "Broken References", "color": "red"},
-    "references": {"icon": "🔗", "name": "Broken References", "color": "red"},
-    "undefined": {"icon": "🔗", "name": "Broken References", "color": "red"},
-    "notfound": {"icon": "🔗", "name": "Broken References", "color": "red"},
-    "missing": {"icon": "🔗", "name": "Broken References", "color": "red"},
+    "brokenreferences": {"icon": "🔗", "name": _BROKEN_REFERENCES, "color": "red"},
+    "brokenreference": {"icon": "🔗", "name": _BROKEN_REFERENCES, "color": "red"},
+    "reference": {"icon": "🔗", "name": _BROKEN_REFERENCES, "color": "red"},
+    "references": {"icon": "🔗", "name": _BROKEN_REFERENCES, "color": "red"},
+    "undefined": {"icon": "🔗", "name": _BROKEN_REFERENCES, "color": "red"},
+    "notfound": {"icon": "🔗", "name": _BROKEN_REFERENCES, "color": "red"},
+    "missing": {"icon": "🔗", "name": _BROKEN_REFERENCES, "color": "red"},
     # Code quality
-    "codequality": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
-    "quality": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
-    "unused": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
-    "unusedvariable": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
-    "redundant": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
-    "errorhandling": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
-    "asyncawait": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
-    "async": {"icon": "✨", "name": "Code Quality", "color": "magenta"},
+    "codequality": {"icon": "✨", "name": _CODE_QUALITY, "color": "magenta"},
+    "quality": {"icon": "✨", "name": _CODE_QUALITY, "color": "magenta"},
+    "unused": {"icon": "✨", "name": _CODE_QUALITY, "color": "magenta"},
+    "unusedvariable": {"icon": "✨", "name": _CODE_QUALITY, "color": "magenta"},
+    "redundant": {"icon": "✨", "name": _CODE_QUALITY, "color": "magenta"},
+    "errorhandling": {"icon": "✨", "name": _CODE_QUALITY, "color": "magenta"},
+    "asyncawait": {"icon": "✨", "name": _CODE_QUALITY, "color": "magenta"},
+    "async": {"icon": "✨", "name": _CODE_QUALITY, "color": "magenta"},
     # Security
     "security": {"icon": "🔒", "name": "Security", "color": "red"},
     "securityissue": {"icon": "🔒", "name": "Security", "color": "red"},
@@ -95,14 +100,14 @@ _ISSUE_TYPE_INFO = {
     "validation": {"icon": "🔒", "name": "Security", "color": "red"},
     "unsafe": {"icon": "🔒", "name": "Security", "color": "red"},
     # Best practices
-    "bestpractices": {"icon": "📋", "name": "Best Practices", "color": "blue"},
-    "bestpractice": {"icon": "📋", "name": "Best Practices", "color": "blue"},
-    "maintainability": {"icon": "📋", "name": "Best Practices", "color": "blue"},
-    "readability": {"icon": "📋", "name": "Best Practices", "color": "blue"},
-    "naming": {"icon": "📋", "name": "Best Practices", "color": "blue"},
-    "namingconvention": {"icon": "📋", "name": "Best Practices", "color": "blue"},
-    "consistency": {"icon": "📋", "name": "Best Practices", "color": "blue"},
-    "convention": {"icon": "📋", "name": "Best Practices", "color": "blue"},
+    "bestpractices": {"icon": "📋", "name": _BEST_PRACTICES, "color": "blue"},
+    "bestpractice": {"icon": "📋", "name": _BEST_PRACTICES, "color": "blue"},
+    "maintainability": {"icon": "📋", "name": _BEST_PRACTICES, "color": "blue"},
+    "readability": {"icon": "📋", "name": _BEST_PRACTICES, "color": "blue"},
+    "naming": {"icon": "📋", "name": _BEST_PRACTICES, "color": "blue"},
+    "namingconvention": {"icon": "📋", "name": _BEST_PRACTICES, "color": "blue"},
+    "consistency": {"icon": "📋", "name": _BEST_PRACTICES, "color": "blue"},
+    "convention": {"icon": "📋", "name": _BEST_PRACTICES, "color": "blue"},
     # Performance
     "performance": {"icon": "⚡", "name": "Performance", "color": "yellow"},
     "perf": {"icon": "⚡", "name": "Performance", "color": "yellow"},
@@ -127,13 +132,13 @@ _ISSUE_TYPE_INFO = {
     "clarity": {"icon": "📚", "name": "Documentation", "color": "blue"},
     "completeness": {"icon": "📚", "name": "Documentation", "color": "blue"},
     # Breaking changes
-    "breaking": {"icon": "💥", "name": "Breaking Change", "color": "red"},
-    "breakingchange": {"icon": "💥", "name": "Breaking Change", "color": "red"},
-    "breakingchanges": {"icon": "💥", "name": "Breaking Change", "color": "red"},
-    "rename": {"icon": "💥", "name": "Breaking Change", "color": "red"},
-    "deletion": {"icon": "💥", "name": "Breaking Change", "color": "red"},
-    "signature": {"icon": "💥", "name": "Breaking Change", "color": "red"},
-    "signaturechange": {"icon": "💥", "name": "Breaking Change", "color": "red"},
+    "breaking": {"icon": "💥", "name": _BREAKING_CHANGE, "color": "red"},
+    "breakingchange": {"icon": "💥", "name": _BREAKING_CHANGE, "color": "red"},
+    "breakingchanges": {"icon": "💥", "name": _BREAKING_CHANGE, "color": "red"},
+    "rename": {"icon": "💥", "name": _BREAKING_CHANGE, "color": "red"},
+    "deletion": {"icon": "💥", "name": _BREAKING_CHANGE, "color": "red"},
+    "signature": {"icon": "💥", "name": _BREAKING_CHANGE, "color": "red"},
+    "signaturechange": {"icon": "💥", "name": _BREAKING_CHANGE, "color": "red"},
     # General
     "bug": {"icon": "🐛", "name": "Bug", "color": "red"},
     "error": {"icon": "🐛", "name": "Bug", "color": "red"},
@@ -177,7 +182,7 @@ class ConsoleUI:
 
         self.console.print(
             Panel(
-                f"[bold cyan]{icon} {tool_name}[/bold cyan]\n\n" f"[yellow]Parameters:[/yellow]\n" f"{params_text}",
+                f"[bold cyan]{icon} {tool_name}[/bold cyan]\n\n[yellow]Parameters:[/yellow]\n{params_text}",
                 title="📥 Tool Input",
                 border_style="blue",
             )
@@ -371,7 +376,7 @@ class ConsoleUI:
         progress_bar = "█" * current + "░" * (total - current)
         self.console.print(
             Panel(
-                f"📊 Step {current}/{total}: {step}\n\n" f"Progress: [{progress_bar}] {current}/{total}",
+                f"📊 Step {current}/{total}: {step}\n\nProgress: [{progress_bar}] {current}/{total}",
                 title="⚡ AI Progress",
                 border_style="green",
                 padding=(0, 1),
@@ -386,7 +391,7 @@ class ConsoleUI:
 
         self.console.print(
             Panel(
-                f"✍️ {writing_status}\n\n" f"📝 Current output:\n{content_preview}",
+                f"✍️ {writing_status}\n\n📝 Current output:\n{content_preview}",
                 title="📄 AI Writing in Real-Time",
                 border_style="yellow",
                 padding=(0, 1),
@@ -460,7 +465,7 @@ class ConsoleUI:
 
         self.console.print(
             Panel(
-                f"🎯 AI Analysis Completed!\n\n" f"📝 Response length: {response_length:,} characters\n" f"📊 Processing JSON response...",
+                f"🎯 AI Analysis Completed!\n\n📝 Response length: {response_length:,} characters\n📊 Processing JSON response...",
                 title="✅ Analysis Complete",
                 border_style="green",
             )

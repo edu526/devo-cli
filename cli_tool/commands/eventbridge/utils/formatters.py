@@ -8,6 +8,8 @@ from rich.table import Table
 
 console = Console()
 
+_LAMBDA_FUNCTION_SEGMENT = ":function:"
+
 # Common environment names for extraction
 COMMON_ENVS = [
     "dev",
@@ -118,8 +120,8 @@ def _format_targets(targets: List[Dict]) -> str:
         target_arn = target.get("Arn", "")
 
         # Extract Lambda function name from ARN
-        if ":function:" in target_arn:
-            func_name = target_arn.split(":function:")[-1].split(":")[0]
+        if _LAMBDA_FUNCTION_SEGMENT in target_arn:
+            func_name = target_arn.split(_LAMBDA_FUNCTION_SEGMENT)[-1].split(":")[0]
             target_list.append(func_name)
         elif target_arn:
             # For other services, show the last part of ARN
@@ -156,8 +158,8 @@ def _extract_environment(targets: List[Dict], tags: Dict[str, str]) -> str:
         target_arn = target.get("Arn", "")
 
         # Extract from Lambda function name pattern
-        if ":function:" in target_arn:
-            func_name = target_arn.split(":function:")[-1].split(":")[0]
+        if _LAMBDA_FUNCTION_SEGMENT in target_arn:
+            func_name = target_arn.split(_LAMBDA_FUNCTION_SEGMENT)[-1].split(":")[0]
             parts = func_name.split("-")
 
             for part in parts:

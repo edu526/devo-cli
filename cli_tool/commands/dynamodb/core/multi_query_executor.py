@@ -20,15 +20,15 @@ def _execute_single_query(
     """Execute a single query with retry on throttling."""
     query_values = _extract_query_values(query_config["key_condition"], expression_attribute_values)
 
-    kwargs = dict(
-        key_condition_expression=query_config["key_condition"],
-        filter_expression=None,
-        projection_expression=projection_expression,
-        index_name=query_config.get("index_name"),
-        limit=limit_per_query,
-        expression_attribute_values=query_values,
-        expression_attribute_names=expression_attribute_names,
-    )
+    kwargs = {
+        "key_condition_expression": query_config["key_condition"],
+        "filter_expression": None,
+        "projection_expression": projection_expression,
+        "index_name": query_config.get("index_name"),
+        "limit": limit_per_query,
+        "expression_attribute_values": query_values,
+        "expression_attribute_names": expression_attribute_names,
+    }
 
     try:
         return exporter.query_table(**kwargs)
