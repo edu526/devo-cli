@@ -82,10 +82,10 @@ def _update_shell_config_file(config_file: Path, export_line: str):
                 new_lines.append(line)
 
         if found:
-            resolved.write_text("".join(new_lines))
+            resolved.write_text("".join(new_lines))  # NOSONAR: path validated to be within home directory above
             console.print(f"\n[green]✓ Updated AWS_PROFILE in {resolved}[/green]")
         else:
-            with open(resolved, "a") as f:
+            with open(resolved, "a") as f:  # NOSONAR: path validated to be within home directory above
                 f.write("\n# AWS default profile (added by devo-cli)\n")
                 f.write(f"{export_line}\n")
             console.print(f"\n[green]✓ Added to {resolved}[/green]")
