@@ -99,6 +99,31 @@ def parse_sso_config(profile_name):
         return None
 
 
+def _flush_profile(current_profile: str, has_sso: bool, config_profiles: dict) -> None:
+    """Save the current profile entry into config_profiles if a profile is active."""
+    if current_profile is not None:
+        config_profiles[current_profile] = has_sso
+
+
+def _parse_config_line(line: str, current_profile, has_sso: bool, config_profiles: dict) -> tuple:
+    """Process a single line from the AWS config file.
+
+    Returns (current_profile, has_sso) reflecting the updated parser state.
+    """
+    if line.startswith("[profile "):
+        _flush_profile(current_profile, has_sso, config_profiles)
+        return line[9:-1].strip(), False
+    if line == _DEFAULT_PROFILE:
+        _flush_profile(current_profile, has_sso, config_profiles)
+        return "default", False
+    if line.startswith("[sso-session "):
+        _flush_profile(current_profile, has_sso, config_profiles)
+        return None, False
+    if current_profile and ("sso_" in line or line.startswith("sso_")):
+        return current_profile, True
+    return current_profile, has_sso
+
+
 def _read_config_profiles(config_path: Path) -> dict:
     """Read profile names and SSO presence from ~/.aws/config.
 
@@ -111,27 +136,9 @@ def _read_config_profiles(config_path: Path) -> dict:
     try:
         with config_path.open("r") as f:
             for line in f:
-                line = line.strip()
-                if line.startswith("[profile "):
-                    if current_profile:
-                        config_profiles[current_profile] = has_sso
-                    current_profile = line[9:-1].strip()
-                    has_sso = False
-                elif line == _DEFAULT_PROFILE:
-                    if current_profile:
-                        config_profiles[current_profile] = has_sso
-                    current_profile = "default"
-                    has_sso = False
-                elif line.startswith("[sso-session "):
-                    if current_profile:
-                        config_profiles[current_profile] = has_sso
-                    current_profile = None
-                    has_sso = False
-                elif current_profile and ("sso_" in line or line.startswith("sso_")):
-                    has_sso = True
+                current_profile, has_sso = _parse_config_line(line.strip(), current_profile, has_sso, config_profiles)
 
-        if current_profile:
-            config_profiles[current_profile] = has_sso
+        _flush_profile(current_profile, has_sso, config_profiles)
     except Exception:
         pass
 

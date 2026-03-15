@@ -57,22 +57,17 @@ def _read_sso_session_config(config_path, session_name: str) -> tuple:
     return sso_start_url, sso_region
 
 
-def _select_account_from_list(accounts: list, sso_region: str, access_token: str) -> tuple:
-    """Display account list, prompt selection, then fetch and select a role. Returns (account_id, role_name, region)."""
-    console.print("[green]Available accounts:[/green]")
-    for i, account in enumerate(accounts, 1):
-        account_id = account.get("accountId")
-        account_name = account.get("accountName", "N/A")
-        console.print(f"  {i}. {account_name} ({account_id})")
+def _select_role_from_list(roles: list) -> str:
+    """Display role list and prompt user to select one. Returns the selected role name."""
+    console.print("[green]Available roles:[/green]")
+    for i, role in enumerate(roles, 1):
+        console.print(f"  {i}. {role.get('roleName')}")
+    role_choice = click.prompt("\nSelect role", type=int, default=1)
+    return roles[role_choice - 1]["roleName"] if 1 <= role_choice <= len(roles) else roles[0]["roleName"]
 
-    account_choice = click.prompt("\nSelect account", type=int, default=1)
-    if not (1 <= account_choice <= len(accounts)):
-        console.print("[red]Invalid selection[/red]")
-        return None, None, None
 
-    selected_account = accounts[account_choice - 1]
-    account_id = selected_account["accountId"]
-
+def _fetch_role_for_account(account_id: str, sso_region: str, access_token: str) -> str:
+    """Fetch available roles for an account and prompt user to select one. Falls back to manual entry."""
     console.print(f"\n[blue]Fetching roles for account {account_id}...[/blue]\n")
     list_roles_cmd = [
         "aws",
@@ -90,17 +85,31 @@ def _select_account_from_list(accounts: list, sso_region: str, access_token: str
     if result.returncode == 0:
         roles = json.loads(result.stdout).get("roleList", [])
         if roles:
-            console.print("[green]Available roles:[/green]")
-            for i, role in enumerate(roles, 1):
-                console.print(f"  {i}. {role.get('roleName')}")
-            role_choice = click.prompt("\nSelect role", type=int, default=1)
-            role_name = roles[role_choice - 1]["roleName"] if 1 <= role_choice <= len(roles) else roles[0]["roleName"]
-        else:
-            console.print("[yellow]No roles found, enter manually[/yellow]")
-            role_name = click.prompt(_ROLE_NAME_PROMPT, default="AdministratorAccess", type=str)
+            return _select_role_from_list(roles)
+        console.print("[yellow]No roles found, enter manually[/yellow]")
     else:
         console.print("[yellow]Could not fetch roles, enter manually[/yellow]")
-        role_name = click.prompt(_ROLE_NAME_PROMPT, default="AdministratorAccess", type=str)
+
+    return click.prompt(_ROLE_NAME_PROMPT, default="AdministratorAccess", type=str)
+
+
+def _select_account_from_list(accounts: list, sso_region: str, access_token: str) -> tuple:
+    """Display account list, prompt selection, then fetch and select a role. Returns (account_id, role_name, region)."""
+    console.print("[green]Available accounts:[/green]")
+    for i, account in enumerate(accounts, 1):
+        account_id = account.get("accountId")
+        account_name = account.get("accountName", "N/A")
+        console.print(f"  {i}. {account_name} ({account_id})")
+
+    account_choice = click.prompt("\nSelect account", type=int, default=1)
+    if not (1 <= account_choice <= len(accounts)):
+        console.print("[red]Invalid selection[/red]")
+        return None, None, None
+
+    selected_account = accounts[account_choice - 1]
+    account_id = selected_account["accountId"]
+
+    role_name = _fetch_role_for_account(account_id, sso_region, access_token)
 
     region = click.prompt("\nDefault region", default="us-east-1", type=str)
     return account_id, role_name, region
@@ -147,20 +156,36 @@ output = json
         f.write("\n")
 
 
-def configure_profile_with_existing_session(profile_name, session_name):
-    """Configure a profile using an existing SSO session."""
+def _sso_login_for_session(session_name: str) -> bool:
+    """Run 'aws sso login' for the given session. Returns True on success."""
     console.print("[yellow]Logging in to get available accounts...[/yellow]\n")
-
     try:
         result = subprocess.run(["aws", "sso", "login", "--sso-session", session_name], timeout=120)
         if result.returncode != 0:
             console.print("[red]✗ SSO authentication failed[/red]")
-            return None
+            return False
     except subprocess.TimeoutExpired:
         console.print("[red]✗ SSO authentication timed out[/red]")
-        return None
+        return False
     except KeyboardInterrupt:
         console.print("\n[yellow]Authentication cancelled[/yellow]")
+        return False
+    return True
+
+
+def _resolve_account_role_region_for_session(sso_start_url: str, sso_region: str) -> tuple:
+    """Resolve account/role/region using SSO cache token or fall back to manual entry."""
+    access_token = get_sso_cache_token(sso_start_url)
+    if access_token:
+        return _resolve_account_role_region(access_token, sso_region)
+    console.print("[yellow]Could not get access token from cache[/yellow]")
+    console.print(_MANUAL_ACCOUNT_ROLE_PROMPT)
+    return _prompt_manual_account_role_region()
+
+
+def configure_profile_with_existing_session(profile_name, session_name):
+    """Configure a profile using an existing SSO session."""
+    if not _sso_login_for_session(session_name):
         return None
 
     config_path = get_aws_config_path()
@@ -171,96 +196,113 @@ def configure_profile_with_existing_session(profile_name, session_name):
         console.print(_MANUAL_ACCOUNT_ROLE_PROMPT)
         account_id, role_name, region = _prompt_manual_account_role_region()
     else:
-        access_token = get_sso_cache_token(sso_start_url)
-        if access_token:
-            account_id, role_name, region = _resolve_account_role_region(access_token, sso_region)
-            if account_id is None:
-                return None
-        else:
-            console.print("[yellow]Could not get access token from cache[/yellow]")
-            console.print(_MANUAL_ACCOUNT_ROLE_PROMPT)
-            account_id, role_name, region = _prompt_manual_account_role_region()
+        account_id, role_name, region = _resolve_account_role_region_for_session(sso_start_url, sso_region)
+        if account_id is None:
+            return None
 
     _write_profile_config(profile_name, session_name, account_id, role_name, region)
     console.print(f"\n[green]✓ Profile '{profile_name}' configured successfully[/green]")
     return profile_name
 
 
-def configure_sso_profile(profile_name=None):
-    """Interactive SSO profile configuration using AWS CLI."""
-    console.print("\n[blue]═══ AWS SSO Configuration ═══[/blue]\n")
+def _print_existing_profile_info(existing_config: dict) -> None:
+    """Print details of an existing profile configuration."""
+    if "sso_account_id" in existing_config:
+        console.print(f"  Account: {existing_config.get('sso_account_id')}")
+    if "sso_role_name" in existing_config:
+        console.print(f"  Role: {existing_config.get('sso_role_name')}")
+    if "sso_start_url" in existing_config:
+        console.print(f"  SSO URL: {existing_config.get('sso_start_url')}")
 
-    if not profile_name:
-        profile_name = click.prompt("Profile name", type=str)
 
-    if profile_name.lower() == "default":
+def _handle_choice_keep(profile_name: str, is_sso: bool) -> tuple:
+    """Handle 'keep and login' choice. Returns (profile_name, should_continue)."""
+    if not is_sso:
+        console.print(f"[yellow]Profile '{profile_name}' is not configured for SSO[/yellow]")
+        console.print("Choose option 2 to reconfigure it for SSO")
+        return None, False
+    return profile_name, False
+
+
+def _handle_choice_overwrite(profile_name: str) -> tuple:
+    """Handle 'reconfigure/overwrite' choice. Returns (profile_name, should_continue)."""
+    if not click.confirm(f"\n⚠ Overwrite '{profile_name}'?", default=False):
+        return None, False
+    console.print("")
+    return profile_name, True
+
+
+def _handle_choice_new_name() -> tuple:
+    """Handle 'new profile name' choice. Returns (new_name, should_continue)."""
+    new_name = click.prompt("\nNew name", type=str)
+    if new_name.lower() == "default":
         console.print(_CANNOT_USE_DEFAULT)
         console.print(_USE_SET_DEFAULT_HINT)
+        return None, False
+    if get_profile_config(new_name):
+        console.print(f"[red]'{new_name}' exists too[/red]")
+        return None, False
+    console.print("")
+    return new_name, True
+
+
+def _handle_existing_profile_choice(profile_name: str, existing_config: dict) -> tuple:
+    """Prompt user for action when profile already exists.
+
+    Returns (resolved_profile_name, should_continue) where should_continue=False means abort.
+    """
+    console.print(f"[yellow]⚠ Profile '{profile_name}' already exists:[/yellow]\n")
+    _print_existing_profile_info(existing_config)
+
+    is_sso = "sso_start_url" in existing_config or "sso_session" in existing_config
+
+    console.print("\nOptions:")
+    console.print("  1. Keep and login (recommended)" if is_sso else "  1. Keep profile (not SSO, cannot login)")
+    console.print("  2. Reconfigure (overwrite)")
+    console.print("  3. New profile name")
+    console.print("  4. Cancel")
+    choice = click.prompt("\nSelect", type=int, default=1)
+
+    if choice == 1:
+        return _handle_choice_keep(profile_name, is_sso)
+    if choice == 2:
+        return _handle_choice_overwrite(profile_name)
+    if choice == 3:
+        return _handle_choice_new_name()
+    return None, False
+
+
+def _select_or_create_session(profile_name: str) -> str:
+    """Let user pick an existing SSO session or fall through to create a new one.
+
+    Returns the profile_name if an existing session was used, otherwise None
+    (caller should proceed with 'aws configure sso').
+    """
+    existing_sessions = get_existing_sso_sessions()
+    if not existing_sessions:
         return None
 
-    # Check if profile already exists
-    existing_config = get_profile_config(profile_name)
-    if existing_config:
-        console.print(f"[yellow]⚠ Profile '{profile_name}' already exists:[/yellow]\n")
-        if "sso_account_id" in existing_config:
-            console.print(f"  Account: {existing_config.get('sso_account_id')}")
-        if "sso_role_name" in existing_config:
-            console.print(f"  Role: {existing_config.get('sso_role_name')}")
-        if "sso_start_url" in existing_config:
-            console.print(f"  SSO URL: {existing_config.get('sso_start_url')}")
+    session_list = list(existing_sessions.items())
+    console.print("[green]Found existing SSO sessions:[/green]")
+    for i, (session_name, config) in enumerate(session_list, 1):
+        sso_url = config.get("sso_start_url", "N/A")
+        console.print(f"  {i}. {session_name} - {sso_url}")
+    console.print(f"  {len(session_list) + 1}. Create new SSO session")
+    console.print("")
 
-        is_sso = "sso_start_url" in existing_config or "sso_session" in existing_config
+    choice = click.prompt("Select SSO session", type=int, default=1)
 
-        console.print("\nOptions:")
-        console.print("  1. Keep and login (recommended)" if is_sso else "  1. Keep profile (not SSO, cannot login)")
-        console.print("  2. Reconfigure (overwrite)")
-        console.print("  3. New profile name")
-        console.print("  4. Cancel")
-        choice = click.prompt("\nSelect", type=int, default=1)
+    if 1 <= choice <= len(session_list):
+        session_name, session_config = session_list[choice - 1]
+        console.print(f"\n[cyan]Using SSO session: {session_name}[/cyan]")
+        console.print(f"SSO URL: {session_config.get('sso_start_url', 'N/A')}\n")
+        return configure_profile_with_existing_session(profile_name, session_name)
 
-        if choice == 1:
-            if not is_sso:
-                console.print(f"[yellow]Profile '{profile_name}' is not configured for SSO[/yellow]")
-                console.print("Choose option 2 to reconfigure it for SSO")
-                return None
-            return profile_name
-        elif choice == 2:
-            if not click.confirm(f"\n⚠ Overwrite '{profile_name}'?", default=False):
-                return None
-        elif choice == 3:
-            new_name = click.prompt("\nNew name", type=str)
-            if new_name.lower() == "default":
-                console.print(_CANNOT_USE_DEFAULT)
-                console.print(_USE_SET_DEFAULT_HINT)
-                return None
-            if get_profile_config(new_name):
-                console.print(f"[red]'{new_name}' exists too[/red]")
-                return None
-            profile_name = new_name
-        else:
-            return None
-        console.print("")
+    return None
 
-    # Check for existing SSO sessions
-    existing_sessions = get_existing_sso_sessions()
 
-    if existing_sessions:
-        console.print("[green]Found existing SSO sessions:[/green]")
-        session_list = list(existing_sessions.items())
-        for i, (session_name, config) in enumerate(session_list, 1):
-            sso_url = config.get("sso_start_url", "N/A")
-            console.print(f"  {i}. {session_name} - {sso_url}")
-        console.print(f"  {len(session_list) + 1}. Create new SSO session")
-        console.print("")
-
-        choice = click.prompt("Select SSO session", type=int, default=1)
-
-        if 1 <= choice <= len(session_list):
-            session_name, session_config = session_list[choice - 1]
-            console.print(f"\n[cyan]Using SSO session: {session_name}[/cyan]")
-            console.print(f"SSO URL: {session_config.get('sso_start_url', 'N/A')}\n")
-            return configure_profile_with_existing_session(profile_name, session_name)
-
+def _run_aws_configure_sso(profile_name: str) -> str:
+    """Run 'aws configure sso' interactively and return profile_name on success, None on failure."""
     console.print(f"[cyan]Configuring profile: {profile_name}[/cyan]\n")
     console.print("[yellow]Using AWS CLI to configure SSO...[/yellow]")
     console.print("[dim]This will open your browser to authenticate and select account/role[/dim]\n")
@@ -278,3 +320,33 @@ def configure_sso_profile(profile_name=None):
     except Exception as e:
         console.print(f"\n[red]Error during configuration: {e}[/red]")
         return None
+
+
+def configure_sso_profile(profile_name=None):
+    """Interactive SSO profile configuration using AWS CLI."""
+    console.print("\n[blue]═══ AWS SSO Configuration ═══[/blue]\n")
+
+    if not profile_name:
+        profile_name = click.prompt("Profile name", type=str)
+
+    if profile_name.lower() == "default":
+        console.print(_CANNOT_USE_DEFAULT)
+        console.print(_USE_SET_DEFAULT_HINT)
+        return None
+
+    # Check if profile already exists
+    existing_config = get_profile_config(profile_name)
+    if existing_config:
+        profile_name, should_continue = _handle_existing_profile_choice(profile_name, existing_config)
+        if profile_name is None:
+            return None
+        if not should_continue:
+            # choice was "keep and login" — return the confirmed profile name directly
+            return profile_name
+
+    # Check for existing SSO sessions and let user pick one
+    result = _select_or_create_session(profile_name)
+    if result is not None:
+        return result
+
+    return _run_aws_configure_sso(profile_name)

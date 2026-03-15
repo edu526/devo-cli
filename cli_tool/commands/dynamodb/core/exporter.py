@@ -137,6 +137,17 @@ class DynamoDBExporter:
 
         return rows
 
+    def _format_bool_for_csv(self, value: bool, bool_format: str) -> str:
+        """Format a boolean value for CSV output according to bool_format style."""
+        _BOOL_FORMATS = {
+            "lowercase": ("true", "false"),
+            "uppercase": ("True", "False"),
+            "numeric": ("1", "0"),
+            "letter": ("t", "f"),
+        }
+        true_val, false_val = _BOOL_FORMATS.get(bool_format, (str(value).lower(), str(value).lower()))
+        return true_val if value else false_val
+
     def _format_value_for_csv(self, value: Any, null_value: str = "", bool_format: str = "lowercase") -> str:
         """Format value for CSV output.
 
@@ -146,16 +157,7 @@ class DynamoDBExporter:
         if value is None:
             return null_value
         if isinstance(value, bool):
-            if bool_format == "lowercase":
-                return "true" if value else "false"
-            elif bool_format == "uppercase":
-                return "True" if value else "False"
-            elif bool_format == "numeric":
-                return "1" if value else "0"
-            elif bool_format == "letter":
-                return "t" if value else "f"
-            else:
-                return str(value).lower()
+            return self._format_bool_for_csv(value, bool_format)
         if isinstance(value, Decimal):
             # Convert Decimal to int or float
             if value % 1 == 0:
@@ -287,6 +289,83 @@ class DynamoDBExporter:
 
         return items
 
+    def _open_csv_file_handle(self, output_file: Path, compress: Optional[str], encoding: str):
+        """Open the appropriate file handle for CSV writing based on compression type.
+
+        Returns (actual_output_file, file_handle, zip_file_or_None).
+        """
+        actual_output_file = output_file
+        zip_file = None
+
+        if compress == "gzip":
+            actual_output_file = output_file.with_suffix(output_file.suffix + ".gz")
+            file_handle = gzip.open(actual_output_file, "wt", encoding=encoding, newline="")
+        elif compress == "zip":
+            import io
+
+            actual_output_file = output_file.with_suffix(".zip")
+            zip_file = zipfile.ZipFile(actual_output_file, "w", zipfile.ZIP_DEFLATED)
+            file_handle = zip_file.open(output_file.name, "w")
+            file_handle = io.TextIOWrapper(file_handle, encoding=encoding, newline="")
+        else:
+            file_handle = actual_output_file.open("w", encoding=encoding, newline="")
+
+        return actual_output_file, file_handle, zip_file
+
+    def _write_csv_metadata(self, file_handle, actual_output_file: Path, compress: Optional[str], total_items: int, mode: str) -> None:
+        """Write export metadata either as a sidecar .meta file (compressed) or as comment lines."""
+        if compress:
+            meta_file = actual_output_file.with_suffix(".meta")
+            with meta_file.open("w", encoding="utf-8") as mf:
+                mf.write(f"Export Date: {datetime.now().isoformat()}\n")
+                mf.write(f"Table: {self.table_name}\n")
+                mf.write(f"Region: {self.region}\n")
+                if self.profile:
+                    mf.write(f"Profile: {self.profile}\n")
+                mf.write(f"Total Items: {total_items}\n")
+                mf.write(f"Mode: {mode}\n")
+            console.print(f"[cyan]Metadata written to: {meta_file}[/cyan]")
+        else:
+            file_handle.write(f"# Export Date: {datetime.now().isoformat()}\n")
+            file_handle.write(f"# Table: {self.table_name}\n")
+            file_handle.write(f"# Region: {self.region}\n")
+            if self.profile:
+                file_handle.write(f"# Profile: {self.profile}\n")
+            file_handle.write(f"# Total Items: {total_items}\n")
+            file_handle.write(f"# Mode: {mode}\n")
+            file_handle.write("#\n")
+
+    def _convert_items_for_csv(self, items: List[Dict[str, Any]], mode: str) -> List[Dict[str, Any]]:
+        """Convert DynamoDB items to plain dicts according to the CSV export mode."""
+        converted_items = []
+        for item in items:
+            converted = self._convert_dynamodb_item(item)
+            if mode == "strings":
+                converted_items.append(self._serialize_as_json(converted))
+            elif mode == "flatten":
+                converted_items.append(self._flatten_dict(converted))
+            elif mode == "normalize":
+                for row in self._normalize_lists(converted):
+                    converted_items.append(self._flatten_dict(row))
+            else:
+                converted_items.append(converted)
+        return converted_items
+
+    def _warn_normalize_large_lists(self, items: List[Dict[str, Any]]) -> None:
+        """Warn the user when normalize mode may produce a very large number of rows."""
+        max_list_size = 0
+        total_rows_estimate = 0
+        for item in items[:100]:  # Sample first 100 items
+            converted = self._convert_dynamodb_item(item)
+            normalized = self._normalize_lists(converted)
+            max_list_size = max(max_list_size, len(normalized))
+            total_rows_estimate += len(normalized)
+
+        if max_list_size > 100:
+            console.print(f"[yellow]⚠ Warning: Detected items with large lists (up to {max_list_size} elements)[/yellow]")
+            console.print(f"[yellow]  Normalize mode will expand these into {total_rows_estimate:,}+ rows[/yellow]")
+            console.print("[yellow]  Consider using 'strings' or 'flatten' mode for better performance[/yellow]")
+
     def export_to_csv(
         self,
         items: List[Dict[str, Any]],
@@ -316,20 +395,8 @@ class DynamoDBExporter:
 
         self.stats["start_time"] = datetime.now()
 
-        # Warn about normalize mode with large lists
         if mode == "normalize":
-            max_list_size = 0
-            total_rows_estimate = 0
-            for item in items[:100]:  # Sample first 100 items
-                converted = self._convert_dynamodb_item(item)
-                normalized = self._normalize_lists(converted)
-                max_list_size = max(max_list_size, len(normalized))
-                total_rows_estimate += len(normalized)
-
-            if max_list_size > 100:
-                console.print(f"[yellow]⚠ Warning: Detected items with large lists (up to {max_list_size} elements)[/yellow]")
-                console.print(f"[yellow]  Normalize mode will expand these into {total_rows_estimate:,}+ rows[/yellow]")
-                console.print("[yellow]  Consider using 'strings' or 'flatten' mode for better performance[/yellow]")
+            self._warn_normalize_large_lists(items)
 
         # For large datasets, use streaming mode
         if len(items) > 10000 and not streaming:
@@ -339,48 +406,16 @@ class DynamoDBExporter:
         if streaming:
             return self._export_to_csv_streaming(items, output_file, mode, null_value, delimiter, encoding, include_metadata, compress, bool_format)
 
-        # Non-streaming mode (original implementation)
-        # Convert items based on export mode
-        converted_items = []
-        for item in items:
-            converted = self._convert_dynamodb_item(item)
-
-            if mode == "strings":
-                converted = self._serialize_as_json(converted)
-                converted_items.append(converted)
-            elif mode == "flatten":
-                converted = self._flatten_dict(converted)
-                converted_items.append(converted)
-            elif mode == "normalize":
-                normalized_rows = self._normalize_lists(converted)
-                for row in normalized_rows:
-                    flattened_row = self._flatten_dict(row)
-                    converted_items.append(flattened_row)
-            else:
-                converted_items.append(converted)
+        # Non-streaming mode: convert all items first, then write
+        converted_items = self._convert_items_for_csv(items, mode)
 
         # Get all unique keys for CSV headers
-        all_keys = set()
+        all_keys: set = set()  # noqa: C405
         for item in converted_items:
             all_keys.update(item.keys())
         fieldnames = sorted(all_keys)
 
-        # Determine output file with compression
-        actual_output_file = output_file
-        zip_file = None
-
-        if compress == "gzip":
-            actual_output_file = output_file.with_suffix(output_file.suffix + ".gz")
-            file_handle = gzip.open(actual_output_file, "wt", encoding=encoding, newline="")
-        elif compress == "zip":
-            actual_output_file = output_file.with_suffix(".zip")
-            zip_file = zipfile.ZipFile(actual_output_file, "w", zipfile.ZIP_DEFLATED)
-            file_handle = zip_file.open(output_file.name, "w")
-            import io
-
-            file_handle = io.TextIOWrapper(file_handle, encoding=encoding, newline="")
-        else:
-            file_handle = actual_output_file.open("w", encoding=encoding, newline="")
+        actual_output_file, file_handle, zip_file = self._open_csv_file_handle(output_file, compress, encoding)
 
         try:
             writer = csv.DictWriter(
@@ -392,28 +427,8 @@ class DynamoDBExporter:
                 escapechar=None,
             )
 
-            # Write metadata
             if include_metadata:
-                if compress:
-                    meta_file = actual_output_file.with_suffix(".meta")
-                    with meta_file.open("w", encoding="utf-8") as mf:
-                        mf.write(f"Export Date: {datetime.now().isoformat()}\n")
-                        mf.write(f"Table: {self.table_name}\n")
-                        mf.write(f"Region: {self.region}\n")
-                        if self.profile:
-                            mf.write(f"Profile: {self.profile}\n")
-                        mf.write(f"Total Items: {len(converted_items)}\n")
-                        mf.write(f"Mode: {mode}\n")
-                    console.print(f"[cyan]Metadata written to: {meta_file}[/cyan]")
-                else:
-                    file_handle.write(f"# Export Date: {datetime.now().isoformat()}\n")
-                    file_handle.write(f"# Table: {self.table_name}\n")
-                    file_handle.write(f"# Region: {self.region}\n")
-                    if self.profile:
-                        file_handle.write(f"# Profile: {self.profile}\n")
-                    file_handle.write(f"# Total Items: {len(converted_items)}\n")
-                    file_handle.write(f"# Mode: {mode}\n")
-                    file_handle.write("#\n")
+                self._write_csv_metadata(file_handle, actual_output_file, compress, len(converted_items), mode)
 
             writer.writeheader()
 
@@ -445,6 +460,46 @@ class DynamoDBExporter:
 
         return actual_output_file
 
+    def _collect_streaming_fieldnames(self, items: List[Dict[str, Any]], mode: str, sample_size: int) -> List[str]:
+        """Sample the first items to discover all possible CSV column names."""
+        all_keys: set = set()  # noqa: C405
+        for item in items[:sample_size]:
+            converted = self._convert_dynamodb_item(item)
+            if mode == "strings":
+                converted = self._serialize_as_json(converted)
+                all_keys.update(converted.keys())
+            elif mode == "flatten":
+                converted = self._flatten_dict(converted)
+                all_keys.update(converted.keys())
+            elif mode == "normalize":
+                for row in self._normalize_lists(converted):
+                    all_keys.update(self._flatten_dict(row).keys())
+            else:
+                all_keys.update(converted.keys())
+        return sorted(all_keys)
+
+    def _write_streaming_item(self, writer, converted: Dict[str, Any], mode: str, null_value: str, bool_format: str) -> int:
+        """Write a single converted item (or its normalized rows) to the CSV writer.
+
+        Returns the number of rows written.
+        """
+        rows_written = 0
+        if mode == "normalize":
+            for row in self._normalize_lists(converted):
+                flattened = self._flatten_dict(row)
+                formatted = {k: self._format_value_for_csv(v, null_value, bool_format) for k, v in flattened.items()}
+                writer.writerow(formatted)
+                rows_written += 1
+        else:
+            if mode == "strings":
+                converted = self._serialize_as_json(converted)
+            elif mode == "flatten":
+                converted = self._flatten_dict(converted)
+            formatted = {k: self._format_value_for_csv(v, null_value, bool_format) for k, v in converted.items()}
+            writer.writerow(formatted)
+            rows_written = 1
+        return rows_written
+
     def _export_to_csv_streaming(
         self,
         items: List[Dict[str, Any]],
@@ -462,40 +517,9 @@ class DynamoDBExporter:
         Returns:
             Path: The actual output file path (may differ from input if compressed)
         """
-        # First pass: collect all possible fieldnames
-        all_keys = set()
-        sample_size = min(1000, len(items))
-        for item in items[:sample_size]:
-            converted = self._convert_dynamodb_item(item)
-            if mode == "strings":
-                converted = self._serialize_as_json(converted)
-            elif mode == "flatten":
-                converted = self._flatten_dict(converted)
-            elif mode == "normalize":
-                normalized = self._normalize_lists(converted)
-                for row in normalized:
-                    all_keys.update(self._flatten_dict(row).keys())
-                continue
-            all_keys.update(converted.keys())
+        fieldnames = self._collect_streaming_fieldnames(items, mode, min(1000, len(items)))
 
-        fieldnames = sorted(all_keys)
-
-        # Open file for writing
-        actual_output_file = output_file
-        zip_file = None
-
-        if compress == "gzip":
-            actual_output_file = output_file.with_suffix(output_file.suffix + ".gz")
-            file_handle = gzip.open(actual_output_file, "wt", encoding=encoding, newline="")
-        elif compress == "zip":
-            actual_output_file = output_file.with_suffix(".zip")
-            zip_file = zipfile.ZipFile(actual_output_file, "w", zipfile.ZIP_DEFLATED)
-            file_handle = zip_file.open(output_file.name, "w")
-            import io
-
-            file_handle = io.TextIOWrapper(file_handle, encoding=encoding, newline="")
-        else:
-            file_handle = actual_output_file.open("w", encoding=encoding, newline="")
+        actual_output_file, file_handle, zip_file = self._open_csv_file_handle(output_file, compress, encoding)
 
         try:
             writer = csv.DictWriter(
@@ -507,31 +531,11 @@ class DynamoDBExporter:
                 escapechar=None,
             )
 
-            # Write metadata
             if include_metadata:
-                if compress:
-                    meta_file = actual_output_file.with_suffix(".meta")
-                    with meta_file.open("w", encoding="utf-8") as mf:
-                        mf.write(f"Export Date: {datetime.now().isoformat()}\n")
-                        mf.write(f"Table: {self.table_name}\n")
-                        mf.write(f"Region: {self.region}\n")
-                        if self.profile:
-                            mf.write(f"Profile: {self.profile}\n")
-                        mf.write(f"Total Items: {len(items)}\n")
-                        mf.write(f"Mode: {mode}\n")
-                else:
-                    file_handle.write(f"# Export Date: {datetime.now().isoformat()}\n")
-                    file_handle.write(f"# Table: {self.table_name}\n")
-                    file_handle.write(f"# Region: {self.region}\n")
-                    if self.profile:
-                        file_handle.write(f"# Profile: {self.profile}\n")
-                    file_handle.write(f"# Total Items: {len(items)}\n")
-                    file_handle.write(f"# Mode: {mode}\n")
-                    file_handle.write("#\n")
+                self._write_csv_metadata(file_handle, actual_output_file, compress, len(items), mode)
 
             writer.writeheader()
 
-            # Stream items
             items_written = 0
             with Progress(
                 SpinnerColumn(),
@@ -547,29 +551,7 @@ class DynamoDBExporter:
 
                 for item in items:
                     converted = self._convert_dynamodb_item(item)
-
-                    if mode == "strings":
-                        converted = self._serialize_as_json(converted)
-                        formatted = {k: self._format_value_for_csv(v, null_value, bool_format) for k, v in converted.items()}
-                        writer.writerow(formatted)
-                        items_written += 1
-                    elif mode == "flatten":
-                        converted = self._flatten_dict(converted)
-                        formatted = {k: self._format_value_for_csv(v, null_value, bool_format) for k, v in converted.items()}
-                        writer.writerow(formatted)
-                        items_written += 1
-                    elif mode == "normalize":
-                        normalized = self._normalize_lists(converted)
-                        for row in normalized:
-                            flattened = self._flatten_dict(row)
-                            formatted = {k: self._format_value_for_csv(v, null_value, bool_format) for k, v in flattened.items()}
-                            writer.writerow(formatted)
-                            items_written += 1
-                    else:
-                        formatted = {k: self._format_value_for_csv(v, null_value, bool_format) for k, v in converted.items()}
-                        writer.writerow(formatted)
-                        items_written += 1
-
+                    items_written += self._write_streaming_item(writer, converted, mode, null_value, bool_format)
                     progress.update(task, advance=1)
 
         finally:
@@ -582,6 +564,46 @@ class DynamoDBExporter:
         self.stats["file_size"] = actual_output_file.stat().st_size
 
         return actual_output_file
+
+    def _open_json_file_handle(self, output_file: Path, compress: Optional[str], encoding: str):
+        """Open the appropriate file handle for JSON writing based on compression type.
+
+        Returns (actual_output_file, file_handle, zip_file_or_None).
+        """
+        actual_output_file = output_file
+        zip_file = None
+
+        if compress == "gzip":
+            # Only add .gz if not already present
+            if not str(output_file).endswith(".gz"):
+                actual_output_file = output_file.with_suffix(output_file.suffix + ".gz")
+            file_handle = gzip.open(actual_output_file, "wt", encoding=encoding)
+        elif compress == "zip":
+            import io
+
+            # Only add .zip if not already present
+            if not str(output_file).endswith(".zip"):
+                actual_output_file = output_file.with_suffix(".zip")
+            zip_file = zipfile.ZipFile(actual_output_file, "w", zipfile.ZIP_DEFLATED)
+            # Use original filename without .zip for the entry inside the zip
+            entry_name = output_file.stem + output_file.suffix if not str(output_file).endswith(".zip") else output_file.stem
+            file_handle = zip_file.open(entry_name, "w")
+            file_handle = io.TextIOWrapper(file_handle, encoding=encoding)
+        else:
+            file_handle = actual_output_file.open("w", encoding=encoding)
+
+        return actual_output_file, file_handle, zip_file
+
+    def _write_json_items(self, file_handle, converted_items: List[Dict[str, Any]], jsonl: bool, pretty: bool) -> None:
+        """Write converted items to file_handle in JSON or JSONL format."""
+        if jsonl:
+            for item in converted_items:
+                json.dump(item, file_handle, default=str)
+                file_handle.write("\n")
+        elif pretty:
+            json.dump(converted_items, file_handle, indent=2, default=str)
+        else:
+            json.dump(converted_items, file_handle, default=str)
 
     def export_to_json(
         self,
@@ -603,49 +625,12 @@ class DynamoDBExporter:
 
         self.stats["start_time"] = datetime.now()
 
-        # Convert items
         converted_items = [self._convert_dynamodb_item(item) for item in items]
 
-        # Determine output file with compression
-        actual_output_file = output_file
-        zip_file = None
-
-        if compress == "gzip":
-            # Only add .gz if not already present
-            if not str(output_file).endswith(".gz"):
-                actual_output_file = output_file.with_suffix(output_file.suffix + ".gz")
-            else:
-                actual_output_file = output_file
-            file_handle = gzip.open(actual_output_file, "wt", encoding=encoding)
-        elif compress == "zip":
-            # Only add .zip if not already present
-            if not str(output_file).endswith(".zip"):
-                actual_output_file = output_file.with_suffix(".zip")
-            else:
-                actual_output_file = output_file
-            zip_file = zipfile.ZipFile(actual_output_file, "w", zipfile.ZIP_DEFLATED)
-            # Use original filename without .zip for the entry inside the zip
-            entry_name = output_file.stem + output_file.suffix if not str(output_file).endswith(".zip") else output_file.stem
-            file_handle = zip_file.open(entry_name, "w")
-            import io
-
-            file_handle = io.TextIOWrapper(file_handle, encoding=encoding)
-        else:
-            file_handle = actual_output_file.open("w", encoding=encoding)
+        actual_output_file, file_handle, zip_file = self._open_json_file_handle(output_file, compress, encoding)
 
         try:
-            if jsonl:
-                # JSON Lines format
-                for item in converted_items:
-                    json.dump(item, file_handle, default=str)
-                    file_handle.write("\n")
-            else:
-                # Standard JSON array
-                if pretty:
-                    json.dump(converted_items, file_handle, indent=2, default=str)
-                else:
-                    json.dump(converted_items, file_handle, default=str)
-
+            self._write_json_items(file_handle, converted_items, jsonl, pretty)
         finally:
             file_handle.close()
             if zip_file:
