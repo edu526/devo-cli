@@ -18,12 +18,14 @@ console = Console()
 
 _CANNOT_USE_DEFAULT = "[red]✗ Cannot use 'default' as a profile name.[/red]"
 _USE_SET_DEFAULT_HINT = "[dim]Use 'devo aws-login set-default' to set a profile as default.[/dim]"
+_ROLE_NAME_PROMPT = "Role name"
+_MANUAL_ACCOUNT_ROLE_PROMPT = "\n[blue]Enter account and role details manually:[/blue]\n"
 
 
 def _prompt_manual_account_role_region() -> tuple:
     """Prompt user to enter account, role, and region manually."""
     account_id = click.prompt("AWS Account ID", type=str)
-    role_name = click.prompt("Role name", default="AdministratorAccess", type=str)
+    role_name = click.prompt(_ROLE_NAME_PROMPT, default="AdministratorAccess", type=str)
     region = click.prompt("Default region", default="us-east-1", type=str)
     return account_id, role_name, region
 
@@ -95,10 +97,10 @@ def _select_account_from_list(accounts: list, sso_region: str, access_token: str
             role_name = roles[role_choice - 1]["roleName"] if 1 <= role_choice <= len(roles) else roles[0]["roleName"]
         else:
             console.print("[yellow]No roles found, enter manually[/yellow]")
-            role_name = click.prompt("Role name", default="AdministratorAccess", type=str)
+            role_name = click.prompt(_ROLE_NAME_PROMPT, default="AdministratorAccess", type=str)
     else:
         console.print("[yellow]Could not fetch roles, enter manually[/yellow]")
-        role_name = click.prompt("Role name", default="AdministratorAccess", type=str)
+        role_name = click.prompt(_ROLE_NAME_PROMPT, default="AdministratorAccess", type=str)
 
     region = click.prompt("\nDefault region", default="us-east-1", type=str)
     return account_id, role_name, region
@@ -120,7 +122,7 @@ def _resolve_account_role_region(access_token: str, sso_region: str) -> tuple:
     except Exception as e:
         console.print(f"[yellow]Error listing accounts: {e}[/yellow]")
 
-    console.print("\n[blue]Enter account and role details manually:[/blue]\n")
+    console.print(_MANUAL_ACCOUNT_ROLE_PROMPT)
     return _prompt_manual_account_role_region()
 
 
@@ -166,7 +168,7 @@ def configure_profile_with_existing_session(profile_name, session_name):
 
     if not sso_start_url:
         console.print("[red]Could not find SSO start URL[/red]")
-        console.print("\n[blue]Enter account and role details manually:[/blue]\n")
+        console.print(_MANUAL_ACCOUNT_ROLE_PROMPT)
         account_id, role_name, region = _prompt_manual_account_role_region()
     else:
         access_token = get_sso_cache_token(sso_start_url)
@@ -176,7 +178,7 @@ def configure_profile_with_existing_session(profile_name, session_name):
                 return None
         else:
             console.print("[yellow]Could not get access token from cache[/yellow]")
-            console.print("\n[blue]Enter account and role details manually:[/blue]\n")
+            console.print(_MANUAL_ACCOUNT_ROLE_PROMPT)
             account_id, role_name, region = _prompt_manual_account_role_region()
 
     _write_profile_config(profile_name, session_name, account_id, role_name, region)

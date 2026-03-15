@@ -137,7 +137,7 @@ def save_config(config: Dict[str, Any]):
         with open(config_file, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2)
     except Exception as e:
-        raise Exception(f"Failed to save configuration: {str(e)}")
+        raise RuntimeError(f"Failed to save configuration: {str(e)}")
 
 
 def get_config_value(key_path: str, default: Any = None) -> Any:

@@ -13,6 +13,8 @@ from boto3.dynamodb.types import TypeDeserializer
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
+_PROGRESS_DESCRIPTION_COL = "[progress.description]{task.description}"
+
 console = Console()
 
 
@@ -202,7 +204,7 @@ class DynamoDBExporter:
 
         with Progress(
             SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
+            TextColumn(_PROGRESS_DESCRIPTION_COL),
             BarColumn(),
             TaskProgressColumn(),
             console=console,
@@ -262,7 +264,7 @@ class DynamoDBExporter:
 
         with Progress(
             SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
+            TextColumn(_PROGRESS_DESCRIPTION_COL),
             console=console,
         ) as progress:
             task = progress.add_task(f"[cyan]Querying {self.table_name}...")
@@ -417,7 +419,7 @@ class DynamoDBExporter:
 
             with Progress(
                 SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
+                TextColumn(_PROGRESS_DESCRIPTION_COL),
                 BarColumn(),
                 TaskProgressColumn(),
                 console=console,
@@ -533,7 +535,7 @@ class DynamoDBExporter:
             items_written = 0
             with Progress(
                 SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
+                TextColumn(_PROGRESS_DESCRIPTION_COL),
                 BarColumn(),
                 TaskProgressColumn(),
                 console=console,

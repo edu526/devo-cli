@@ -36,4 +36,4 @@ def get_remote_url() -> str:
             url = url.replace(":", "/", 1).replace("git@", "https://")
         return url
     except subprocess.CalledProcessError:
-        return None
+        return ""

@@ -24,7 +24,13 @@ def _determine_archive_suffix(system: str) -> str:
 
 def _download_and_verify(asset_url: str, archive_type) -> Path:
     """Download binary to a temp file, verify it, and return the path. Exits on failure."""
-    suffix = _determine_archive_suffix("windows" if archive_type == "zip" else ("darwin" if archive_type == "tar.gz" else "linux"))
+    if archive_type == "zip":
+        platform = "windows"
+    elif archive_type == "tar.gz":
+        platform = "darwin"
+    else:
+        platform = "linux"
+    suffix = _determine_archive_suffix(platform)
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
         tmp_path = Path(tmp_file.name)

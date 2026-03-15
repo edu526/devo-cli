@@ -1,5 +1,6 @@
 """Tests for set_default AWS profile command."""
 
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -10,8 +11,11 @@ from cli_tool.commands.aws_login.commands.set_default import (
     _format_source_label,
     _get_shell_config,
     _resolve_and_validate_profile,
+    _set_unix_profile,
+    _set_windows_profile,
     _update_shell_config_file,
     _write_default_credentials,
+    set_default_profile,
 )
 
 # ---------------------------------------------------------------------------
@@ -214,3 +218,191 @@ def test_write_default_credentials_returns_none(monkeypatch):
     # Should not raise
     _write_default_credentials("dev")
     mock_write.assert_called_once_with("dev")
+
+
+# ---------------------------------------------------------------------------
+# _set_windows_profile
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_set_windows_profile_success(monkeypatch, mocker):
+    """setx succeeds — prints confirmation message."""
+    mock_run = mocker.patch("subprocess.run")
+    mock_run.return_value = MagicMock(returncode=0)
+
+    _set_windows_profile("dev")
+
+    mock_run.assert_called_once()
+    call_args = mock_run.call_args[0][0]
+    assert "setx" in call_args
+    assert "AWS_PROFILE" in call_args
+    assert "dev" in call_args
+
+
+@pytest.mark.unit
+def test_set_windows_profile_failure(mocker):
+    """setx fails — prints fallback message."""
+    mocker.patch("subprocess.run", return_value=MagicMock(returncode=1, stderr="Access denied"))
+
+    # Should not raise
+    _set_windows_profile("dev")
+
+
+@pytest.mark.unit
+def test_set_windows_profile_exception(mocker):
+    """setx raises exception — caught gracefully."""
+    mocker.patch("subprocess.run", side_effect=Exception("setx not found"))
+
+    # Should not raise
+    _set_windows_profile("dev")
+
+
+# ---------------------------------------------------------------------------
+# _set_unix_profile
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_set_unix_profile_uses_shell_env(tmp_path, monkeypatch, mocker):
+    """_set_unix_profile reads $SHELL to pick config file."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    rc = tmp_path / ".zshrc"
+    rc.write_text("# zsh config\n")
+
+    mock_update = mocker.patch("cli_tool.commands.aws_login.commands.set_default._update_shell_config_file")
+
+    _set_unix_profile("dev")
+
+    mock_update.assert_called_once()
+    config_file_arg = mock_update.call_args[0][0]
+    assert ".zshrc" in str(config_file_arg)
+
+
+@pytest.mark.unit
+def test_set_unix_profile_defaults_to_bash_when_no_shell(tmp_path, monkeypatch, mocker):
+    """Falls back to .bashrc when SHELL env var is not set."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.delenv("SHELL", raising=False)
+
+    mock_update = mocker.patch("cli_tool.commands.aws_login.commands.set_default._update_shell_config_file")
+
+    _set_unix_profile("dev")
+
+    mock_update.assert_called_once()
+    config_file_arg = mock_update.call_args[0][0]
+    assert ".bashrc" in str(config_file_arg)
+
+
+@pytest.mark.unit
+def test_set_unix_profile_uses_fish_config(tmp_path, monkeypatch, mocker):
+    """Uses fish config.fish when $SHELL is fish."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setenv("SHELL", "/usr/bin/fish")
+
+    mock_update = mocker.patch("cli_tool.commands.aws_login.commands.set_default._update_shell_config_file")
+
+    _set_unix_profile("dev")
+
+    mock_update.assert_called_once()
+    export_line_arg = mock_update.call_args[0][1]
+    assert "set -gx" in export_line_arg
+    assert "dev" in export_line_arg
+
+
+# ---------------------------------------------------------------------------
+# set_default_profile
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_set_default_profile_exits_when_no_profiles(monkeypatch):
+    """Exits with code 1 when no AWS profiles found."""
+    monkeypatch.setattr("cli_tool.commands.aws_login.commands.set_default.list_aws_profiles", lambda: [])
+
+    with pytest.raises(SystemExit) as exc_info:
+        set_default_profile()
+
+    assert exc_info.value.code == 1
+
+
+@pytest.mark.unit
+def test_set_default_profile_exits_when_credentials_unavailable(monkeypatch):
+    """Exits with code 1 when credentials are not available."""
+    monkeypatch.setattr(
+        "cli_tool.commands.aws_login.commands.set_default.list_aws_profiles",
+        lambda: [("dev", "sso")],
+    )
+    monkeypatch.setattr(
+        "cli_tool.commands.aws_login.commands.set_default.check_profile_credentials_available",
+        lambda profile: (False, "Token expired"),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        set_default_profile("dev")
+
+    assert exc_info.value.code == 1
+
+
+@pytest.mark.unit
+def test_set_default_profile_sets_env_variable(monkeypatch, mocker):
+    """Sets AWS_PROFILE environment variable when profile is valid."""
+    monkeypatch.setattr(
+        "cli_tool.commands.aws_login.commands.set_default.list_aws_profiles",
+        lambda: [("dev", "sso")],
+    )
+    monkeypatch.setattr(
+        "cli_tool.commands.aws_login.commands.set_default.check_profile_credentials_available",
+        lambda profile: (True, None),
+    )
+    monkeypatch.setattr("os.name", "posix")
+    mocker.patch("cli_tool.commands.aws_login.commands.set_default._set_unix_profile")
+    mocker.patch("cli_tool.commands.aws_login.commands.set_default._write_default_credentials")
+
+    set_default_profile("dev")
+
+    assert os.environ.get("AWS_PROFILE") == "dev"
+
+
+@pytest.mark.unit
+def test_set_default_profile_calls_windows_on_nt(monkeypatch, mocker):
+    """Calls _set_windows_profile on Windows (os.name == 'nt')."""
+    monkeypatch.setattr(
+        "cli_tool.commands.aws_login.commands.set_default.list_aws_profiles",
+        lambda: [("dev", "sso")],
+    )
+    monkeypatch.setattr(
+        "cli_tool.commands.aws_login.commands.set_default.check_profile_credentials_available",
+        lambda profile: (True, None),
+    )
+    monkeypatch.setattr("os.name", "nt")
+    monkeypatch.setenv("SHELL", "")  # Not git bash
+
+    mock_windows = mocker.patch("cli_tool.commands.aws_login.commands.set_default._set_windows_profile")
+    mocker.patch("cli_tool.commands.aws_login.commands.set_default._write_default_credentials")
+
+    set_default_profile("dev")
+
+    mock_windows.assert_called_once_with("dev")
+
+
+@pytest.mark.unit
+def test_set_default_profile_calls_unix_on_posix(monkeypatch, mocker):
+    """Calls _set_unix_profile on Unix/Linux/macOS."""
+    monkeypatch.setattr(
+        "cli_tool.commands.aws_login.commands.set_default.list_aws_profiles",
+        lambda: [("dev", "sso")],
+    )
+    monkeypatch.setattr(
+        "cli_tool.commands.aws_login.commands.set_default.check_profile_credentials_available",
+        lambda profile: (True, None),
+    )
+    monkeypatch.setattr("os.name", "posix")
+
+    mock_unix = mocker.patch("cli_tool.commands.aws_login.commands.set_default._set_unix_profile")
+    mocker.patch("cli_tool.commands.aws_login.commands.set_default._write_default_credentials")
+
+    set_default_profile("dev")
+
+    mock_unix.assert_called_once_with("dev")

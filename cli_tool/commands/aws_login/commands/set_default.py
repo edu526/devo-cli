@@ -117,9 +117,17 @@ def _set_windows_profile(profile_name: str):
 
 def _set_unix_profile(profile_name: str):
     """Update shell config file with AWS_PROFILE on Linux/macOS."""
+    home = Path.home().resolve()
+    # All paths are hardcoded literals; shell_name is used only as a dict key
+    _shell_configs = {
+        "fish": (home / ".config" / "fish" / "config.fish", f"set -gx AWS_PROFILE {profile_name}"),
+        "zsh": (home / ".zshrc", f"export AWS_PROFILE={profile_name}"),
+    }
+    _default_config = (home / ".bashrc", f"export AWS_PROFILE={profile_name}")
+
     shell = os.environ.get("SHELL", "")
     shell_name = Path(shell).name if shell else "bash"
-    config_file, export_line = _get_shell_config(shell_name, profile_name)
+    config_file, export_line = _shell_configs.get(shell_name, _default_config)
     _update_shell_config_file(config_file, export_line)
     console.print(f"\n[green]✓ Set '{profile_name}' as default profile[/green]")
     console.print("\n[yellow]To apply in your current terminal, run:[/yellow]")

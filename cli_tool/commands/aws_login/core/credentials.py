@@ -9,6 +9,8 @@ from rich.console import Console
 
 from cli_tool.commands.aws_login.core.config import get_aws_credentials_path, get_profile_config, remove_section_from_file
 
+_UTC_OFFSET = "+00:00"
+
 console = Console()
 
 _SSO_START_URL_KEY = "startUrl"
@@ -32,7 +34,7 @@ def get_sso_cache_token(sso_start_url):
                     # Check if token is still valid
                     expires_at = cache_data.get(_EXPIRES_AT_KEY)
                     if expires_at:
-                        expires_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                        expires_dt = datetime.fromisoformat(expires_at.replace("Z", _UTC_OFFSET))
                         if expires_dt > datetime.now(expires_dt.tzinfo):
                             return cache_data.get(_ACCESS_TOKEN_KEY)
 
@@ -56,7 +58,7 @@ def get_sso_token_expiration(sso_start_url):
                 if cache_data.get(_SSO_START_URL_KEY) == sso_start_url:
                     expires_at = cache_data.get(_EXPIRES_AT_KEY)
                     if expires_at:
-                        expires_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                        expires_dt = datetime.fromisoformat(expires_at.replace("Z", _UTC_OFFSET))
                         return expires_dt
 
         return None
@@ -146,7 +148,7 @@ def get_profile_credentials_expiration(profile_name):
 
             if expiration_str:
                 # Parse expiration time (format: 2026-03-01T05:30:29+00:00)
-                expiration_dt = datetime.fromisoformat(expiration_str.replace("Z", "+00:00"))
+                expiration_dt = datetime.fromisoformat(expiration_str.replace("Z", _UTC_OFFSET))
                 return expiration_dt
 
         return None

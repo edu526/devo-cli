@@ -17,7 +17,7 @@ from cli_tool.commands.aws_login.core.credentials import (
 console = Console()
 
 
-def _refresh_session(session_key: str, session_profs: list) -> tuple:
+def _refresh_session(_session_key: str, session_profs: list) -> tuple:
     """Login to an SSO session and verify all profiles in it.
 
     Returns (success, verified_count, failed_count).
@@ -130,7 +130,7 @@ def refresh_all_profiles():
     fail_count = 0
 
     for session_key, session_profs in session_profiles.items():
-        ok, verified, failed = _refresh_session(session_key, session_profs)
+        _, verified, failed = _refresh_session(session_key, session_profs)
         success_count += verified
         fail_count += failed
 

@@ -22,7 +22,7 @@ def get_smart_search_patterns(symbol_name: str) -> List[str]:
     patterns.append(f"\\b{escaped_full}\\b")
 
     # Function calls like "createTrip(cache)" -> extract "createTrip"
-    func_call_match = re.match(r"^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(", symbol_name)
+    func_call_match = re.match(r"^([a-zA-Z_]\w*)\s*\(", symbol_name)
     if func_call_match:
         base_name = func_call_match.group(1)
         escaped_base = re.escape(base_name)
@@ -35,7 +35,7 @@ def get_smart_search_patterns(symbol_name: str) -> List[str]:
         )
 
     # Method calls like "obj.method" -> extract "method"
-    method_call_match = re.match(r"^.*\.([a-zA-Z_][a-zA-Z0-9_]*)", symbol_name)
+    method_call_match = re.match(r"^.*\.([a-zA-Z_]\w*)", symbol_name)
     if method_call_match:
         method_name = method_call_match.group(1)
         escaped_method = re.escape(method_name)
@@ -102,7 +102,7 @@ def get_gitignore_excludes() -> str:
     return " ".join(excludes)
 
 
-def parse_grep_results(output: str, symbol_name: str) -> List[Dict[str, Any]]:
+def parse_grep_results(output: str, _symbol_name: str) -> List[Dict[str, Any]]:
     """Parse grep output into structured results."""
     results = []
     for line in output.strip().split("\n"):
