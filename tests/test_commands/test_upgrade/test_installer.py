@@ -127,8 +127,10 @@ def test_replace_unix_archive_replaces_target(tmp_path):
 
 
 @pytest.mark.unit
-def test_replace_unix_archive_sets_executable_permissions(tmp_path):
+def test_replace_unix_archive_sets_executable_permissions(tmp_path, mocker):
     """Sets 0o755 on the devo executable after replacement."""
+    mock_chmod = mocker.patch("os.chmod")
+
     target = tmp_path / "devo"
     target.mkdir()
     (target / "devo").write_text("old")
@@ -144,8 +146,7 @@ def test_replace_unix_archive_sets_executable_permissions(tmp_path):
 
     _replace_unix_archive(extracted, target, backup, temp_extract)
 
-    mode = oct(os.stat(target / "devo").st_mode)
-    assert "755" in mode
+    mock_chmod.assert_called_once_with(target / "devo", 0o755)
 
 
 # ---------------------------------------------------------------------------
