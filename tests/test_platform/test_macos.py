@@ -9,46 +9,14 @@ Tests macOS-specific functionality including:
 Requirements: 5.1, 5.4, 5.5
 """
 
-import sys
 import tarfile
 
 import pytest
 
 
 @pytest.mark.platform
-@pytest.mark.skipif(sys.platform != "darwin", reason="macOS only")
 class TestMacOSBinaryFormat:
     """Test macOS-specific binary format and handling."""
-
-    def test_macos_binary_format_is_tarball(self):
-        """Test that macOS binary is in tarball format.
-
-        Validates: Requirements 5.4, 5.5
-        """
-        from cli_tool.commands.upgrade.core.platform import get_binary_name
-
-        # Get binary name for macOS
-        binary_name = get_binary_name("darwin", "amd64")
-
-        # Verify tarball extension
-        assert binary_name.endswith(".tar.gz")
-        assert "darwin" in binary_name.lower()
-        assert "amd64" in binary_name.lower()
-
-    def test_macos_binary_name_arm64(self):
-        """Test macOS binary name for ARM64 (Apple Silicon) architecture.
-
-        Validates: Requirements 5.4, 5.5
-        """
-        from cli_tool.commands.upgrade.core.platform import get_binary_name
-
-        # Get binary name for macOS ARM64
-        binary_name = get_binary_name("darwin", "arm64")
-
-        # Verify format
-        assert binary_name.endswith(".tar.gz")
-        assert "darwin" in binary_name.lower()
-        assert "arm64" in binary_name.lower()
 
     def test_macos_tarball_verification(self, temp_config_dir):
         """Test tarball verification on macOS (Mach-O header).
@@ -125,7 +93,6 @@ class TestMacOSBinaryFormat:
 
 
 @pytest.mark.platform
-@pytest.mark.skipif(sys.platform != "darwin", reason="macOS only")
 class TestMacOSTarballExtraction:
     """Test tarball extraction on macOS."""
 

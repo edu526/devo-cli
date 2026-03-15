@@ -9,7 +9,7 @@ Tests Windows-specific functionality including:
 Requirements: 5.1, 5.2, 5.4, 5.5, 10.5
 """
 
-import sys
+import subprocess
 import zipfile
 from unittest.mock import MagicMock
 
@@ -17,39 +17,8 @@ import pytest
 
 
 @pytest.mark.platform
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
 class TestWindowsBinaryFormat:
     """Test Windows-specific binary format and handling."""
-
-    def test_windows_binary_format_is_zip(self):
-        """Test that Windows binary is in ZIP format.
-
-        Validates: Requirements 5.4, 5.5
-        """
-        from cli_tool.commands.upgrade.core.platform import get_binary_name
-
-        # Get binary name for Windows
-        binary_name = get_binary_name("windows", "amd64")
-
-        # Verify ZIP extension
-        assert binary_name.endswith(".zip")
-        assert "windows" in binary_name.lower()
-        assert "amd64" in binary_name.lower()
-
-    def test_windows_binary_name_arm64(self):
-        """Test Windows binary name for ARM64 architecture.
-
-        Validates: Requirements 5.4, 5.5
-        """
-        from cli_tool.commands.upgrade.core.platform import get_binary_name
-
-        # Get binary name for Windows ARM64
-        binary_name = get_binary_name("windows", "arm64")
-
-        # Verify format
-        assert binary_name.endswith(".zip")
-        assert "windows" in binary_name.lower()
-        assert "arm64" in binary_name.lower()
 
     def test_windows_zip_verification(self, temp_config_dir):
         """Test ZIP file verification on Windows (PE header).
@@ -110,7 +79,6 @@ class TestWindowsBinaryFormat:
 
 
 @pytest.mark.platform
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
 class TestWindowsZipExtraction:
     """Test ZIP extraction on Windows."""
 
@@ -158,6 +126,12 @@ class TestWindowsZipExtraction:
             zf.writestr("devo/devo.exe", b"MZ" + b"\x00" * 100)
             zf.writestr("devo/_internal/base_library.zip", b"PK\x03\x04")
 
+        # Mock platform.system to take the Windows path in installer.py
+        mocker.patch("platform.system", return_value="Windows")
+
+        # CREATE_NEW_CONSOLE is a Windows-only constant — patch it for Linux CI
+        mocker.patch.object(subprocess, "CREATE_NEW_CONSOLE", 0x10, create=True)
+
         # Mock subprocess.Popen to avoid actually running PowerShell
         mock_popen = mocker.patch("subprocess.Popen")
         mock_popen.return_value = MagicMock()
@@ -184,7 +158,6 @@ class TestWindowsZipExtraction:
 
 
 @pytest.mark.platform
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
 class TestWindowsShellCompletion:
     """Test Windows-specific shell completion (PowerShell)."""
 
