@@ -479,3 +479,134 @@ def test_write_default_credentials_success(tmp_path, mocker, monkeypatch):
     content = credentials_file.read_text()
     assert "[default]" in content
     assert "aws_access_key_id = AKIATEST" in content
+
+
+@pytest.mark.unit
+def test_write_default_credentials_without_session_token(tmp_path, mocker, monkeypatch):
+    """Writes credentials file without aws_session_token when SessionToken is absent."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    aws_dir = tmp_path / ".aws"
+    aws_dir.mkdir()
+
+    creds = {
+        "AccessKeyId": "AKIATEST2",
+        "SecretAccessKey": "SECRET2",
+        "Expiration": "2099-06-01T00:00:00+00:00",
+    }
+    mocker.patch("subprocess.run", return_value=MagicMock(returncode=0, stdout=json.dumps(creds)))
+    mocker.patch("cli_tool.commands.aws_login.core.credentials.get_profile_config", return_value={"region": "us-east-1"})
+
+    result = write_default_credentials("dev")
+
+    assert result is not None
+    content = (aws_dir / "credentials").read_text()
+    assert "aws_session_token" not in content
+    assert "aws_access_key_id = AKIATEST2" in content
+
+
+@pytest.mark.unit
+def test_write_default_credentials_without_region(tmp_path, mocker, monkeypatch):
+    """Writes credentials file without region line when profile config has none."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    aws_dir = tmp_path / ".aws"
+    aws_dir.mkdir()
+
+    creds = {"AccessKeyId": "AKIATEST3", "SecretAccessKey": "SECRET3", "SessionToken": "TOK"}
+    mocker.patch("subprocess.run", return_value=MagicMock(returncode=0, stdout=json.dumps(creds)))
+    mocker.patch("cli_tool.commands.aws_login.core.credentials.get_profile_config", return_value=None)
+
+    result = write_default_credentials("dev")
+
+    assert result is not None
+    content = (aws_dir / "credentials").read_text()
+    assert "region" not in content
+    assert "aws_access_key_id = AKIATEST3" in content
+
+
+@pytest.mark.unit
+def test_write_default_credentials_replaces_existing_default(tmp_path, mocker, monkeypatch):
+    """Replaces an existing [default] section with fresh credentials."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    aws_dir = tmp_path / ".aws"
+    aws_dir.mkdir()
+    (aws_dir / "credentials").write_text("[default]\naws_access_key_id = OLD_KEY\n")
+
+    creds = {"AccessKeyId": "NEW_KEY", "SecretAccessKey": "NEW_SECRET"}
+    mocker.patch("subprocess.run", return_value=MagicMock(returncode=0, stdout=json.dumps(creds)))
+    mocker.patch("cli_tool.commands.aws_login.core.credentials.get_profile_config", return_value=None)
+
+    result = write_default_credentials("dev")
+
+    assert result is not None
+    content = (aws_dir / "credentials").read_text()
+    assert "OLD_KEY" not in content
+    assert "NEW_KEY" in content
+
+
+# ---------------------------------------------------------------------------
+# get_sso_token_expiration — additional branches
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_get_sso_token_expiration_returns_none_on_url_mismatch(tmp_path, monkeypatch):
+    """Returns None when no cache file matches the requested URL."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    cache_dir = tmp_path / ".aws" / "sso" / "cache"
+    cache_dir.mkdir(parents=True)
+
+    from datetime import timedelta
+
+    future = (datetime.now(timezone.utc) + timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cache_data = {"startUrl": "https://other.awsapps.com/start", "expiresAt": future}
+    (cache_dir / "abc.json").write_text(json.dumps(cache_data))
+
+    result = get_sso_token_expiration("https://example.awsapps.com/start")
+
+    assert result is None
+
+
+@pytest.mark.unit
+def test_get_sso_token_expiration_returns_none_on_corrupt_json(tmp_path, monkeypatch):
+    """Returns None when cache file contains invalid JSON."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    cache_dir = tmp_path / ".aws" / "sso" / "cache"
+    cache_dir.mkdir(parents=True)
+    (cache_dir / "bad.json").write_text("not json at all")
+
+    result = get_sso_token_expiration("https://example.awsapps.com/start")
+
+    assert result is None
+
+
+@pytest.mark.unit
+def test_get_sso_token_expiration_returns_none_when_no_expires_at(tmp_path, monkeypatch):
+    """Returns None when matching file has no expiresAt field."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    cache_dir = tmp_path / ".aws" / "sso" / "cache"
+    cache_dir.mkdir(parents=True)
+    cache_data = {"startUrl": "https://example.awsapps.com/start"}
+    (cache_dir / "abc.json").write_text(json.dumps(cache_data))
+
+    result = get_sso_token_expiration("https://example.awsapps.com/start")
+
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# get_sso_cache_token — no expiresAt field branch
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_get_sso_cache_token_returns_none_when_no_expires_at(tmp_path, monkeypatch):
+    """Returns None when matching file has no expiresAt field."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    cache_dir = tmp_path / ".aws" / "sso" / "cache"
+    cache_dir.mkdir(parents=True)
+    cache_data = {"startUrl": "https://example.awsapps.com/start", "accessToken": "tok"}
+    (cache_dir / "abc.json").write_text(json.dumps(cache_data))
+
+    result = get_sso_cache_token("https://example.awsapps.com/start")
+
+    assert result is None

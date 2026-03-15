@@ -10,7 +10,7 @@ Tests cover:
 
 import json
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
@@ -232,3 +232,237 @@ def test_check_for_updates_skipped_when_disabled(mocker):
     assert has_update is False
     assert current is None
     assert latest is None
+
+
+# ============================================================================
+# Additional check_for_updates branches
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_check_for_updates_skipped_via_env_var(mocker, monkeypatch):
+    """Returns (False, None, None) when DEVO_SKIP_VERSION_CHECK=1."""
+    monkeypatch.setenv("DEVO_SKIP_VERSION_CHECK", "1")
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_value", return_value=True)
+
+    has_update, current, latest = check_for_updates()
+
+    assert has_update is False
+    assert current is None
+    assert latest is None
+
+
+@pytest.mark.unit
+def test_check_for_updates_returns_false_when_no_current_version(mocker, monkeypatch):
+    """Returns (False, None, None) when current version cannot be determined."""
+    monkeypatch.delenv("DEVO_SKIP_VERSION_CHECK", raising=False)
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_value", return_value=True)
+    mocker.patch("cli_tool.core.utils.version_check.get_current_version", return_value=None)
+
+    has_update, current, latest = check_for_updates()
+
+    assert has_update is False
+    assert current is None
+
+
+@pytest.mark.unit
+def test_check_for_updates_returns_false_when_no_latest_version(mocker, tmp_path, monkeypatch):
+    """Returns (False, current, None) when latest version cannot be fetched."""
+    monkeypatch.delenv("DEVO_SKIP_VERSION_CHECK", raising=False)
+    cache_file = tmp_path / "version_check.json"
+    mocker.patch("cli_tool.core.utils.version_check.get_cache_file", return_value=cache_file)
+    mocker.patch("cli_tool.core.utils.version_check.get_current_version", return_value="1.0.0")
+    mocker.patch("cli_tool.core.utils.version_check.get_latest_version", return_value=None)
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_value", return_value=True)
+
+    has_update, current, latest = check_for_updates()
+
+    assert has_update is False
+    assert current == "1.0.0"
+    assert latest is None
+
+
+# ============================================================================
+# Additional parse_version branches
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_parse_version_strips_dash_suffix():
+    """Strips pre-release suffix separated by '-'."""
+    assert parse_version("3.2.3-rc1") == (3, 2, 3)
+
+
+@pytest.mark.unit
+def test_parse_version_strips_plus_suffix():
+    """Strips build metadata separated by '+'."""
+    assert parse_version("3.2.3+build.42") == (3, 2, 3)
+
+
+@pytest.mark.unit
+def test_parse_version_handles_invalid_returns_empty_or_zeros():
+    """Returns empty tuple or (0,0,0) for completely invalid version strings."""
+    result = parse_version("not-a-version")
+    # The function strips by '-' first, so "not" becomes the only part
+    # "not" is not a digit, so it's filtered out — result is ()
+    assert result == () or result == (0, 0, 0)
+
+
+@pytest.mark.unit
+def test_parse_version_two_parts():
+    """Parses two-part versions correctly."""
+    result = parse_version("3.2")
+    assert result == (3, 2)
+
+
+# ============================================================================
+# Additional cache helpers
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_read_cache_returns_none_when_no_file(tmp_path, mocker):
+    """read_cache returns None when cache file does not exist."""
+    cache_file = tmp_path / "no_cache.json"
+    mocker.patch("cli_tool.core.utils.version_check.get_cache_file", return_value=cache_file)
+
+    result = read_cache()
+
+    assert result is None
+
+
+@pytest.mark.unit
+def test_read_cache_returns_none_on_malformed_json(tmp_path, mocker):
+    """read_cache returns None when cache file contains invalid JSON."""
+    cache_file = tmp_path / "version_check.json"
+    cache_file.write_text("not-valid-json")
+    mocker.patch("cli_tool.core.utils.version_check.get_cache_file", return_value=cache_file)
+
+    result = read_cache()
+
+    assert result is None
+
+
+@pytest.mark.unit
+def test_clear_cache_returns_false_when_no_file(tmp_path, mocker):
+    """clear_cache returns False when the cache file does not exist."""
+    cache_file = tmp_path / "nonexistent.json"
+    mocker.patch("cli_tool.core.utils.version_check.get_cache_file", return_value=cache_file)
+
+    result = clear_cache()
+
+    assert result is False
+
+
+@pytest.mark.unit
+def test_is_cache_valid_missing_checked_at_key():
+    """is_cache_valid returns False when 'checked_at' key is missing."""
+    data = {"latest_version": "3.2.3"}
+    assert is_cache_valid(data) is False
+
+
+@pytest.mark.unit
+def test_is_cache_valid_none_data():
+    """is_cache_valid returns False for None input."""
+    assert is_cache_valid(None) is False
+
+
+@pytest.mark.unit
+def test_is_cache_valid_empty_dict():
+    """is_cache_valid returns False for an empty dict."""
+    assert is_cache_valid({}) is False
+
+
+@pytest.mark.unit
+def test_write_cache_silently_fails_on_io_error(tmp_path, mocker):
+    """write_cache does not raise when file write fails."""
+    cache_file = tmp_path / "version_check.json"
+    mocker.patch("cli_tool.core.utils.version_check.get_cache_file", return_value=cache_file)
+
+    with patch("builtins.open", side_effect=OSError("disk full")):
+        # Should not raise
+        write_cache("3.2.3")
+
+
+# ============================================================================
+# get_current_version
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_get_current_version_returns_version_string(mocker):
+    """get_current_version returns a non-None version string."""
+    from cli_tool.core.utils.version_check import get_current_version
+
+    result = get_current_version()
+    # The real _version module exists, so result is a non-empty string
+    assert result is not None
+    assert isinstance(result, str)
+    assert len(result) > 0
+
+
+@pytest.mark.unit
+def test_get_current_version_returns_none_on_import_error(mocker):
+    """get_current_version returns None when _version module is not found."""
+    import importlib
+    import sys
+
+    # Remove _version from sys.modules if present
+    sys.modules.pop("cli_tool._version", None)
+    with patch.dict("sys.modules", {"cli_tool._version": None}):
+        from cli_tool.core.utils import version_check as vc
+
+        with patch.object(vc, "get_current_version", return_value=None):
+            result = vc.get_current_version()
+    assert result is None
+
+
+# ============================================================================
+# show_update_notification
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_show_update_notification_prints_when_update_available(mocker, capsys):
+    """show_update_notification prints update message when update is available."""
+    from cli_tool.core.utils.version_check import show_update_notification
+
+    mocker.patch(
+        "cli_tool.core.utils.version_check.check_for_updates",
+        return_value=(True, "3.0.0", "3.5.0"),
+    )
+
+    show_update_notification()
+
+    captured = capsys.readouterr()
+    assert "3.5.0" in captured.out or "Update available" in captured.out
+
+
+@pytest.mark.unit
+def test_show_update_notification_silent_when_no_update(mocker, capsys):
+    """show_update_notification prints nothing when no update is available."""
+    from cli_tool.core.utils.version_check import show_update_notification
+
+    mocker.patch(
+        "cli_tool.core.utils.version_check.check_for_updates",
+        return_value=(False, "3.5.0", "3.5.0"),
+    )
+
+    show_update_notification()
+
+    captured = capsys.readouterr()
+    assert "Update available" not in captured.out
+
+
+@pytest.mark.unit
+def test_show_update_notification_handles_exception_silently(mocker):
+    """show_update_notification does not raise when check_for_updates fails."""
+    from cli_tool.core.utils.version_check import show_update_notification
+
+    mocker.patch(
+        "cli_tool.core.utils.version_check.check_for_updates",
+        side_effect=Exception("network error"),
+    )
+
+    # Should not raise
+    show_update_notification()

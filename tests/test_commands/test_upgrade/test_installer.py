@@ -335,3 +335,100 @@ def test_replace_binary_removes_old_backup_if_exists(tmp_path, mocker):
 
     # Old backup should have been removed
     assert not (backup / "stale").exists()
+
+
+@pytest.mark.unit
+def test_replace_binary_warns_when_old_backup_removal_fails(tmp_path, mocker, capsys):
+    """Prints a warning but continues when removing the old backup directory raises OSError."""
+    mocker.patch("platform.system", return_value="Darwin")
+
+    target = tmp_path / "devo"
+    target.mkdir()
+    (target / "devo").write_text("old binary")
+
+    backup = target.parent / "devo.backup"
+    backup.mkdir()
+    (backup / "stale").write_text("stale")
+
+    # Make rmtree raise only for the backup path
+    import shutil as _shutil
+
+    original_rmtree = _shutil.rmtree
+    backup_str = str(backup)
+
+    def selective_rmtree(path, *args, **kwargs):
+        if str(path) == backup_str:
+            raise OSError("permission denied")
+        return original_rmtree(path, *args, **kwargs)
+
+    mocker.patch("shutil.rmtree", side_effect=selective_rmtree)
+    # copytree will fail because backup still exists; mock it to succeed
+    mocker.patch("shutil.copytree")
+    mocker.patch("cli_tool.commands.upgrade.core.installer._replace_unix_archive", return_value=True)
+
+    binary_file = tmp_path / "devo_bin"
+    binary_file.write_text("x")
+    tar_path = tmp_path / "binary.tar.gz"
+    with tarfile.open(tar_path, "w:gz") as tf:
+        tf.add(binary_file, arcname="devo/devo")
+
+    result = replace_binary(tar_path, target, archive_type="tar.gz")
+
+    # The upgrade should still succeed despite the backup removal warning
+    assert result is True
+
+
+@pytest.mark.unit
+def test_replace_binary_linux_removes_existing_backup_file(tmp_path, mocker):
+    """Linux single-file path removes pre-existing .backup file before creating a new one."""
+    mocker.patch("platform.system", return_value="Linux")
+
+    current_exe = tmp_path / "devo"
+    current_exe.write_text("old binary")
+
+    # Pre-existing .backup file
+    backup = current_exe.with_suffix(".backup")
+    backup.write_text("old backup")
+
+    new_binary = tmp_path / "devo.new"
+    new_binary.write_text("new binary")
+
+    result = replace_binary(new_binary, current_exe, archive_type=None)
+
+    assert result is True
+    # The backup should be the OLD binary, not the pre-existing one
+    assert backup.read_text() == "old binary"
+
+
+@pytest.mark.unit
+def test_replace_unix_archive_temp_extract_already_gone(tmp_path):
+    """_replace_unix_archive handles missing temp_extract dir gracefully (no OSError)."""
+    target = tmp_path / "devo"
+    target.mkdir()
+    (target / "devo").write_text("old")
+
+    extracted = tmp_path / "new_devo"
+    extracted.mkdir()
+    new_exe = extracted / "devo"
+    new_exe.write_text("new binary content")
+
+    backup = tmp_path / "devo.backup"
+    # temp_extract does NOT exist
+    temp_extract = tmp_path / "devo_new"
+
+    result = _replace_unix_archive(extracted, target, backup, temp_extract)
+
+    assert result is True
+    assert (target / "devo").read_text() == "new binary content"
+
+
+@pytest.mark.unit
+def test_extract_archive_unknown_type_does_nothing(tmp_path):
+    """_extract_archive does nothing for an unknown archive type (no exception)."""
+    dummy = tmp_path / "file.bin"
+    dummy.write_text("binary")
+    extract_dir = tmp_path / "out"
+    extract_dir.mkdir()
+
+    # Should not raise; just a no-op
+    _extract_archive(dummy, "unknown", extract_dir)
