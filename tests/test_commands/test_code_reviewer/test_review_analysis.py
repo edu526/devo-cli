@@ -11,7 +11,7 @@ Tests the complete code review workflow including:
 """
 
 import json
-from unittest.mock import MagicMock, PropertyMock
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 from click.testing import CliRunner
@@ -760,3 +760,401 @@ def test_code_review_output_format_consistency(
     assert result_table.exit_code == 0
     # Verify console_ui.show_analysis_results_table was called
     assert mock_console_ui.show_analysis_results_table.called
+
+
+# ============================================================================
+# Unit tests for CodeReviewAnalyzer (covers lines 39-40, 45-56, 65-86, 105-149,
+# 173-242, 251-260, 264-287)
+# ============================================================================
+
+
+@pytest.mark.unit
+class TestCodeReviewAnalyzerUnit:
+    """Unit tests for CodeReviewAnalyzer methods."""
+
+    def _make_analyzer(self, profile_name=None):
+        """Return a CodeReviewAnalyzer instance without hitting real dependencies."""
+        from cli_tool.commands.code_reviewer.core.analyzer import CodeReviewAnalyzer
+
+        return CodeReviewAnalyzer(profile_name=profile_name)
+
+    # ------------------------------------------------------------------
+    # __init__ (lines 39-40)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.unit
+    def test_init_sets_profile_name(self):
+        """__init__ stores the profile_name attribute."""
+        analyzer = self._make_analyzer(profile_name="my-profile")
+        assert analyzer.profile_name == "my-profile"
+
+    @pytest.mark.unit
+    def test_init_default_profile_name(self):
+        """__init__ defaults profile_name to None."""
+        analyzer = self._make_analyzer()
+        assert analyzer.profile_name is None
+
+    # ------------------------------------------------------------------
+    # _create_agent (lines 45-61)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.unit
+    def test_create_agent_returns_base_agent_instance(self):
+        """_create_agent creates a BaseAgent with CodeReviewer name."""
+        analyzer = self._make_analyzer()
+        mock_base_agent = MagicMock()
+        with patch("cli_tool.commands.code_reviewer.core.analyzer.BaseAgent", return_value=mock_base_agent) as mock_cls:
+            result = analyzer._create_agent(use_short_prompt=True)
+        mock_cls.assert_called_once()
+        call_kwargs = mock_cls.call_args[1]
+        assert call_kwargs["name"] == "CodeReviewer"
+        assert result is mock_base_agent
+
+    @pytest.mark.unit
+    def test_create_agent_uses_short_prompt_by_default(self):
+        """_create_agent passes CODE_REVIEWER_PROMPT_SHORT when use_short_prompt=True."""
+        from cli_tool.commands.code_reviewer.prompt.code_reviewer import CODE_REVIEWER_PROMPT_SHORT
+
+        analyzer = self._make_analyzer()
+        with patch("cli_tool.commands.code_reviewer.core.analyzer.BaseAgent") as mock_cls:
+            analyzer._create_agent(use_short_prompt=True)
+        call_kwargs = mock_cls.call_args[1]
+        assert call_kwargs["system_prompt"] is CODE_REVIEWER_PROMPT_SHORT
+
+    @pytest.mark.unit
+    def test_create_agent_uses_full_prompt(self):
+        """_create_agent passes CODE_REVIEWER_PROMPT when use_short_prompt=False."""
+        from cli_tool.commands.code_reviewer.prompt.code_reviewer import CODE_REVIEWER_PROMPT
+
+        analyzer = self._make_analyzer()
+        with patch("cli_tool.commands.code_reviewer.core.analyzer.BaseAgent") as mock_cls:
+            analyzer._create_agent(use_short_prompt=False)
+        call_kwargs = mock_cls.call_args[1]
+        assert call_kwargs["system_prompt"] is CODE_REVIEWER_PROMPT
+
+    # ------------------------------------------------------------------
+    # _get_agent (line 86)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.unit
+    def test_get_agent_delegates_to_create_agent(self):
+        """_get_agent calls _create_agent with the given prompt flag."""
+        analyzer = self._make_analyzer()
+        mock_agent = MagicMock()
+        with patch.object(analyzer, "_create_agent", return_value=mock_agent) as mock_create:
+            result = analyzer._get_agent(use_short_prompt=False)
+        mock_create.assert_called_once_with(False)
+        assert result is mock_agent
+
+    # ------------------------------------------------------------------
+    # _get_agent_with_streaming (lines 65-82)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.unit
+    def test_get_agent_with_streaming_returns_result(self):
+        """_get_agent_with_streaming returns the result from agent.query."""
+        analyzer = self._make_analyzer()
+        mock_agent = MagicMock()
+        mock_agent.query.return_value = "agent response"
+        mock_agent.get_last_metrics.return_value = {}
+        mock_agent.get_metrics_summary.return_value = {"total_tokens": 100}
+
+        with patch("cli_tool.commands.code_reviewer.core.analyzer.console_ui"):
+            with patch.object(analyzer, "_get_agent", return_value=mock_agent):
+                result = analyzer._get_agent_with_streaming("my request")
+
+        assert result == "agent response"
+        assert analyzer._last_metrics == {}
+        assert analyzer._metrics_summary == {"total_tokens": 100}
+
+    @pytest.mark.unit
+    def test_get_agent_with_streaming_propagates_exception(self):
+        """_get_agent_with_streaming re-raises exceptions from agent.query."""
+        analyzer = self._make_analyzer()
+        mock_agent = MagicMock()
+        mock_agent.query.side_effect = RuntimeError("agent failed")
+
+        with patch("cli_tool.commands.code_reviewer.core.analyzer.console_ui"):
+            with patch.object(analyzer, "_get_agent", return_value=mock_agent):
+                with pytest.raises(RuntimeError, match="agent failed"):
+                    analyzer._get_agent_with_streaming("request")
+
+    # ------------------------------------------------------------------
+    # _extract_agent_response (lines 251-260)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.unit
+    def test_extract_agent_response_returns_string_directly(self):
+        """_extract_agent_response returns the result when it is already a string."""
+        analyzer = self._make_analyzer()
+        assert analyzer._extract_agent_response("plain string") == "plain string"
+
+    @pytest.mark.unit
+    def test_extract_agent_response_extracts_from_message_content(self):
+        """_extract_agent_response extracts text from message/content format."""
+        analyzer = self._make_analyzer()
+        mock_result = MagicMock()
+        mock_result.message = {"content": [{"text": "extracted text"}]}
+        assert analyzer._extract_agent_response(mock_result) == "extracted text"
+
+    @pytest.mark.unit
+    def test_extract_agent_response_falls_back_to_str(self):
+        """_extract_agent_response falls back to str() for unknown result types."""
+        analyzer = self._make_analyzer()
+        mock_result = MagicMock(spec=[])  # No 'message' attribute
+        result = analyzer._extract_agent_response(mock_result)
+        assert isinstance(result, str)
+
+    # ------------------------------------------------------------------
+    # _display_metrics_summary (lines 264-287)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.unit
+    def test_display_metrics_summary_does_nothing_when_no_metrics(self):
+        """_display_metrics_summary returns early when _metrics_summary is not set."""
+        analyzer = self._make_analyzer()
+        with patch("cli_tool.commands.code_reviewer.core.analyzer.console_ui") as mock_ui:
+            analyzer._display_metrics_summary()
+        mock_ui.show_ai_thinking.assert_not_called()
+
+    @pytest.mark.unit
+    def test_display_metrics_summary_shows_all_metric_fields(self):
+        """_display_metrics_summary calls console_ui.show_ai_thinking with metrics info."""
+        analyzer = self._make_analyzer()
+        analyzer._metrics_summary = {
+            "accumulated_usage": {"totalTokens": 500},
+            "total_duration": 3.5,
+            "total_cycles": 2,
+            "tool_usage": {"get_file_content": 1, "search_code_references": 1},
+        }
+
+        with patch("cli_tool.commands.code_reviewer.core.analyzer.console_ui") as mock_ui:
+            analyzer._display_metrics_summary()
+
+        mock_ui.show_ai_thinking.assert_called_once()
+        call_text = mock_ui.show_ai_thinking.call_args[0][0]
+        assert "500" in call_text
+        assert "3.5" in call_text
+
+    @pytest.mark.unit
+    def test_display_metrics_summary_empty_metrics_does_nothing(self):
+        """_display_metrics_summary returns early when _metrics_summary is empty dict."""
+        analyzer = self._make_analyzer()
+        analyzer._metrics_summary = {}
+        with patch("cli_tool.commands.code_reviewer.core.analyzer.console_ui") as mock_ui:
+            analyzer._display_metrics_summary()
+        mock_ui.show_ai_thinking.assert_not_called()
+
+    # ------------------------------------------------------------------
+    # analyze_pr (lines 105-154)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.unit
+    def test_analyze_pr_no_supported_files_returns_early(self):
+        """analyze_pr returns early summary when no supported files are in the PR."""
+        analyzer = self._make_analyzer()
+        mock_git_manager = MagicMock()
+        mock_git_manager.get_pr_context.return_value = {
+            "current_branch": "feature/x",
+            "base_branch": "main",
+            "total_changed_files": 2,
+            "supported_changed_files": 0,
+            "changed_files": ["img.png"],
+            "supported_files": [],
+            "full_diff": "",
+            "file_diffs": {},
+        }
+
+        with patch("cli_tool.commands.code_reviewer.core.analyzer.GitManager", return_value=mock_git_manager):
+            with patch("cli_tool.commands.code_reviewer.core.analyzer.console_ui"):
+                with patch("os.system"):
+                    result = analyzer.analyze_pr(base_branch="main")
+
+        assert "No supported code files" in result["summary"]
+        assert result["issues"] == []
+
+    @pytest.mark.unit
+    def test_analyze_pr_returns_analysis_result(self):
+        """analyze_pr returns structured result when files are present."""
+        analyzer = self._make_analyzer()
+        mock_git_manager = MagicMock()
+        mock_git_manager.get_pr_context.return_value = {
+            "current_branch": "feature/x",
+            "base_branch": "main",
+            "total_changed_files": 1,
+            "supported_changed_files": 1,
+            "changed_files": ["file.py"],
+            "supported_files": ["file.py"],
+            "full_diff": "diff content",
+            "file_diffs": {"file.py": "diff content"},
+        }
+
+        diff_analysis = {"summary": "looks good", "issues": []}
+        with patch("cli_tool.commands.code_reviewer.core.analyzer.GitManager", return_value=mock_git_manager):
+            with patch("cli_tool.commands.code_reviewer.core.analyzer.console_ui"):
+                with patch("os.system"):
+                    with patch.object(analyzer, "_analyze_pr_diff_only", return_value=diff_analysis):
+                        result = analyzer.analyze_pr(base_branch="main")
+
+        assert result["summary"] == "looks good"
+        assert result["issues"] == []
+        assert "pr_context" in result
+
+    @pytest.mark.unit
+    def test_analyze_pr_handles_git_manager_exception(self):
+        """analyze_pr returns error dict when GitManager raises an exception."""
+        analyzer = self._make_analyzer()
+        with patch("cli_tool.commands.code_reviewer.core.analyzer.GitManager", side_effect=Exception("no git repo")):
+            with patch("cli_tool.commands.code_reviewer.core.analyzer.console_ui"):
+                with patch("os.system"):
+                    result = analyzer.analyze_pr()
+
+        assert "error" in result
+        assert "Failed to analyze PR" in result["error"]
+
+    @pytest.mark.unit
+    def test_analyze_pr_includes_metrics_when_available(self):
+        """analyze_pr includes metrics from _metrics_summary when available."""
+        analyzer = self._make_analyzer()
+        analyzer._metrics_summary = {"total_tokens": 200}
+
+        mock_git_manager = MagicMock()
+        mock_git_manager.get_pr_context.return_value = {
+            "current_branch": "feature/x",
+            "base_branch": "main",
+            "total_changed_files": 1,
+            "supported_changed_files": 1,
+            "changed_files": ["file.py"],
+            "supported_files": ["file.py"],
+            "full_diff": "diff",
+            "file_diffs": {"file.py": "diff"},
+        }
+
+        diff_analysis = {"summary": "ok", "issues": []}
+        with patch("cli_tool.commands.code_reviewer.core.analyzer.GitManager", return_value=mock_git_manager):
+            with patch("cli_tool.commands.code_reviewer.core.analyzer.console_ui"):
+                with patch("os.system"):
+                    with patch.object(analyzer, "_analyze_pr_diff_only", return_value=diff_analysis):
+                        result = analyzer.analyze_pr(base_branch="main")
+
+        assert result["metrics"] == {"total_tokens": 200}
+
+    # ------------------------------------------------------------------
+    # _analyze_pr_diff_only — JSON parsing branches (lines 173-246)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.unit
+    def test_analyze_pr_diff_only_parses_direct_json(self):
+        """_analyze_pr_diff_only returns parsed dict when response starts with '{'."""
+        analyzer = self._make_analyzer()
+        pr_context = {
+            "current_branch": "feature/x",
+            "base_branch": "main",
+            "total_changed_files": 1,
+            "supported_changed_files": 1,
+            "changed_files": ["file.py"],
+            "supported_files": ["file.py"],
+            "full_diff": "diff",
+        }
+        json_response = '{"summary": "all good", "issues": []}'
+
+        with patch("cli_tool.commands.code_reviewer.core.analyzer.console_ui"):
+            with patch.object(analyzer, "_get_agent_with_streaming", return_value=json_response):
+                with patch.object(analyzer, "_extract_agent_response", return_value=json_response):
+                    result = analyzer._analyze_pr_diff_only(pr_context)
+
+        assert result["summary"] == "all good"
+        assert result["issues"] == []
+
+    @pytest.mark.unit
+    def test_analyze_pr_diff_only_extracts_json_block(self):
+        """_analyze_pr_diff_only finds JSON in code block when response doesn't start with '{'."""
+        analyzer = self._make_analyzer()
+        pr_context = {
+            "current_branch": "feature/x",
+            "base_branch": "main",
+            "total_changed_files": 1,
+            "supported_changed_files": 1,
+            "changed_files": ["file.py"],
+            "supported_files": ["file.py"],
+            "full_diff": "diff",
+        }
+        response_with_block = 'Here is the analysis:\n```json\n{"summary": "from block", "issues": []}\n```'
+
+        with patch("cli_tool.commands.code_reviewer.core.analyzer.console_ui"):
+            with patch.object(analyzer, "_get_agent_with_streaming", return_value=response_with_block):
+                with patch.object(analyzer, "_extract_agent_response", return_value=response_with_block):
+                    result = analyzer._analyze_pr_diff_only(pr_context)
+
+        assert result["summary"] == "from block"
+
+    @pytest.mark.unit
+    def test_analyze_pr_diff_only_fallback_for_non_json(self):
+        """_analyze_pr_diff_only creates fallback structure when no JSON found."""
+        analyzer = self._make_analyzer()
+        pr_context = {
+            "current_branch": "feature/x",
+            "base_branch": "main",
+            "total_changed_files": 1,
+            "supported_changed_files": 1,
+            "changed_files": ["file.py"],
+            "supported_files": ["file.py"],
+            "full_diff": "diff",
+        }
+        plain_response = "The code looks fine overall. Nothing to report."
+
+        with patch("cli_tool.commands.code_reviewer.core.analyzer.console_ui"):
+            with patch.object(analyzer, "_get_agent_with_streaming", return_value=plain_response):
+                with patch.object(analyzer, "_extract_agent_response", return_value=plain_response):
+                    result = analyzer._analyze_pr_diff_only(pr_context)
+
+        assert "summary" in result
+        assert result["issues"] == []
+
+    @pytest.mark.unit
+    def test_analyze_pr_diff_only_handles_json_decode_error(self):
+        """_analyze_pr_diff_only returns raw response wrapper when JSON parsing fails."""
+        analyzer = self._make_analyzer()
+        pr_context = {
+            "current_branch": "feature/x",
+            "base_branch": "main",
+            "total_changed_files": 1,
+            "supported_changed_files": 1,
+            "changed_files": ["file.py"],
+            "supported_files": ["file.py"],
+            "full_diff": "diff",
+        }
+        # Starts with '{' but is not valid JSON
+        invalid_json = "{broken json content here"
+
+        with patch("cli_tool.commands.code_reviewer.core.analyzer.console_ui"):
+            with patch.object(analyzer, "_get_agent_with_streaming", return_value=invalid_json):
+                with patch.object(analyzer, "_extract_agent_response", return_value=invalid_json):
+                    result = analyzer._analyze_pr_diff_only(pr_context)
+
+        assert "summary" in result
+        assert "issues" in result
+
+    @pytest.mark.unit
+    def test_analyze_pr_diff_only_shows_metrics_summary_when_set(self):
+        """_analyze_pr_diff_only calls _display_metrics_summary when _metrics_summary is set."""
+        analyzer = self._make_analyzer()
+        analyzer._metrics_summary = {"total_tokens": 50}
+        pr_context = {
+            "current_branch": "feature/x",
+            "base_branch": "main",
+            "total_changed_files": 1,
+            "supported_changed_files": 1,
+            "changed_files": ["file.py"],
+            "supported_files": ["file.py"],
+            "full_diff": "diff",
+        }
+        json_response = '{"summary": "ok", "issues": []}'
+
+        with patch("cli_tool.commands.code_reviewer.core.analyzer.console_ui"):
+            with patch.object(analyzer, "_get_agent_with_streaming", return_value=json_response):
+                with patch.object(analyzer, "_extract_agent_response", return_value=json_response):
+                    with patch.object(analyzer, "_display_metrics_summary") as mock_display:
+                        analyzer._analyze_pr_diff_only(pr_context)
+
+        mock_display.assert_called_once()

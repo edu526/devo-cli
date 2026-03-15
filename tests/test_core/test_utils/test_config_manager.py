@@ -1480,3 +1480,412 @@ def test_try_migrate_legacy_configs_no_legacy_files(temp_config_dir, mocker):
     result = _try_migrate_legacy_configs()
 
     assert result is False
+
+
+# ============================================================================
+# Additional coverage: uncovered lines (lines 17, 59, 83, 93-130, 258, 263-265,
+# 309-313, 349-350, 353-359, 366-373, 399, 401)
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_get_legacy_ssm_config_file_returns_path(tmp_path, monkeypatch):
+    """get_legacy_ssm_config_file returns the expected path under ~/.devo."""
+    from cli_tool.core.utils.config_manager import get_legacy_ssm_config_file
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    # mkdir so get_config_dir does not fail
+    (tmp_path / ".devo").mkdir(exist_ok=True)
+
+    result = get_legacy_ssm_config_file()
+
+    assert result.name == "ssm-config.json"
+    assert ".devo" in str(result)
+
+
+@pytest.mark.unit
+def test_get_legacy_dynamodb_config_file_returns_path(tmp_path, monkeypatch):
+    """get_legacy_dynamodb_config_file returns the expected path under ~/.devo/dynamodb."""
+    from cli_tool.core.utils.config_manager import get_legacy_dynamodb_config_file
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    (tmp_path / ".devo").mkdir(exist_ok=True)
+
+    result = get_legacy_dynamodb_config_file()
+
+    assert result.name == "export_templates.json"
+    assert "dynamodb" in str(result)
+
+
+@pytest.mark.unit
+def test_load_config_migrates_legacy_and_reloads(tmp_path, mocker):
+    """When no config.json exists but legacy files do, migration runs and result reloaded."""
+    devo_dir = tmp_path / ".devo"
+    devo_dir.mkdir()
+    config_file = devo_dir / "config.json"
+    legacy_ssm = devo_dir / "ssm-config.json"
+    legacy_ssm.write_text('{"databases": {}}')
+
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_ssm_config_file", return_value=legacy_ssm)
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_dynamodb_config_file", return_value=devo_dir / "dynamo.json")
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_dir", return_value=devo_dir)
+
+    config = load_config()
+
+    assert isinstance(config, dict)
+    assert "ssm" in config
+
+
+@pytest.mark.unit
+def test_try_migrate_legacy_configs_returns_false_when_config_exists(tmp_path, mocker):
+    """_try_migrate_legacy_configs returns False immediately if config.json already exists."""
+    from cli_tool.core.utils.config_manager import _try_migrate_legacy_configs
+
+    devo_dir = tmp_path / ".devo"
+    devo_dir.mkdir()
+    config_file = devo_dir / "config.json"
+    config_file.write_text("{}")
+
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+
+    result = _try_migrate_legacy_configs()
+
+    assert result is False
+
+
+@pytest.mark.unit
+def test_try_migrate_legacy_configs_migrates_ssm_only(tmp_path, mocker):
+    """_try_migrate_legacy_configs migrates only SSM config when only that exists."""
+    from cli_tool.core.utils.config_manager import _try_migrate_legacy_configs
+
+    devo_dir = tmp_path / ".devo"
+    devo_dir.mkdir()
+    config_file = devo_dir / "config.json"
+    legacy_ssm = devo_dir / "ssm-config.json"
+    legacy_ssm.write_text('{"databases": {"mydb": {}}}')
+
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_ssm_config_file", return_value=legacy_ssm)
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_dynamodb_config_file", return_value=devo_dir / "no.json")
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_dir", return_value=devo_dir)
+
+    result = _try_migrate_legacy_configs()
+
+    assert result is True
+    assert config_file.exists()
+
+
+@pytest.mark.unit
+def test_try_migrate_legacy_configs_migrates_dynamodb_only(tmp_path, mocker):
+    """_try_migrate_legacy_configs migrates only DynamoDB config when only that exists."""
+    from cli_tool.core.utils.config_manager import _try_migrate_legacy_configs
+
+    devo_dir = tmp_path / ".devo"
+    devo_dir.mkdir()
+    dynamo_dir = devo_dir / "dynamodb"
+    dynamo_dir.mkdir()
+    config_file = devo_dir / "config.json"
+    legacy_dynamodb = dynamo_dir / "export_templates.json"
+    legacy_dynamodb.write_text('{"my-template": {}}')
+
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_ssm_config_file", return_value=devo_dir / "no.json")
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_dynamodb_config_file", return_value=legacy_dynamodb)
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_dir", return_value=devo_dir)
+
+    result = _try_migrate_legacy_configs()
+
+    assert result is True
+
+
+@pytest.mark.unit
+def test_try_migrate_legacy_configs_handles_corrupt_ssm(tmp_path, mocker):
+    """_try_migrate_legacy_configs silently ignores corrupt SSM config."""
+    from cli_tool.core.utils.config_manager import _try_migrate_legacy_configs
+
+    devo_dir = tmp_path / ".devo"
+    devo_dir.mkdir()
+    config_file = devo_dir / "config.json"
+    legacy_ssm = devo_dir / "ssm-config.json"
+    legacy_ssm.write_text("NOT JSON {{{{")
+
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_ssm_config_file", return_value=legacy_ssm)
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_dynamodb_config_file", return_value=devo_dir / "no.json")
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_dir", return_value=devo_dir)
+
+    # Should not raise
+    result = _try_migrate_legacy_configs()
+
+    assert result is True
+
+
+@pytest.mark.unit
+def test_try_migrate_legacy_configs_handles_corrupt_dynamodb(tmp_path, mocker):
+    """_try_migrate_legacy_configs silently ignores corrupt DynamoDB config."""
+    from cli_tool.core.utils.config_manager import _try_migrate_legacy_configs
+
+    devo_dir = tmp_path / ".devo"
+    devo_dir.mkdir()
+    dynamo_dir = devo_dir / "dynamodb"
+    dynamo_dir.mkdir()
+    config_file = devo_dir / "config.json"
+    legacy_dynamodb = dynamo_dir / "export_templates.json"
+    legacy_dynamodb.write_text("INVALID JSON")
+
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_ssm_config_file", return_value=devo_dir / "no.json")
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_dynamodb_config_file", return_value=legacy_dynamodb)
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_dir", return_value=devo_dir)
+
+    result = _try_migrate_legacy_configs()
+
+    assert result is True
+
+
+@pytest.mark.unit
+def test_import_sections_skips_missing_section():
+    """_import_sections skips sections that don't exist in imported config."""
+    from cli_tool.core.utils.config_manager import _import_sections
+
+    current = {"ssm": {"databases": {}}}
+    imported = {"bedrock": {"model_id": "x"}}
+
+    _import_sections(current, imported, ["ssm"], merge=True)
+
+    # ssm should be unchanged since it's not in imported_config
+    assert current["ssm"] == {"databases": {}}
+
+
+@pytest.mark.unit
+def test_import_sections_merge_non_dict_value():
+    """_import_sections replaces non-dict current value with imported when merging."""
+    from cli_tool.core.utils.config_manager import _import_sections
+
+    current = {"version_check": True}
+    imported = {"version_check": False}
+
+    _import_sections(current, imported, ["version_check"], merge=True)
+
+    assert current["version_check"] is False
+
+
+@pytest.mark.unit
+def test_import_sections_no_merge_replaces_section():
+    """_import_sections replaces section entirely when merge=False."""
+    from cli_tool.core.utils.config_manager import _import_sections
+
+    current = {"ssm": {"databases": {"old": {}}}}
+    imported = {"ssm": {"databases": {"new": {}}}}
+
+    _import_sections(current, imported, ["ssm"], merge=False)
+
+    assert "new" in current["ssm"]["databases"]
+    assert "old" not in current["ssm"]["databases"]
+
+
+@pytest.mark.unit
+def test_import_sections_merge_adds_new_section():
+    """_import_sections adds section from imported that doesn't exist in current when merge=False."""
+    from cli_tool.core.utils.config_manager import _import_sections
+
+    current = {}
+    imported = {"ssm": {"databases": {}}}
+
+    _import_sections(current, imported, ["ssm"], merge=False)
+
+    assert "ssm" in current
+
+
+@pytest.mark.unit
+def test_backup_legacy_file_moves_file(tmp_path):
+    """_backup_legacy_file moves the legacy file to the backup directory."""
+    from unittest.mock import MagicMock
+
+    from cli_tool.core.utils.config_manager import _backup_legacy_file
+
+    legacy = tmp_path / "ssm-config.json"
+    legacy.write_text('{"key": "value"}')
+    backup_dir = tmp_path / "backup"
+    backup_dir.mkdir()
+    mock_console = MagicMock()
+
+    _backup_legacy_file(legacy, backup_dir, "ssm-config.json.bak", mock_console)
+
+    assert (backup_dir / "ssm-config.json.bak").exists()
+    assert not legacy.exists()
+    mock_console.print.assert_called_once()
+
+
+@pytest.mark.unit
+def test_migrate_legacy_configs_ssm_error_logs_failure(tmp_path, mocker):
+    """migrate_legacy_configs logs failure when SSM migration raises an exception."""
+    from cli_tool.core.utils.config_manager import migrate_legacy_configs
+
+    devo_dir = tmp_path / ".devo"
+    devo_dir.mkdir()
+    config_file = devo_dir / "config.json"
+    config_file.write_text("{}")
+    legacy_ssm = devo_dir / "ssm-config.json"
+    legacy_ssm.write_text("BAD JSON")
+
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_ssm_config_file", return_value=legacy_ssm)
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_dynamodb_config_file", return_value=devo_dir / "no.json")
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_dir", return_value=devo_dir)
+
+    status = migrate_legacy_configs(backup=False)
+
+    assert status["ssm"] is False
+
+
+@pytest.mark.unit
+def test_migrate_legacy_configs_dynamodb_error_logs_failure(tmp_path, mocker):
+    """migrate_legacy_configs logs failure when DynamoDB migration raises an exception."""
+    from cli_tool.core.utils.config_manager import migrate_legacy_configs
+
+    devo_dir = tmp_path / ".devo"
+    devo_dir.mkdir()
+    dynamo_dir = devo_dir / "dynamodb"
+    dynamo_dir.mkdir()
+    config_file = devo_dir / "config.json"
+    config_file.write_text("{}")
+    legacy_dynamodb = dynamo_dir / "export_templates.json"
+    legacy_dynamodb.write_text("BAD JSON")
+
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_ssm_config_file", return_value=devo_dir / "no.json")
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_dynamodb_config_file", return_value=legacy_dynamodb)
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_dir", return_value=devo_dir)
+
+    status = migrate_legacy_configs(backup=False)
+
+    assert status["dynamodb"] is False
+
+
+@pytest.mark.unit
+def test_migrate_legacy_configs_with_backup_creates_backup(tmp_path, mocker):
+    """migrate_legacy_configs backs up legacy files when backup=True."""
+    from cli_tool.core.utils.config_manager import migrate_legacy_configs
+
+    devo_dir = tmp_path / ".devo"
+    devo_dir.mkdir()
+    config_file = devo_dir / "config.json"
+    legacy_ssm = devo_dir / "ssm-config.json"
+    legacy_ssm.write_text('{"databases": {}}')
+
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_ssm_config_file", return_value=legacy_ssm)
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_dynamodb_config_file", return_value=devo_dir / "no.json")
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_dir", return_value=devo_dir)
+
+    status = migrate_legacy_configs(backup=True)
+
+    assert status["ssm"] is True
+    backup_dir = devo_dir / "backup"
+    assert backup_dir.exists()
+    assert (backup_dir / "ssm-config.json.bak").exists()
+
+
+@pytest.mark.unit
+def test_migrate_legacy_configs_with_backup_dynamodb(tmp_path, mocker):
+    """migrate_legacy_configs backs up DynamoDB legacy file when backup=True."""
+    from cli_tool.core.utils.config_manager import migrate_legacy_configs
+
+    devo_dir = tmp_path / ".devo"
+    devo_dir.mkdir()
+    dynamo_dir = devo_dir / "dynamodb"
+    dynamo_dir.mkdir()
+    config_file = devo_dir / "config.json"
+    legacy_dynamodb = dynamo_dir / "export_templates.json"
+    legacy_dynamodb.write_text('{"t1": {}}')
+
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_ssm_config_file", return_value=devo_dir / "no.json")
+    mocker.patch("cli_tool.core.utils.config_manager.get_legacy_dynamodb_config_file", return_value=legacy_dynamodb)
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_dir", return_value=devo_dir)
+
+    status = migrate_legacy_configs(backup=True)
+
+    assert status["dynamodb"] is True
+    assert (devo_dir / "backup" / "export_templates.json.bak").exists()
+
+
+@pytest.mark.unit
+def test_save_dynamodb_template_creates_dynamodb_key_if_missing(tmp_path, mocker):
+    """save_dynamodb_template creates 'dynamodb' key if not in config."""
+    from cli_tool.core.utils.config_manager import save_dynamodb_template
+
+    config_file = tmp_path / "config.json"
+    config_file.write_text('{"bedrock": {}}')  # No 'dynamodb' key
+
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+
+    save_dynamodb_template("my-template", {"table": "my-table"})
+
+    import json as _json
+
+    saved = _json.loads(config_file.read_text())
+    assert "dynamodb" in saved
+    assert "my-template" in saved["dynamodb"]["export_templates"]
+
+
+@pytest.mark.unit
+def test_save_dynamodb_template_creates_export_templates_key_if_missing(tmp_path, mocker):
+    """save_dynamodb_template creates 'export_templates' key if dynamodb exists but templates don't."""
+    from cli_tool.core.utils.config_manager import save_dynamodb_template
+
+    config_file = tmp_path / "config.json"
+    config_file.write_text('{"dynamodb": {}}')  # dynamodb exists but no export_templates
+
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+
+    save_dynamodb_template("t1", {"table": "tbl"})
+
+    import json as _json
+
+    saved = _json.loads(config_file.read_text())
+    assert "t1" in saved["dynamodb"]["export_templates"]
+
+
+@pytest.mark.unit
+def test_import_config_replace_mode_no_sections(tmp_path, mocker):
+    """import_config with merge=False and no sections replaces config entirely."""
+    import json as _json
+
+    from cli_tool.core.utils.config_manager import import_config
+
+    config_file = tmp_path / "config.json"
+    config_file.write_text('{"bedrock": {"model_id": "old"}}')
+
+    import_file = tmp_path / "import.json"
+    import_file.write_text('{"bedrock": {"model_id": "new"}, "custom": "value"}')
+
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+
+    import_config(str(import_file), sections=None, merge=False)
+
+    saved = _json.loads(config_file.read_text())
+    assert saved.get("custom") == "value"
+
+
+@pytest.mark.unit
+def test_import_config_with_sections_missing_from_file(tmp_path, mocker):
+    """import_config with sections not in import file leaves current config unchanged."""
+    import json as _json
+
+    from cli_tool.core.utils.config_manager import import_config
+
+    config_file = tmp_path / "config.json"
+    config_file.write_text('{"ssm": {"databases": {"old": {}}}}')
+
+    import_file = tmp_path / "import.json"
+    import_file.write_text('{"bedrock": {}}')  # no 'ssm' section
+
+    mocker.patch("cli_tool.core.utils.config_manager.get_config_file", return_value=config_file)
+
+    import_config(str(import_file), sections=["ssm"])
+
+    saved = _json.loads(config_file.read_text())
+    assert "old" in saved.get("ssm", {}).get("databases", {})
