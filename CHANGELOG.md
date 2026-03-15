@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v3.4.3 (2026-03-15)
+
+### Bug Fixes
+
+- **security**: Fix NOSONAR syntax to suppress S2083 false positive
+  ([`16809e6`](https://github.com/edu526/devo-cli/commit/16809e6d4a2a724317ef0cfc5ef851b8cae0f1f5))
+
+- **security**: Suppress false positive S2083 in _update_shell_config_file
+  ([`aef17d2`](https://github.com/edu526/devo-cli/commit/aef17d277460952b15dd8b3ca7503d5a89b26f34))
+
+### Testing
+
+- **coverage**: Extend unit tests to reach 80% coverage target
+  ([`3cc5cc5`](https://github.com/edu526/devo-cli/commit/3cc5cc51199c12dd3f883389cb416dd8ebe4eed2))
+
+- **platform**: Consolidate platform tests to run on Linux CI only
+  ([`f4832e6`](https://github.com/edu526/devo-cli/commit/f4832e6a59ae8cd89b7d621cc7b7576b27f7f199))
+
+
 ## v3.4.2 (2026-03-15)
 
 ### Bug Fixes
