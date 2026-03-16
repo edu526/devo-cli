@@ -110,10 +110,26 @@ def test_connect_instance_not_found_no_instances(runner, mock_ssm_config):
 
 
 @pytest.mark.unit
-def test_connect_instance_success(runner, mock_ssm_config, sample_instance, mocker):
-    """A successful connection starts an SSMSession and exits cleanly."""
+def test_connect_instance_expired_tokens_aborts_before_session(runner, mock_ssm_config, sample_instance, mocker):
+    """Pre-check: expired tokens abort before starting the session."""
     mock_ssm_config["ssm"]["instances"]["bastion-dev"] = sample_instance
     mock_session = mocker.patch("cli_tool.commands.ssm.commands.instance.shell.SSMSession")
+    mock_session._is_token_expired.return_value = True
+
+    result = runner.invoke(connect_instance, ["bastion-dev"])
+
+    assert result.exit_code == 0
+    assert "expired" in result.output.lower()
+    mock_session.start_session.assert_not_called()
+
+
+@pytest.mark.unit
+def test_connect_instance_success(runner, mock_ssm_config, sample_instance, mocker):
+    """A successful connection (returncode 0) exits cleanly without reconnecting."""
+    mock_ssm_config["ssm"]["instances"]["bastion-dev"] = sample_instance
+    mock_session = mocker.patch("cli_tool.commands.ssm.commands.instance.shell.SSMSession")
+    mock_session._is_token_expired.return_value = False
+    mock_session.start_session.return_value = 0
 
     result = runner.invoke(connect_instance, ["bastion-dev"])
 
@@ -131,12 +147,63 @@ def test_connect_instance_keyboard_interrupt(runner, mock_ssm_config, sample_ins
     """A KeyboardInterrupt during the session is caught and 'Session closed' shown."""
     mock_ssm_config["ssm"]["instances"]["bastion-dev"] = sample_instance
     mock_session = mocker.patch("cli_tool.commands.ssm.commands.instance.shell.SSMSession")
+    mock_session._is_token_expired.return_value = False
     mock_session.start_session.side_effect = KeyboardInterrupt()
 
     result = runner.invoke(connect_instance, ["bastion-dev"])
 
     assert result.exit_code == 0
     assert "Session closed" in result.output
+
+
+@pytest.mark.unit
+def test_connect_instance_expired_tokens_shows_error(runner, mock_ssm_config, sample_instance, mocker):
+    """When the session drops and tokens are expired, an error is shown and no reconnect happens."""
+    mock_ssm_config["ssm"]["instances"]["bastion-dev"] = sample_instance
+    mock_session = mocker.patch("cli_tool.commands.ssm.commands.instance.shell.SSMSession")
+    mock_session.start_session.return_value = 1
+    # pre-check passes, post-drop check detects expiry
+    mock_session._is_token_expired.side_effect = [False, True]
+
+    result = runner.invoke(connect_instance, ["bastion-dev"])
+
+    assert result.exit_code == 0
+    assert "tokens are expired" in result.output.lower()
+    assert "devo aws-login" in result.output
+    mock_session.start_session.assert_called_once()
+
+
+@pytest.mark.unit
+def test_connect_instance_reconnects_when_tokens_valid(runner, mock_ssm_config, sample_instance, mocker):
+    """When the session drops and tokens are valid, a reconnect is attempted."""
+    mock_ssm_config["ssm"]["instances"]["bastion-dev"] = sample_instance
+    mock_session = mocker.patch("cli_tool.commands.ssm.commands.instance.shell.SSMSession")
+    # First call drops with error; second call exits cleanly
+    mock_session.start_session.side_effect = [1, 0]
+    mock_session._is_token_expired.return_value = False
+    mocker.patch("cli_tool.commands.ssm.commands.instance.shell.time.sleep")
+
+    result = runner.invoke(connect_instance, ["bastion-dev"])
+
+    assert result.exit_code == 0
+    assert "Reconnecting" in result.output
+    assert mock_session.start_session.call_count == 2
+
+
+@pytest.mark.unit
+def test_connect_instance_ctrl_c_during_reconnect_delay(runner, mock_ssm_config, sample_instance, mocker):
+    """Ctrl+C during the reconnect countdown cancels the reconnect."""
+    mock_ssm_config["ssm"]["instances"]["bastion-dev"] = sample_instance
+    mock_session = mocker.patch("cli_tool.commands.ssm.commands.instance.shell.SSMSession")
+    mock_session.start_session.return_value = 1
+    mock_session._is_token_expired.return_value = False
+    mocker.patch("cli_tool.commands.ssm.commands.instance.shell.time.sleep", side_effect=KeyboardInterrupt)
+
+    result = runner.invoke(connect_instance, ["bastion-dev"])
+
+    assert result.exit_code == 0
+    assert "Connection closed" in result.output
+    mock_session.start_session.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

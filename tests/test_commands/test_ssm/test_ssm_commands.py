@@ -184,6 +184,7 @@ def test_connect_database_without_hostname_forwarding(cli_runner, mock_ssm_confi
 
     # Mock SSMSession to raise KeyboardInterrupt (simulate user stopping)
     mock_ssm_session = mocker.patch("cli_tool.commands.ssm.commands.database.connect.SSMSession")
+    mock_ssm_session._is_token_expired.return_value = False
     mock_ssm_session.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
     result = cli_runner.invoke(connect_database, ["test-db"])
@@ -200,18 +201,19 @@ def test_connect_database_without_hostname_forwarding(cli_runner, mock_ssm_confi
 
 
 @pytest.mark.integration
-def test_connect_database_ssm_session_failure(cli_runner, mock_ssm_config, sample_database_config, mocker):
-    """Test handling SSM session failures."""
+def test_connect_database_ssm_session_failure_expired_tokens(cli_runner, mock_ssm_config, sample_database_config, mocker):
+    """Test handling SSM session failure caused by expired tokens."""
     mock_ssm_config["ssm"]["databases"] = sample_database_config
 
-    # Mock SSMSession to return non-zero exit code
     mock_ssm_session = mocker.patch("cli_tool.commands.ssm.commands.database.connect.SSMSession")
     mock_ssm_session.start_port_forwarding_to_remote.return_value = 1
+    mock_ssm_session._is_token_expired.return_value = True
 
     result = cli_runner.invoke(connect_database, ["test-db"])
 
     assert result.exit_code == 0
-    assert "Connection failed" in result.output or "SSM session failed" in result.output
+    assert "expired" in result.output.lower()
+    assert "aws-login" in result.output.lower()
 
 
 # ============================================================================

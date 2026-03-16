@@ -117,6 +117,7 @@ def test_ssm_tunnel_complete_workflow(cli_runner, mock_ssm_config, sample_databa
 
     # Mock SSMSession to simulate tunnel establishment
     mock_ssm_session = mocker.patch("cli_tool.commands.ssm.commands.database.connect.SSMSession")
+    mock_ssm_session._is_token_expired.return_value = False
 
     # Simulate KeyboardInterrupt after tunnel is established (user stops tunnel)
     mock_ssm_session.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
@@ -202,6 +203,7 @@ def test_ssm_tunnel_cleanup_on_error(cli_runner, mock_ssm_config, sample_databas
 
     # Mock SSMSession to raise an error
     mock_ssm_session = mocker.patch("cli_tool.commands.ssm.commands.database.connect.SSMSession")
+    mock_ssm_session._is_token_expired.return_value = False
     mock_ssm_session.start_port_forwarding_to_remote.side_effect = Exception("SSM session failed: Unable to connect to bastion")
 
     connect_result = cli_runner.invoke(connect_database, ["test-db"])
@@ -262,6 +264,7 @@ def test_ssm_tunnel_multiple_simultaneous_tunnels(cli_runner, mock_ssm_config, m
 
     # Mock SSMSession for first tunnel
     mock_ssm_session_1 = mocker.patch("cli_tool.commands.ssm.commands.database.connect.SSMSession")
+    mock_ssm_session_1._is_token_expired.return_value = False
     mock_ssm_session_1.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
     connect_result_1 = cli_runner.invoke(connect_database, ["db1"])
@@ -280,6 +283,7 @@ def test_ssm_tunnel_multiple_simultaneous_tunnels(cli_runner, mock_ssm_config, m
 
     # Reset mock for second tunnel
     mock_ssm_session_2 = mocker.patch("cli_tool.commands.ssm.commands.database.connect.SSMSession")
+    mock_ssm_session_2._is_token_expired.return_value = False
     mock_ssm_session_2.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
     connect_result_2 = cli_runner.invoke(connect_database, ["db2"])
@@ -298,6 +302,7 @@ def test_ssm_tunnel_multiple_simultaneous_tunnels(cli_runner, mock_ssm_config, m
 
     # Reset mock for third tunnel
     mock_ssm_session_3 = mocker.patch("cli_tool.commands.ssm.commands.database.connect.SSMSession")
+    mock_ssm_session_3._is_token_expired.return_value = False
     mock_ssm_session_3.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
     connect_result_3 = cli_runner.invoke(connect_database, ["db3"])
@@ -329,15 +334,16 @@ def test_ssm_tunnel_hosts_file_rollback_on_error(cli_runner, mock_ssm_config, sa
 
     # ========== Step 1: Simulate Tunnel Failure ==========
 
-    # Mock SSMSession to fail
+    # Mock SSMSession to fail: pre-check passes, post-drop detects expired tokens
     mock_ssm_session = mocker.patch("cli_tool.commands.ssm.commands.database.connect.SSMSession")
+    mock_ssm_session._is_token_expired.side_effect = [False, True]
     mock_ssm_session.start_port_forwarding_to_remote.return_value = 1  # Non-zero exit code
 
     connect_result = cli_runner.invoke(connect_database, ["test-db"])
 
     # Verify tunnel failure is reported
     assert connect_result.exit_code == 0  # Command handles error gracefully
-    assert "failed" in connect_result.output.lower() or "error" in connect_result.output.lower()
+    assert "failed" in connect_result.output.lower() or "error" in connect_result.output.lower() or "expired" in connect_result.output.lower()
 
     # Note: In a real scenario, /etc/hosts cleanup would be manual
     # The hosts clear command can be used to clean up entries if needed
@@ -392,6 +398,7 @@ def test_ssm_tunnel_state_persistence_across_connections(cli_runner, mock_ssm_co
 
     # Mock SSMSession for first connection
     mock_ssm_session_1 = mocker.patch("cli_tool.commands.ssm.commands.database.connect.SSMSession")
+    mock_ssm_session_1._is_token_expired.return_value = False
     mock_ssm_session_1.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
     connect_result_1 = cli_runner.invoke(connect_database, ["persistent-db"])
@@ -409,6 +416,7 @@ def test_ssm_tunnel_state_persistence_across_connections(cli_runner, mock_ssm_co
 
     # Reset mock for second connection
     mock_ssm_session_2 = mocker.patch("cli_tool.commands.ssm.commands.database.connect.SSMSession")
+    mock_ssm_session_2._is_token_expired.return_value = False
     mock_ssm_session_2.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
     connect_result_2 = cli_runner.invoke(connect_database, ["persistent-db"])
@@ -426,6 +434,7 @@ def test_ssm_tunnel_state_persistence_across_connections(cli_runner, mock_ssm_co
 
     # Reset mock for third connection
     mock_ssm_session_3 = mocker.patch("cli_tool.commands.ssm.commands.database.connect.SSMSession")
+    mock_ssm_session_3._is_token_expired.return_value = False
     mock_ssm_session_3.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
     connect_result_3 = cli_runner.invoke(connect_database, ["persistent-db"])
@@ -479,6 +488,7 @@ def test_ssm_tunnel_with_aws_profile_switching(cli_runner, mock_ssm_config, mock
 
     # Mock SSMSession for dev connection
     mock_ssm_session_dev = mocker.patch("cli_tool.commands.ssm.commands.database.connect.SSMSession")
+    mock_ssm_session_dev._is_token_expired.return_value = False
     mock_ssm_session_dev.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
     connect_result_dev = cli_runner.invoke(connect_database, ["dev-db"])
@@ -496,6 +506,7 @@ def test_ssm_tunnel_with_aws_profile_switching(cli_runner, mock_ssm_config, mock
 
     # Reset mock for prod connection
     mock_ssm_session_prod = mocker.patch("cli_tool.commands.ssm.commands.database.connect.SSMSession")
+    mock_ssm_session_prod._is_token_expired.return_value = False
     mock_ssm_session_prod.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
     connect_result_prod = cli_runner.invoke(connect_database, ["prod-db"])

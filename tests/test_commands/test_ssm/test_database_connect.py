@@ -271,25 +271,38 @@ class TestProcessDatabaseConnection:
 
 @pytest.mark.unit
 class TestConnectWithHostnameForwarding:
+    def test_expired_tokens_aborts_before_connecting(self):
+        """Pre-check: expired tokens abort before any connection attempt."""
+        db_config = _make_db_config()
+        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+            mock_session._is_token_expired.return_value = True
+            _connect_with_hostname_forwarding("mydb", db_config)
+        mock_session.start_port_forwarding_to_remote.assert_not_called()
+
     def test_successful_connection(self):
         db_config = _make_db_config()
         with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder") as mock_pf_cls:
             mock_pf = MagicMock()
             mock_pf_cls.return_value = mock_pf
             with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+                mock_session._is_token_expired.return_value = False
                 mock_session.start_port_forwarding_to_remote.return_value = 0
                 _connect_with_hostname_forwarding("mydb", db_config)
         mock_pf.stop_all.assert_called_once()
 
-    def test_nonzero_exit_code_prints_error(self):
+    def test_nonzero_exit_code_checks_tokens_and_exits(self):
+        """Non-zero exit triggers token check; expired tokens stop the reconnect loop."""
         db_config = _make_db_config()
         with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder") as mock_pf_cls:
             mock_pf = MagicMock()
             mock_pf_cls.return_value = mock_pf
             with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
                 mock_session.start_port_forwarding_to_remote.return_value = 1
+                # pre-check passes, post-drop check detects expiry
+                mock_session._is_token_expired.side_effect = [False, True]
                 _connect_with_hostname_forwarding("mydb", db_config)
         mock_pf.stop_all.assert_called_once()
+        assert mock_session._is_token_expired.call_count == 2
 
     def test_keyboard_interrupt_handled(self):
         db_config = _make_db_config()
@@ -297,6 +310,7 @@ class TestConnectWithHostnameForwarding:
             mock_pf = MagicMock()
             mock_pf_cls.return_value = mock_pf
             with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+                mock_session._is_token_expired.return_value = False
                 mock_session.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt
                 _connect_with_hostname_forwarding("mydb", db_config)
         mock_pf.stop_all.assert_called_once()
@@ -307,6 +321,7 @@ class TestConnectWithHostnameForwarding:
             mock_pf = MagicMock()
             mock_pf_cls.return_value = mock_pf
             with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+                mock_session._is_token_expired.return_value = False
                 mock_session.start_port_forwarding_to_remote.side_effect = Exception("connection refused")
                 _connect_with_hostname_forwarding("mydb", db_config)
         mock_pf.stop_all.assert_called_once()
@@ -318,9 +333,54 @@ class TestConnectWithHostnameForwarding:
             mock_pf = MagicMock()
             mock_pf_cls.return_value = mock_pf
             with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+                mock_session._is_token_expired.return_value = False
                 mock_session.start_port_forwarding_to_remote.return_value = 0
                 _connect_with_hostname_forwarding("mydb", db_config)
         mock_pf.stop_all.assert_called_once()
+
+    def test_expired_tokens_shows_error_message(self):
+        """Token expiry error is displayed when tokens are expired after a disconnect."""
+        db_config = _make_db_config()
+        with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder") as mock_pf_cls:
+            mock_pf = MagicMock()
+            mock_pf_cls.return_value = mock_pf
+            with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+                mock_session.start_port_forwarding_to_remote.return_value = 1
+                # pre-check passes, post-drop check detects expiry
+                mock_session._is_token_expired.side_effect = [False, True]
+                with patch("cli_tool.commands.ssm.commands.database.connect.console") as mock_console:
+                    _connect_with_hostname_forwarding("mydb", db_config)
+        output = " ".join(str(c) for c in mock_console.print.call_args_list)
+        assert "expired" in output.lower()
+        assert "aws-login" in output.lower()
+
+    def test_reconnects_when_tokens_valid(self):
+        """When tokens are valid after a disconnect, reconnect is attempted."""
+        db_config = _make_db_config()
+        with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder") as mock_pf_cls:
+            mock_pf = MagicMock()
+            mock_pf_cls.return_value = mock_pf
+            with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+                # First call drops, second exits cleanly
+                mock_session.start_port_forwarding_to_remote.side_effect = [1, 0]
+                mock_session._is_token_expired.return_value = False
+                with patch("cli_tool.commands.ssm.commands.database.connect.time.sleep"):
+                    _connect_with_hostname_forwarding("mydb", db_config)
+        assert mock_session.start_port_forwarding_to_remote.call_count == 2
+        assert mock_pf.stop_all.call_count == 2
+
+    def test_ctrl_c_during_reconnect_delay_cancels(self):
+        """Ctrl+C during the reconnect countdown stops the reconnect loop."""
+        db_config = _make_db_config()
+        with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder") as mock_pf_cls:
+            mock_pf = MagicMock()
+            mock_pf_cls.return_value = mock_pf
+            with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+                mock_session.start_port_forwarding_to_remote.return_value = 1
+                mock_session._is_token_expired.return_value = False
+                with patch("cli_tool.commands.ssm.commands.database.connect.time.sleep", side_effect=KeyboardInterrupt):
+                    _connect_with_hostname_forwarding("mydb", db_config)
+        mock_session.start_port_forwarding_to_remote.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -330,23 +390,37 @@ class TestConnectWithHostnameForwarding:
 
 @pytest.mark.unit
 class TestConnectWithoutHostnameForwarding:
+    def test_expired_tokens_aborts_before_connecting(self):
+        """Pre-check: expired tokens abort before any connection attempt."""
+        db_config = _make_db_config(local_address="127.0.0.1")
+        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+            mock_session._is_token_expired.return_value = True
+            _connect_without_hostname_forwarding("mydb", db_config, no_hosts=False)
+        mock_session.start_port_forwarding_to_remote.assert_not_called()
+
     def test_successful_connection_localhost(self):
         db_config = _make_db_config(local_address="127.0.0.1")
         with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+            mock_session._is_token_expired.return_value = False
             mock_session.start_port_forwarding_to_remote.return_value = 0
             _connect_without_hostname_forwarding("mydb", db_config, no_hosts=False)
         mock_session.start_port_forwarding_to_remote.assert_called_once()
 
-    def test_nonzero_exit_code_prints_error(self):
+    def test_nonzero_exit_code_checks_tokens_and_exits(self):
+        """Non-zero exit triggers token check; expired tokens stop the reconnect loop."""
         db_config = _make_db_config(local_address="127.0.0.1")
         with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
             mock_session.start_port_forwarding_to_remote.return_value = 1
+            # pre-check passes, post-drop check detects expiry
+            mock_session._is_token_expired.side_effect = [False, True]
             _connect_without_hostname_forwarding("mydb", db_config, no_hosts=False)
         mock_session.start_port_forwarding_to_remote.assert_called_once()
+        assert mock_session._is_token_expired.call_count == 2
 
     def test_keyboard_interrupt_handled(self):
         db_config = _make_db_config(local_address="127.0.0.1")
         with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+            mock_session._is_token_expired.return_value = False
             mock_session.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt
             _connect_without_hostname_forwarding("mydb", db_config, no_hosts=False)
         mock_session.start_port_forwarding_to_remote.assert_called_once()
@@ -354,8 +428,43 @@ class TestConnectWithoutHostnameForwarding:
     def test_no_hosts_flag_with_non_localhost(self):
         db_config = _make_db_config(local_address="10.0.0.1")
         with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+            mock_session._is_token_expired.return_value = False
             mock_session.start_port_forwarding_to_remote.return_value = 0
             _connect_without_hostname_forwarding("mydb", db_config, no_hosts=True)
+        mock_session.start_port_forwarding_to_remote.assert_called_once()
+
+    def test_expired_tokens_shows_error_message(self):
+        """Token expiry error is displayed when tokens are expired after a disconnect."""
+        db_config = _make_db_config(local_address="127.0.0.1")
+        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+            mock_session.start_port_forwarding_to_remote.return_value = 1
+            # pre-check passes, post-drop check detects expiry
+            mock_session._is_token_expired.side_effect = [False, True]
+            with patch("cli_tool.commands.ssm.commands.database.connect.console") as mock_console:
+                _connect_without_hostname_forwarding("mydb", db_config, no_hosts=False)
+        output = " ".join(str(c) for c in mock_console.print.call_args_list)
+        assert "expired" in output.lower()
+        assert "aws-login" in output.lower()
+
+    def test_reconnects_when_tokens_valid(self):
+        """When tokens are valid after a disconnect, reconnect is attempted."""
+        db_config = _make_db_config(local_address="127.0.0.1")
+        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+            # First call drops, second exits cleanly
+            mock_session.start_port_forwarding_to_remote.side_effect = [1, 0]
+            mock_session._is_token_expired.return_value = False
+            with patch("cli_tool.commands.ssm.commands.database.connect.time.sleep"):
+                _connect_without_hostname_forwarding("mydb", db_config, no_hosts=False)
+        assert mock_session.start_port_forwarding_to_remote.call_count == 2
+
+    def test_ctrl_c_during_reconnect_delay_cancels(self):
+        """Ctrl+C during the reconnect countdown stops the reconnect loop."""
+        db_config = _make_db_config(local_address="127.0.0.1")
+        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+            mock_session.start_port_forwarding_to_remote.return_value = 1
+            mock_session._is_token_expired.return_value = False
+            with patch("cli_tool.commands.ssm.commands.database.connect.time.sleep", side_effect=KeyboardInterrupt):
+                _connect_without_hostname_forwarding("mydb", db_config, no_hosts=False)
         mock_session.start_port_forwarding_to_remote.assert_called_once()
 
 
@@ -414,6 +523,36 @@ class TestConnectDatabaseCommand:
                 with patch("cli_tool.commands.ssm.commands.database.connect._connect_all_databases") as mock_all:
                     runner.invoke(connect_database, [])
         mock_all.assert_called_once_with(databases, False)
+
+    def test_connect_all_flag_skips_menu(self):
+        """--all flag connects to all databases without showing the selection menu."""
+        from click.testing import CliRunner
+
+        runner = CliRunner()
+        databases = {"db1": _make_db_config(), "db2": _make_db_config(host="other.com")}
+        with patch("cli_tool.commands.ssm.commands.database.connect.SSMConfigManager") as mock_cm_cls:
+            mock_cm = MagicMock()
+            mock_cm.list_databases.return_value = databases
+            mock_cm_cls.return_value = mock_cm
+            with patch("cli_tool.commands.ssm.commands.database.connect._connect_all_databases") as mock_all:
+                with patch("cli_tool.commands.ssm.commands.database.connect._show_database_selection") as mock_sel:
+                    runner.invoke(connect_database, ["--all"])
+        mock_all.assert_called_once_with(databases, False)
+        mock_sel.assert_not_called()
+
+    def test_connect_all_flag_with_no_hosts(self):
+        """--all --no-hosts passes no_hosts=True to _connect_all_databases."""
+        from click.testing import CliRunner
+
+        runner = CliRunner()
+        databases = {"db1": _make_db_config()}
+        with patch("cli_tool.commands.ssm.commands.database.connect.SSMConfigManager") as mock_cm_cls:
+            mock_cm = MagicMock()
+            mock_cm.list_databases.return_value = databases
+            mock_cm_cls.return_value = mock_cm
+            with patch("cli_tool.commands.ssm.commands.database.connect._connect_all_databases") as mock_all:
+                runner.invoke(connect_database, ["--all", "--no-hosts"])
+        mock_all.assert_called_once_with(databases, True)
 
     def test_connect_with_hostname_forwarding(self):
         from click.testing import CliRunner
@@ -483,6 +622,36 @@ class TestConnectDatabaseCommand:
 
 @pytest.mark.unit
 class TestConnectAllDatabases:
+    def test_expired_tokens_aborts_before_connecting(self):
+        """Token check fires before any connection is attempted."""
+        databases = {"db1": _make_db_config(), "db2": _make_db_config(host="other.com")}
+        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+            mock_session._is_token_expired.return_value = True
+            with patch("cli_tool.commands.ssm.commands.database.connect.console") as mock_console:
+                _connect_all_databases(databases, no_hosts=False)
+        output = " ".join(str(c) for c in mock_console.print.call_args_list)
+        assert "expired" in output.lower()
+        assert "aws-login" in output.lower()
+        mock_session.start_port_forwarding_to_remote.assert_not_called()
+
+    def test_checks_each_unique_profile_region(self):
+        """Each unique (profile, region) is checked once."""
+        databases = {
+            "db1": _make_db_config(profile="profile-a", region="us-east-1"),
+            "db2": _make_db_config(profile="profile-a", region="us-east-1"),  # duplicate — not rechecked
+            "db3": _make_db_config(profile="profile-b", region="eu-west-1"),  # different profile
+        }
+        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
+            mock_session._is_token_expired.return_value = False
+            with patch("cli_tool.commands.ssm.commands.database.connect.HostsManager") as mock_hm_cls:
+                mock_hm = MagicMock()
+                mock_hm.get_managed_entries.return_value = []
+                mock_hm_cls.return_value = mock_hm
+                with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder"):
+                    with patch("cli_tool.commands.ssm.commands.database.connect._process_database_connection"):
+                        _connect_all_databases(databases, no_hosts=False)
+        assert mock_session._is_token_expired.call_count == 2  # profile-a and profile-b
+
     def test_no_databases_to_connect(self):
         databases = {"db1": _make_db_config()}
         with patch("cli_tool.commands.ssm.commands.database.connect.HostsManager") as mock_hm_cls:
