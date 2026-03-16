@@ -106,6 +106,7 @@ def test_start_forward_unix_success(mocker):
     mock_proc.pid = 1234
     mock_proc.poll.return_value = None  # Still running
     mocker.patch.object(pf, "_is_command_available", return_value=True)
+    mocker.patch.object(pf, "_kill_orphaned_socat")
     mocker.patch("subprocess.Popen", return_value=mock_proc)
     mocker.patch("time.sleep")
 
@@ -116,10 +117,28 @@ def test_start_forward_unix_success(mocker):
 
 
 @pytest.mark.unit
+def test_start_forward_unix_kills_orphaned_socat_before_start(mocker):
+    """Calls _kill_orphaned_socat before starting socat to clear stale processes."""
+    pf = _make_forwarder("Linux")
+    mock_proc = MagicMock()
+    mock_proc.pid = 1234
+    mock_proc.poll.return_value = None
+    mocker.patch.object(pf, "_is_command_available", return_value=True)
+    mock_kill = mocker.patch.object(pf, "_kill_orphaned_socat")
+    mocker.patch("subprocess.Popen", return_value=mock_proc)
+    mocker.patch("time.sleep")
+
+    pf.start_forward("127.0.0.2", 5432, 15432)
+
+    mock_kill.assert_called_once_with("127.0.0.2", 5432)
+
+
+@pytest.mark.unit
 def test_start_forward_unix_socat_not_installed(mocker):
     """Raises FileNotFoundError when socat is not installed."""
     pf = _make_forwarder("Linux")
     mocker.patch.object(pf, "_is_command_available", return_value=False)
+    mocker.patch.object(pf, "_kill_orphaned_socat")
 
     with pytest.raises(FileNotFoundError, match="socat is not installed"):
         pf.start_forward("127.0.0.2", 5432, 15432)
@@ -133,6 +152,7 @@ def test_start_forward_unix_socat_dies_immediately(mocker):
     mock_proc.poll.return_value = 1  # Process exited immediately
     mock_proc.communicate.return_value = (b"", b"bind error")
     mocker.patch.object(pf, "_is_command_available", return_value=True)
+    mocker.patch.object(pf, "_kill_orphaned_socat")
     mocker.patch("subprocess.Popen", return_value=mock_proc)
     mocker.patch("time.sleep")
 
@@ -152,6 +172,7 @@ def test_start_forward_unix_stops_existing_before_restart(mocker):
     mock_new_proc.pid = 9999
     mock_new_proc.poll.return_value = None
     mocker.patch.object(pf, "_is_command_available", return_value=True)
+    mocker.patch.object(pf, "_kill_orphaned_socat")
     mocker.patch("subprocess.Popen", return_value=mock_new_proc)
     mocker.patch("time.sleep")
 
@@ -173,6 +194,7 @@ def test_start_forward_darwin_ensures_loopback_alias(mocker):
     mock_proc.pid = 5555
     mock_proc.poll.return_value = None
     mocker.patch.object(pf, "_is_command_available", return_value=True)
+    mocker.patch.object(pf, "_kill_orphaned_socat")
     mocker.patch("subprocess.Popen", return_value=mock_proc)
     mocker.patch("time.sleep")
     mock_alias = mocker.patch.object(pf, "_ensure_loopback_alias_macos")
@@ -190,6 +212,7 @@ def test_start_forward_darwin_skips_loopback_for_standard_localhost(mocker):
     mock_proc.pid = 5555
     mock_proc.poll.return_value = None
     mocker.patch.object(pf, "_is_command_available", return_value=True)
+    mocker.patch.object(pf, "_kill_orphaned_socat")
     mocker.patch("subprocess.Popen", return_value=mock_proc)
     mocker.patch("time.sleep")
     mock_alias = mocker.patch.object(pf, "_ensure_loopback_alias_macos")
@@ -402,6 +425,7 @@ def test_start_forward_unix_raises_file_not_found_if_popen_raises(mocker):
     """Raises FileNotFoundError wrapping the unexpected Popen FileNotFoundError (line 76)."""
     pf = _make_forwarder("Linux")
     mocker.patch.object(pf, "_is_command_available", return_value=True)
+    mocker.patch.object(pf, "_kill_orphaned_socat")
     # Popen raises FileNotFoundError even though we checked availability — covers line 76
     mocker.patch("subprocess.Popen", side_effect=FileNotFoundError("socat not found"))
     mocker.patch("time.sleep")
@@ -433,3 +457,88 @@ def test_ensure_loopback_alias_macos_ifconfig_check_fails_continues(mocker):
     # Second call should be the alias-add command
     second_call_cmd = mock_run.call_args_list[1][0][0]
     assert "alias" in second_call_cmd
+
+
+# ============================================================================
+# _kill_orphaned_socat
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_kill_orphaned_socat_calls_pkill(mocker):
+    """Calls pkill with the socat pattern for the given address and port."""
+    pf = _make_forwarder("Linux")
+    mock_run = mocker.patch("subprocess.run")
+    mocker.patch("time.sleep")
+
+    pf._kill_orphaned_socat("127.0.0.2", 5432)
+
+    mock_run.assert_called_once()
+    cmd = mock_run.call_args[0][0]
+    assert cmd[0] == "pkill"
+    assert "-f" in cmd
+    assert "socat" in cmd[2]
+    assert "5432" in cmd[2]
+    assert "127.0.0.2" in cmd[2]
+
+
+@pytest.mark.unit
+def test_kill_orphaned_socat_ignores_exception(mocker):
+    """Does not raise even if pkill fails (e.g. not installed)."""
+    pf = _make_forwarder("Linux")
+    mocker.patch("subprocess.run", side_effect=FileNotFoundError("pkill not found"))
+    mocker.patch("time.sleep")
+
+    # Should not raise
+    pf._kill_orphaned_socat("127.0.0.2", 5432)
+
+
+@pytest.mark.unit
+def test_kill_orphaned_socat_sleeps_after_kill(mocker):
+    """Sleeps briefly after pkill to allow the OS to release the port."""
+    pf = _make_forwarder("Linux")
+    mocker.patch("subprocess.run")
+    mock_sleep = mocker.patch("time.sleep")
+
+    pf._kill_orphaned_socat("127.0.0.2", 5432)
+
+    mock_sleep.assert_called_once_with(0.2)
+
+
+# ============================================================================
+# _register_signal_handlers
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_register_signal_handlers_skipped_on_windows():
+    """Signal handlers are not registered on Windows."""
+    import signal as signal_module
+
+    with patch("cli_tool.commands.ssm.core.port_forwarder.platform.system", return_value="Windows"):
+        with patch.object(signal_module, "signal") as mock_signal:
+            pf = PortForwarder()
+            mock_signal.assert_not_called()
+
+
+@pytest.mark.unit
+def test_register_signal_handlers_registered_on_linux(mocker):
+    """SIGTERM and SIGHUP handlers are registered on Linux."""
+    import signal as signal_module
+
+    mock_signal = mocker.patch("cli_tool.commands.ssm.core.port_forwarder.signal.signal")
+    with patch("cli_tool.commands.ssm.core.port_forwarder.platform.system", return_value="Linux"):
+        PortForwarder()
+
+    registered_signals = [call[0][0] for call in mock_signal.call_args_list]
+    assert signal_module.SIGTERM in registered_signals
+    assert signal_module.SIGHUP in registered_signals
+
+
+@pytest.mark.unit
+def test_register_signal_handlers_ignores_oserror(mocker):
+    """OSError during signal registration (e.g. non-main thread) is silently ignored."""
+    mocker.patch("cli_tool.commands.ssm.core.port_forwarder.signal.signal", side_effect=OSError)
+    with patch("cli_tool.commands.ssm.core.port_forwarder.platform.system", return_value="Linux"):
+        # Should not raise
+        PortForwarder()
