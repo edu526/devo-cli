@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v3.5.0 (2026-03-16)
+
+### Bug Fixes
+
+- **aws-login**: Sort profile, account, role and session lists alphabetically
+  ([`1527ffa`](https://github.com/edu526/devo-cli/commit/1527ffa6b0b4fc5b35750d4f436ad51af302cea7))
+
+- **ssm**: Kill orphaned socat processes on reconnect to prevent port conflicts
+  ([`1b288f7`](https://github.com/edu526/devo-cli/commit/1b288f7b8aad3853ea55a2c66e65775c7f92731d))
+
+### Features
+
+- **aws-login**: Auto-update [default] credentials across login, refresh, and set-default flows
+  ([`25baf82`](https://github.com/edu526/devo-cli/commit/25baf829c445733da3cfbab2a335727c009ccd53))
+
+- **ssm**: Add token validation, auto-reconnect, and --all flag to connect flows
+  ([`0aa7414`](https://github.com/edu526/devo-cli/commit/0aa7414900b3fc6da92dd52f73cfe853e71d53a9))
+
+### Refactoring
+
+- Reduce cognitive complexity across modules (SonarQube S3776)
+  ([`572cfc9`](https://github.com/edu526/devo-cli/commit/572cfc97a3c7045cdb6089cd19bc67b2e9f9eca4))
+
+- **core**: Centralize AWS profile and credential utilities in aws.py
+  ([`faac266`](https://github.com/edu526/devo-cli/commit/faac2661f42217951d794c000910cd27d16f019a))
+
+
 ## v3.4.4 (2026-03-15)
 
 ### Bug Fixes
