@@ -26,6 +26,8 @@ devo aws-login login [PROFILE] [OPTIONS]
 
 - `PROFILE` - AWS profile name (optional, shows interactive menu if omitted)
 
+If a default profile was previously configured via `set-default` and the logged-in profile matches it, `~/.aws/credentials [default]` is automatically updated after a successful login.
+
 **Example:**
 
 ```bash
@@ -105,6 +107,8 @@ devo aws-login refresh [OPTIONS]
 
 Automatically refreshes all profiles that are expired or expiring within 10 minutes. Groups profiles by SSO session to minimize login prompts.
 
+If a default profile was previously configured via `set-default`, the `[default]` section in `~/.aws/credentials` is automatically re-written after a successful refresh — but only for profiles that passed credential verification.
+
 **Example:**
 
 ```bash
@@ -123,13 +127,11 @@ devo aws-login set-default [PROFILE] [OPTIONS]
 
 - `PROFILE` - AWS profile name (optional, shows interactive menu if omitted)
 
-Sets the AWS_PROFILE environment variable as default:
+**Options:**
 
-- **Linux/macOS**: Updates `.bashrc`, `.zshrc`, or `config.fish`
-- **Windows**: Sets user environment variable with `setx`
-- **Git Bash (Windows)**: Updates `.bashrc`
+- `--set-env` - Also export `AWS_PROFILE` in the shell config file (see below)
 
-After setting default, you can use AWS CLI without `--profile`:
+By default, writes the profile's temporary credentials as `[default]` in `~/.aws/credentials`. This lets you use the AWS CLI without `--profile` immediately, without modifying any shell config file.
 
 ```bash
 aws s3 ls
@@ -137,14 +139,31 @@ aws sts get-caller-identity
 devo codeartifact-login
 ```
 
+**Shell config update (optional)**
+
+Pass `--set-env` to also persist `AWS_PROFILE` in your shell config:
+
+- **Linux/macOS**: Updates `.bashrc`, `.zshrc`, or `config.fish`
+- **Windows**: Sets user environment variable with `setx`
+- **Git Bash (Windows)**: Updates `.bashrc`
+
+To enable this behaviour permanently without the flag:
+
+```bash
+devo config set aws_login.set_env_profile true
+```
+
 **Example:**
 
 ```bash
-# Interactive selection
+# Interactive selection (writes credentials only)
 devo aws-login set-default
 
-# Set specific profile as default
+# Set specific profile (writes credentials only)
 devo aws-login set-default production
+
+# Write credentials and update shell config
+devo aws-login set-default production --set-env
 ```
 
 ## Configuration
@@ -196,6 +215,18 @@ Both formats are supported.
 - [AWS Login Workflow](../guides/aws-login-workflow.md) - Complete workflow guide
 - [AWS Setup](../guides/aws-setup.md) - Initial AWS configuration
 - [devo codeartifact-login](codeartifact.md) - Login to CodeArtifact
+
+## Default credentials auto-update
+
+Once a default profile is configured with `set-default`, devo keeps `~/.aws/credentials [default]` in sync automatically across three flows:
+
+| Command | When `[default]` is updated |
+|---------|----------------------------|
+| `set-default <profile>` | Always — writes fresh credentials immediately |
+| `login <profile>` | When the logged-in profile matches the configured default |
+| `refresh` | When the default profile is among the successfully verified profiles after refresh |
+
+The configured default profile is stored in `~/.devo/config.json` under `aws_login.default_credentials_profile`. When `[default]` credentials expire (typically every 1 hour) but the SSO token is still valid (up to 12 hours), re-running `set-default` re-exports without requiring browser re-authentication.
 
 ## Notes
 

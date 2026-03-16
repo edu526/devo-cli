@@ -11,6 +11,7 @@ from rich.console import Console
 
 from cli_tool.commands.aws_login.core.config import list_aws_profiles
 from cli_tool.commands.aws_login.core.credentials import check_profile_credentials_available, write_default_credentials
+from cli_tool.core.utils.config_manager import get_config_value, set_config_value
 
 console = Console()
 
@@ -174,15 +175,20 @@ def _write_default_credentials(profile_name: str) -> None:
         console.print("[green]✓ Credentials written to ~/.aws/credentials as [default][/green]")
         if result.get("expiration"):
             console.print(f"[dim]  Expires: {result['expiration']}[/dim]")
+        set_config_value("aws_login.default_credentials_profile", profile_name)
     else:
-        console.print("[yellow]⚠ Could not write credentials to ~/.aws/credentials — AWS_PROFILE is still set[/yellow]")
+        console.print("[yellow]⚠ Could not write credentials to ~/.aws/credentials[/yellow]")
 
 
-def set_default_profile(profile_name=None):
-    """Set default AWS profile by exporting AWS_PROFILE environment variable.
+def set_default_profile(profile_name=None, set_env=None):
+    """Set default AWS profile by writing credentials as [default] in ~/.aws/credentials.
+
+    Optionally also exports AWS_PROFILE in the shell configuration file when set_env is True.
+    If set_env is None, the value from config (aws_login.set_env_profile) is used.
 
     Args:
       profile_name: Name of the profile to set as default
+      set_env: Whether to also set AWS_PROFILE in the shell config file. Overrides config when provided.
     """
     profiles = list_aws_profiles()
     if not profiles:
@@ -200,16 +206,21 @@ def set_default_profile(profile_name=None):
         console.print("[dim]  Run 'devo aws-login' to refresh them first.[/dim]")
         sys.exit(1)
 
-    # Set in current process (won't affect parent shell, but shows intent)
-    os.environ["AWS_PROFILE"] = profile_name
+    # Resolve set_env: explicit flag overrides config; config default is False
+    if set_env is None:
+        set_env = get_config_value("aws_login.set_env_profile", False)
 
-    # Detect if running in Git Bash on Windows
-    is_git_bash = os.name == "nt" and os.environ.get("SHELL", "").endswith("bash")
+    if set_env:
+        # Set in current process (won't affect parent shell, but shows intent)
+        os.environ["AWS_PROFILE"] = profile_name
 
-    if os.name == "nt" and not is_git_bash:
-        _set_windows_profile(profile_name)
-    else:
-        _set_unix_profile(profile_name)
+        # Detect if running in Git Bash on Windows
+        is_git_bash = os.name == "nt" and os.environ.get("SHELL", "").endswith("bash")
+
+        if os.name == "nt" and not is_git_bash:
+            _set_windows_profile(profile_name)
+        else:
+            _set_unix_profile(profile_name)
 
     # Common instructions for all platforms
     console.print("\n[cyan]You can now use AWS CLI without --profile:[/cyan]")
