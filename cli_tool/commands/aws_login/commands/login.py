@@ -8,7 +8,7 @@ import click
 from rich.console import Console
 
 from cli_tool.commands.aws_login.commands.setup import configure_sso_profile
-from cli_tool.commands.aws_login.core.config import list_aws_profiles, parse_sso_config
+from cli_tool.commands.aws_login.core.config import list_aws_profiles, parse_sso_config, select_profile_interactively
 from cli_tool.commands.aws_login.core.credentials import (
     get_profile_credentials_expiration,
     verify_credentials,
@@ -20,29 +20,6 @@ console = Console()
 
 _CONFIGURE_HINT = "  devo aws-login configure"
 _MANUAL_SSO_HINT = "  aws configure sso"
-
-
-def _format_source_label(source: str) -> str:
-    """Format profile source with Rich color markup."""
-    labels = {
-        "sso": "[cyan]sso[/cyan]",
-        "static": "[yellow]static[/yellow]",
-        "both": "[green]both[/green]",
-    }
-    return labels.get(source, f"[dim]{source}[/dim]")
-
-
-def _select_profile_interactively(profiles: list) -> str:
-    """Display profile list and prompt user to select one. Returns profile name."""
-    console.print("[blue]Available profiles:[/blue]")
-    for i, (prof_name, source) in enumerate(profiles, 1):
-        console.print(f"  {i}. {prof_name} [{_format_source_label(source)}]")
-
-    choice = click.prompt("\nSelect profile number", type=int)
-    if 1 <= choice <= len(profiles):
-        return profiles[choice - 1][0]
-    console.print("[red]Invalid selection[/red]")
-    sys.exit(1)
 
 
 def _resolve_profile_name() -> str:
@@ -62,7 +39,7 @@ def _resolve_profile_name() -> str:
         console.print("\nOr manually:")
         console.print(_MANUAL_SSO_HINT)
         sys.exit(1)
-    return _select_profile_interactively(profiles)
+    return select_profile_interactively(profiles)
 
 
 def _show_login_success(profile_name: str, identity: dict) -> None:

@@ -6,10 +6,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-import click
 from rich.console import Console
 
-from cli_tool.commands.aws_login.core.config import list_aws_profiles
+from cli_tool.commands.aws_login.core.config import list_aws_profiles, select_profile_interactively
 from cli_tool.commands.aws_login.core.credentials import check_profile_credentials_available, write_default_credentials
 from cli_tool.core.utils.config_manager import get_config_value, set_config_value
 
@@ -17,29 +16,6 @@ console = Console()
 
 # AWS profile names: alphanumeric, hyphens, underscores, dots only
 _SAFE_PROFILE_RE = re.compile(r"^[a-zA-Z0-9._-]{1,128}$")
-
-
-def _format_source_label(source: str) -> str:
-    """Format profile source with Rich color markup."""
-    labels = {
-        "sso": "[cyan]sso[/cyan]",
-        "static": "[yellow]static[/yellow]",
-        "both": "[green]both[/green]",
-    }
-    return labels.get(source, f"[dim]{source}[/dim]")
-
-
-def _select_profile_interactively(profiles: list) -> str:
-    """Display profile list and prompt user to select one. Returns profile name."""
-    console.print("[blue]Available profiles:[/blue]")
-    for i, (prof_name, source) in enumerate(profiles, 1):
-        console.print(f"  {i}. {prof_name} [{_format_source_label(source)}]")
-
-    choice = click.prompt("\nSelect profile number", type=int)
-    if 1 <= choice <= len(profiles):
-        return profiles[choice - 1][0]
-    console.print("[red]Invalid selection[/red]")
-    sys.exit(1)
 
 
 def _get_shell_config(shell_name: str, profile_name: str) -> tuple:
@@ -147,7 +123,7 @@ def _resolve_and_validate_profile(profile_name: str | None, profiles: list) -> s
       Validated profile name.
     """
     if not profile_name:
-        profile_name = _select_profile_interactively(profiles)
+        profile_name = select_profile_interactively(profiles)
 
     # Validate format to prevent OS command injection
     if not _SAFE_PROFILE_RE.match(profile_name):
