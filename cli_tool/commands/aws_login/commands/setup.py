@@ -59,6 +59,7 @@ def _read_sso_session_config(config_path, session_name: str) -> tuple:
 
 def _select_role_from_list(roles: list) -> str:
     """Display role list and prompt user to select one. Returns the selected role name."""
+    roles = sorted(roles, key=lambda r: r.get("roleName", "").lower())
     console.print("[green]Available roles:[/green]")
     for i, role in enumerate(roles, 1):
         console.print(f"  {i}. {role.get('roleName')}")
@@ -95,6 +96,7 @@ def _fetch_role_for_account(account_id: str, sso_region: str, access_token: str)
 
 def _select_account_from_list(accounts: list, sso_region: str, access_token: str) -> tuple:
     """Display account list, prompt selection, then fetch and select a role. Returns (account_id, role_name, region)."""
+    accounts = sorted(accounts, key=lambda a: a.get("accountName", "").lower())
     console.print("[green]Available accounts:[/green]")
     for i, account in enumerate(accounts, 1):
         account_id = account.get("accountId")
@@ -282,7 +284,7 @@ def _select_or_create_session(profile_name: str) -> str:
     if not existing_sessions:
         return None
 
-    session_list = list(existing_sessions.items())
+    session_list = sorted(existing_sessions.items(), key=lambda s: s[0].lower())
     console.print("[green]Found existing SSO sessions:[/green]")
     for i, (session_name, config) in enumerate(session_list, 1):
         sso_url = config.get("sso_start_url", "N/A")

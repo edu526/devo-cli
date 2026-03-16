@@ -197,7 +197,7 @@ def list_aws_profiles():
         credentials_profiles = _read_credentials_profiles(credentials_path)
 
     all_profiles = set(config_profiles.keys()) | credentials_profiles
-    return [(p, _classify_profile(p, config_profiles, credentials_profiles)) for p in sorted(all_profiles)]
+    return [(p, _classify_profile(p, config_profiles, credentials_profiles)) for p in sorted(all_profiles, key=str.lower)]
 
 
 def get_profile_config(profile_name):
