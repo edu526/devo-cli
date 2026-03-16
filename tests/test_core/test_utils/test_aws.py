@@ -12,6 +12,7 @@ from cli_tool.core.utils.aws import (
     create_aws_client,
     create_aws_session,
     select_profile,
+    verify_aws_credentials,
 )
 
 # ---------------------------------------------------------------------------
@@ -272,7 +273,7 @@ def test_select_profile_returns_provided_profile():
 @pytest.mark.unit
 def test_select_profile_auto_selects_single_profile(mocker):
     """Auto-selects when only one profile exists."""
-    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=[("dev", "sso")])
+    mocker.patch("cli_tool.commands.aws_login.core.config.list_aws_profiles", return_value=[("dev", "sso")])
 
     result = select_profile()
 
@@ -282,7 +283,7 @@ def test_select_profile_auto_selects_single_profile(mocker):
 @pytest.mark.unit
 def test_select_profile_returns_none_when_no_profiles_and_allow_none(mocker):
     """Returns None when no profiles and allow_none=True."""
-    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=[])
+    mocker.patch("cli_tool.commands.aws_login.core.config.list_aws_profiles", return_value=[])
 
     result = select_profile(allow_none=True)
 
@@ -294,7 +295,7 @@ def test_select_profile_raises_abort_when_no_profiles(mocker):
     """Raises click.Abort when no profiles and allow_none=False."""
     import click
 
-    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=[])
+    mocker.patch("cli_tool.commands.aws_login.core.config.list_aws_profiles", return_value=[])
 
     with pytest.raises(click.Abort):
         select_profile(allow_none=False)
@@ -304,7 +305,7 @@ def test_select_profile_raises_abort_when_no_profiles(mocker):
 def test_select_profile_prompts_when_multiple_profiles(mocker):
     """Prompts user when multiple profiles exist."""
     profiles = [("dev", "sso"), ("prod", "sso"), ("staging", "both")]
-    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=profiles)
+    mocker.patch("cli_tool.commands.aws_login.core.config.list_aws_profiles", return_value=profiles)
     mocker.patch("click.prompt", return_value="1")
 
     result = select_profile()
@@ -316,7 +317,7 @@ def test_select_profile_prompts_when_multiple_profiles(mocker):
 def test_select_profile_selects_default_profile_by_default(mocker):
     """When 'default' profile exists, it is the default choice."""
     profiles = [("dev", "sso"), ("default", "static"), ("prod", "sso")]
-    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=profiles)
+    mocker.patch("cli_tool.commands.aws_login.core.config.list_aws_profiles", return_value=profiles)
     # Return empty string to trigger default selection
     mocker.patch("click.prompt", return_value="")
 
@@ -332,7 +333,7 @@ def test_select_profile_selects_default_profile_by_default(mocker):
 def test_select_profile_invalid_then_valid_choice(mocker):
     """Loops on invalid input, then accepts valid input."""
     profiles = [("dev", "sso"), ("prod", "sso")]
-    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=profiles)
+    mocker.patch("cli_tool.commands.aws_login.core.config.list_aws_profiles", return_value=profiles)
     # First call returns out-of-range, second returns valid
     mocker.patch("click.prompt", side_effect=["99", "2"])
 
@@ -345,7 +346,7 @@ def test_select_profile_invalid_then_valid_choice(mocker):
 def test_select_profile_source_label_both(mocker):
     """Profile with source='both' displays [sso+static] label (line 57)."""
     profiles = [("myprofile", "both"), ("other", "sso")]
-    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=profiles)
+    mocker.patch("cli_tool.commands.aws_login.core.config.list_aws_profiles", return_value=profiles)
     # Choose the first profile
     mocker.patch("click.prompt", return_value="1")
     mock_echo = mocker.patch("click.echo")
@@ -362,7 +363,7 @@ def test_select_profile_source_label_both(mocker):
 def test_select_profile_value_error_then_valid_input(mocker):
     """Loops with error message when ValueError is raised, then accepts valid input (lines 89-90)."""
     profiles = [("dev", "sso"), ("prod", "sso")]
-    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=profiles)
+    mocker.patch("cli_tool.commands.aws_login.core.config.list_aws_profiles", return_value=profiles)
     # First call raises ValueError (non-numeric after stripping), second call succeeds
     mocker.patch("click.prompt", side_effect=[ValueError("bad input"), "1"])
     mock_echo = mocker.patch("click.echo")
@@ -378,7 +379,7 @@ def test_select_profile_value_error_then_valid_input(mocker):
 def test_select_profile_keyboard_interrupt_then_valid_input(mocker):
     """Loops with error message when KeyboardInterrupt is raised, then accepts valid input (lines 89-90)."""
     profiles = [("dev", "sso"), ("prod", "sso")]
-    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=profiles)
+    mocker.patch("cli_tool.commands.aws_login.core.config.list_aws_profiles", return_value=profiles)
     mocker.patch("click.prompt", side_effect=[KeyboardInterrupt(), "2"])
     mock_echo = mocker.patch("click.echo")
 
@@ -396,7 +397,7 @@ def test_select_profile_unknown_source_shows_config_label(mocker):
     Needs 2+ profiles to bypass the auto-select single-profile shortcut.
     """
     profiles = [("dev", "sso"), ("myprofile", "unknown_type")]
-    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=profiles)
+    mocker.patch("cli_tool.commands.aws_login.core.config.list_aws_profiles", return_value=profiles)
     mocker.patch("click.prompt", return_value="2")
     mock_echo = mocker.patch("click.echo")
 
@@ -413,8 +414,71 @@ def test_select_profile_reraises_click_abort(mocker):
     import click
 
     profiles = [("dev", "sso"), ("prod", "sso")]
-    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=profiles)
+    mocker.patch("cli_tool.commands.aws_login.core.config.list_aws_profiles", return_value=profiles)
     mocker.patch("click.prompt", side_effect=click.Abort())
 
     with pytest.raises(click.Abort):
         select_profile()
+
+
+# ---------------------------------------------------------------------------
+# verify_aws_credentials
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_verify_aws_credentials_success(mocker):
+    """Returns (account_id, arn) when sts get-caller-identity succeeds."""
+    identity = {"Account": "123456789012", "Arn": "arn:aws:iam::123456789012:user/test"}
+    mocker.patch("subprocess.run", return_value=MagicMock(returncode=0, stdout=json.dumps(identity)))
+
+    account, arn = verify_aws_credentials()
+
+    assert account == "123456789012"
+    assert "arn:aws:iam" in arn
+
+
+@pytest.mark.unit
+def test_verify_aws_credentials_with_profile(mocker):
+    """Passes --profile to the aws sts command when profile is given."""
+    identity = {"Account": "123456789012", "Arn": "arn:aws:iam::123456789012:user/test"}
+    mock_run = mocker.patch("subprocess.run", return_value=MagicMock(returncode=0, stdout=json.dumps(identity)))
+
+    verify_aws_credentials(profile="my-profile")
+
+    called_cmd = mock_run.call_args[0][0]
+    assert "--profile" in called_cmd
+    assert "my-profile" in called_cmd
+
+
+@pytest.mark.unit
+def test_verify_aws_credentials_non_zero_returncode(mocker):
+    """Returns (None, None) when the command returns a non-zero exit code."""
+    mocker.patch("subprocess.run", return_value=MagicMock(returncode=1, stdout=""))
+
+    account, arn = verify_aws_credentials()
+
+    assert account is None
+    assert arn is None
+
+
+@pytest.mark.unit
+def test_verify_aws_credentials_exception(mocker):
+    """Returns (None, None) when subprocess.run raises an exception."""
+    mocker.patch("subprocess.run", side_effect=Exception("timeout"))
+
+    account, arn = verify_aws_credentials()
+
+    assert account is None
+    assert arn is None
+
+
+@pytest.mark.unit
+def test_verify_aws_credentials_malformed_json(mocker):
+    """Returns (None, None) on malformed JSON output."""
+    mocker.patch("subprocess.run", return_value=MagicMock(returncode=0, stdout="not-valid-json"))
+
+    account, arn = verify_aws_credentials()
+
+    assert account is None
+    assert arn is None

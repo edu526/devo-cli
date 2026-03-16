@@ -180,7 +180,7 @@ def test_error_messages_dont_expose_credentials(cli_runner, mocker):
 def test_profile_selection_doesnt_show_credentials(cli_runner, mocker, mock_subprocess_credentials):
     """Test that profile selection UI doesn't show credentials."""
     # Mock multiple profiles
-    mocker.patch("cli_tool.core.utils.aws_profile.get_aws_profiles", return_value=[("profile1", "sso"), ("profile2", "static")])
+    mocker.patch("cli_tool.commands.aws_login.core.config.list_aws_profiles", return_value=[("profile1", "sso"), ("profile2", "static")])
 
     from cli_tool.core.utils.aws import select_profile
 

@@ -9,6 +9,21 @@ import click
 from botocore.config import Config
 
 
+def verify_aws_credentials(profile=None, _required_account=None):
+    """Verify AWS credentials and return (account_id, user_arn), or (None, None) on failure."""
+    cmd = ["aws", "sts", "get-caller-identity", "--output", "json"]
+    if profile:
+        cmd.extend(["--profile", profile])
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if result.returncode != 0:
+            return None, None
+        identity = json.loads(result.stdout)
+        return identity.get("Account"), identity.get("Arn")
+    except Exception:
+        return None, None
+
+
 def _format_source_label(source: str) -> str:
     """Return a styled source label for an AWS profile."""
     if source == "sso":
@@ -66,14 +81,14 @@ def select_profile(current_profile: Optional[str] = None, allow_none: bool = Fal
     Returns:
         Selected profile name or None
     """
-    from cli_tool.core.utils.aws_profile import get_aws_profiles
+    from cli_tool.commands.aws_login.core.config import list_aws_profiles
 
     # If profile already set, use it
     if current_profile:
         return current_profile
 
     # Get available profiles (list of tuples: (name, source))
-    profiles = get_aws_profiles()
+    profiles = list_aws_profiles() or []
 
     if len(profiles) == 0:
         if allow_none:

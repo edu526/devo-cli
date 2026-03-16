@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from cli_tool.commands.aws_login.commands.set_default import (
-    _format_source_label,
     _get_shell_config,
     _resolve_and_validate_profile,
     _set_unix_profile,
@@ -17,6 +16,7 @@ from cli_tool.commands.aws_login.commands.set_default import (
     _write_default_credentials,
     set_default_profile,
 )
+from cli_tool.commands.aws_login.core.config import _format_source_label
 
 # ---------------------------------------------------------------------------
 # _format_source_label
@@ -163,7 +163,7 @@ def test_resolve_and_validate_profile_not_in_list_exits(monkeypatch):
 def test_resolve_and_validate_none_calls_interactive(monkeypatch):
     mock_select = MagicMock(return_value="dev")
     monkeypatch.setattr(
-        "cli_tool.commands.aws_login.commands.set_default._select_profile_interactively",
+        "cli_tool.commands.aws_login.commands.set_default.select_profile_interactively",
         mock_select,
     )
     result = _resolve_and_validate_profile(None, PROFILES)
@@ -441,7 +441,7 @@ def test_set_default_profile_calls_unix_on_posix(monkeypatch, mocker):
 @pytest.mark.unit
 def test_select_profile_interactively_valid_choice(mocker):
     """Returns profile name for a valid numeric selection."""
-    from cli_tool.commands.aws_login.commands.set_default import _select_profile_interactively
+    from cli_tool.commands.aws_login.core.config import select_profile_interactively as _select_profile_interactively
 
     profiles = [("dev", "sso"), ("prod", "static")]
     mocker.patch("click.prompt", return_value=2)
@@ -454,7 +454,7 @@ def test_select_profile_interactively_valid_choice(mocker):
 @pytest.mark.unit
 def test_select_profile_interactively_invalid_choice_exits(mocker):
     """Calls sys.exit(1) on an out-of-range selection."""
-    from cli_tool.commands.aws_login.commands.set_default import _select_profile_interactively
+    from cli_tool.commands.aws_login.core.config import select_profile_interactively as _select_profile_interactively
 
     profiles = [("dev", "sso")]
     mocker.patch("click.prompt", return_value=99)
@@ -468,7 +468,7 @@ def test_select_profile_interactively_invalid_choice_exits(mocker):
 @pytest.mark.unit
 def test_select_profile_interactively_zero_choice_exits(mocker):
     """Calls sys.exit(1) when user enters 0."""
-    from cli_tool.commands.aws_login.commands.set_default import _select_profile_interactively
+    from cli_tool.commands.aws_login.core.config import select_profile_interactively as _select_profile_interactively
 
     profiles = [("dev", "sso")]
     mocker.patch("click.prompt", return_value=0)
@@ -482,7 +482,7 @@ def test_select_profile_interactively_zero_choice_exits(mocker):
 @pytest.mark.unit
 def test_select_profile_interactively_first_profile(mocker):
     """Returns the first profile when user selects 1."""
-    from cli_tool.commands.aws_login.commands.set_default import _select_profile_interactively
+    from cli_tool.commands.aws_login.core.config import select_profile_interactively as _select_profile_interactively
 
     profiles = [("alpha", "sso"), ("beta", "both")]
     mocker.patch("click.prompt", return_value=1)

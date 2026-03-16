@@ -1,10 +1,36 @@
 """AWS configuration file management."""
 
+import sys
 from pathlib import Path
 
+import click
 from rich.console import Console
 
 console = Console()
+
+
+def _format_source_label(source: str) -> str:
+    """Format profile source with Rich color markup."""
+    labels = {
+        "sso": "[cyan]sso[/cyan]",
+        "static": "[yellow]static[/yellow]",
+        "both": "[green]both[/green]",
+    }
+    return labels.get(source, f"[dim]{source}[/dim]")
+
+
+def select_profile_interactively(profiles: list) -> str:
+    """Display profile list and prompt user to select one. Returns profile name."""
+    console.print("[blue]Available profiles:[/blue]")
+    for i, (prof_name, source) in enumerate(profiles, 1):
+        console.print(f"  {i}. {prof_name} [{_format_source_label(source)}]")
+
+    choice = click.prompt("\nSelect profile number", type=int)
+    if 1 <= choice <= len(profiles):
+        return profiles[choice - 1][0]
+    console.print("[red]Invalid selection[/red]")
+    sys.exit(1)
+
 
 _DEFAULT_PROFILE = "[default]"
 _SSO_START_URL = "sso_start_url"

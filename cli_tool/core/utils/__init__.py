@@ -8,7 +8,6 @@
 
 __all__ = [
     "aws",
-    "aws_profile",
     "config_manager",
     "git_utils",
     "version_check",

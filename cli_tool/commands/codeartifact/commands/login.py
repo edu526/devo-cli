@@ -6,17 +6,14 @@ import click
 from rich.console import Console
 
 from cli_tool.commands.codeartifact.core.authenticator import CodeArtifactAuthenticator
+from cli_tool.config import AWS_ACCOUNT_ID as REQUIRED_ACCOUNT
+from cli_tool.config import AWS_REQUIRED_ROLE as REQUIRED_ROLE
 from cli_tool.config import (
     AWS_SSO_URL,
     CODEARTIFACT_DOMAINS,
     CODEARTIFACT_REGION,
 )
-from cli_tool.core.utils.aws import check_aws_cli
-from cli_tool.core.utils.aws_profile import (
-    REQUIRED_ACCOUNT,
-    REQUIRED_ROLE,
-    verify_aws_credentials,
-)
+from cli_tool.core.utils.aws import check_aws_cli, verify_aws_credentials
 
 console = Console()
 
