@@ -1,6 +1,7 @@
 """Manage port forwarding for loopback IP forwarding"""
 
 import platform
+import signal
 import subprocess
 from typing import Dict, Optional
 
@@ -19,6 +20,22 @@ class PortForwarder:
     def __init__(self):
         self.processes: Dict[str, Optional[subprocess.Popen]] = {}
         self.system = platform.system()
+        self._register_signal_handlers()
+
+    def _register_signal_handlers(self) -> None:
+        """Register SIGTERM/SIGHUP handlers to clean up socat on graceful termination."""
+        if self.system == "Windows":
+            return
+
+        def _cleanup_handler(signum, frame):
+            self.stop_all()
+            signal.raise_signal(signum)
+
+        for sig in (signal.SIGTERM, signal.SIGHUP):
+            try:
+                signal.signal(sig, _cleanup_handler)
+            except (OSError, ValueError):
+                pass  # Not in main thread or signal not available
 
     def start_forward(self, local_address: str, local_port: int, target_port: int) -> Optional[int]:
         """
@@ -37,9 +54,31 @@ class PortForwarder:
         else:
             return self._start_forward_unix(local_address, local_port, target_port)
 
+    def _kill_orphaned_socat(self, local_address: str, local_port: int) -> None:
+        """Kill any orphaned socat process listening on local_address:local_port.
+
+        This handles the case where a previous session was terminated abruptly
+        (terminal closed, laptop lid, SIGKILL) leaving socat processes behind
+        that hold the port and prevent new connections.
+        """
+        try:
+            pattern = f"socat.*TCP-LISTEN:{local_port},bind={local_address}"
+            subprocess.run(["pkill", "-f", pattern], capture_output=True)
+            # Give the OS a moment to release the port
+            import time
+
+            time.sleep(0.2)
+        except Exception:
+            pass
+
     def _start_forward_unix(self, local_address: str, local_port: int, target_port: int) -> int:
         """Start forwarding using socat (Linux/macOS)"""
         key = f"{local_address}:{local_port}"
+
+        # Kill any orphaned socat on this port before starting a new one.
+        # This prevents "address already in use" errors when reconnecting after
+        # an abrupt termination (closed terminal, laptop sleep, etc.).
+        self._kill_orphaned_socat(local_address, local_port)
 
         # On macOS, ensure loopback alias is configured before binding
         if self.system == "Darwin" and local_address.startswith("127.0.0.") and local_address != "127.0.0.1":
