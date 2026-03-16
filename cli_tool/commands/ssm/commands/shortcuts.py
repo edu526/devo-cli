@@ -17,12 +17,13 @@ def register_shortcuts(ssm_group):
     @ssm_group.command("connect", hidden=False)
     @click.argument("name", required=False)
     @click.option("--no-hosts", is_flag=True, help="Disable hostname forwarding (use localhost)")
+    @click.option("--all", "connect_all", is_flag=True, help="Connect to all configured databases at once")
     @click.pass_context
-    def connect_shortcut(ctx, name, no_hosts):
+    def connect_shortcut(ctx, name, no_hosts, connect_all):
         """Shortcut for 'devo ssm database connect'"""
         connect_cmd = _find_subcommand(ssm_group, "database", "connect")
         if connect_cmd:
-            ctx.invoke(connect_cmd, name=name, no_hosts=no_hosts)
+            ctx.invoke(connect_cmd, name=name, no_hosts=no_hosts, connect_all=connect_all)
 
     @ssm_group.command("shell", hidden=False)
     @click.argument("name")

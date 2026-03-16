@@ -9,6 +9,14 @@ from rich.console import Console
 
 console = Console()
 
+_TOKEN_EXPIRED_PATTERNS = [
+    "expiredtokenexception",
+    "the security token included in the request is expired",
+    "token has expired",
+    "credentials have expired",
+    "authfailure",
+]
+
 
 class SSMSession:
     """Manages AWS SSM sessions"""
@@ -43,6 +51,26 @@ class SSMSession:
 
         console.print("[cyan]Verify installation:[/cyan]")
         console.print("  session-manager-plugin\n")
+
+    @staticmethod
+    def _is_token_expired(region: str = "us-east-1", profile: Optional[str] = None) -> bool:
+        """Check if AWS tokens are definitively expired.
+
+        Returns True only when the STS call explicitly indicates token expiry.
+        Returns False on network errors or any other non-expiry failures so that
+        reconnect attempts are not incorrectly suppressed.
+        """
+        cmd = ["aws", "sts", "get-caller-identity", "--region", region]
+        if profile:
+            cmd.extend(["--profile", profile])
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, shell=platform.system() == "Windows")
+            if result.returncode == 0:
+                return False
+            error_text = (result.stderr + result.stdout).lower()
+            return any(pattern in error_text for pattern in _TOKEN_EXPIRED_PATTERNS)
+        except Exception:
+            return False
 
     @staticmethod
     def start_port_forwarding_to_remote(

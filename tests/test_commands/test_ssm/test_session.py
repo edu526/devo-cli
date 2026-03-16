@@ -247,6 +247,89 @@ def test_start_session_without_profile(mocker):
 
 
 # ============================================================================
+# _is_token_expired
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_is_token_expired_returns_false_when_sts_succeeds(mocker):
+    """Returns False when get-caller-identity succeeds (tokens valid)."""
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mocker.patch("subprocess.run", return_value=mock_result)
+
+    result = SSMSession._is_token_expired()
+
+    assert result is False
+
+
+@pytest.mark.unit
+def test_is_token_expired_returns_true_on_expired_token_exception(mocker):
+    """Returns True when stderr contains ExpiredTokenException."""
+    mock_result = MagicMock()
+    mock_result.returncode = 1
+    mock_result.stderr = "An error occurred (ExpiredTokenException) when calling the GetCallerIdentity operation"
+    mock_result.stdout = ""
+    mocker.patch("subprocess.run", return_value=mock_result)
+
+    result = SSMSession._is_token_expired()
+
+    assert result is True
+
+
+@pytest.mark.unit
+def test_is_token_expired_returns_true_on_token_has_expired(mocker):
+    """Returns True when error message says 'token has expired'."""
+    mock_result = MagicMock()
+    mock_result.returncode = 1
+    mock_result.stderr = "The security token included in the request is expired"
+    mock_result.stdout = ""
+    mocker.patch("subprocess.run", return_value=mock_result)
+
+    result = SSMSession._is_token_expired()
+
+    assert result is True
+
+
+@pytest.mark.unit
+def test_is_token_expired_returns_false_on_unrelated_error(mocker):
+    """Returns False when the STS error is not related to token expiry."""
+    mock_result = MagicMock()
+    mock_result.returncode = 1
+    mock_result.stderr = "Could not connect to the endpoint URL"
+    mock_result.stdout = ""
+    mocker.patch("subprocess.run", return_value=mock_result)
+
+    result = SSMSession._is_token_expired()
+
+    assert result is False
+
+
+@pytest.mark.unit
+def test_is_token_expired_returns_false_on_exception(mocker):
+    """Returns False when subprocess raises an exception (e.g. aws not found)."""
+    mocker.patch("subprocess.run", side_effect=FileNotFoundError)
+
+    result = SSMSession._is_token_expired()
+
+    assert result is False
+
+
+@pytest.mark.unit
+def test_is_token_expired_includes_profile_in_command(mocker):
+    """Includes --profile in the sts command when profile is provided."""
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_run = mocker.patch("subprocess.run", return_value=mock_result)
+
+    SSMSession._is_token_expired(region="eu-west-1", profile="my-profile")
+
+    cmd = mock_run.call_args[0][0]
+    assert "--profile" in cmd
+    assert "my-profile" in cmd
+
+
+# ============================================================================
 # start_port_forwarding (instance-level forwarding)
 # ============================================================================
 

@@ -13,9 +13,24 @@ from cli_tool.commands.ssm.utils import HostsManager
 
 console = Console()
 
+_RECONNECT_DELAY = 3
+
 
 def _connect_all_databases(databases, no_hosts):
     """Helper function to connect to all databases"""
+    # Validate tokens for all unique (profile, region) combinations before starting
+    checked = set()
+    for db_config in databases.values():
+        profile = db_config.get("profile")
+        region = db_config.get("region", "us-east-1")
+        key = (profile, region)
+        if key not in checked:
+            checked.add(key)
+            if SSMSession._is_token_expired(region=region, profile=profile):
+                console.print("\n[red]❌ AWS tokens are expired.[/red]")
+                console.print("[yellow]Run 'devo aws-login refresh' to renew your tokens.[/yellow]")
+                return
+
     console.print("[cyan]Starting all connections...[/cyan]\n")
 
     hosts_manager = HostsManager()
@@ -178,6 +193,11 @@ def _check_hostname_in_hosts(db_config: dict) -> bool:
 
 def _connect_with_hostname_forwarding(name: str, db_config: dict) -> None:
     """Connect to a database using hostname forwarding."""
+    if SSMSession._is_token_expired(region=db_config["region"], profile=db_config.get("profile")):
+        console.print("\n[red]❌ AWS tokens are expired.[/red]")
+        console.print("[yellow]Run 'devo aws-login refresh' to renew your tokens.[/yellow]")
+        return
+
     profile_text = db_config.get("profile", "default")
     local_address = db_config.get("local_address", "127.0.0.1")
 
@@ -190,31 +210,58 @@ def _connect_with_hostname_forwarding(name: str, db_config: dict) -> None:
     console.print(f"[dim]{connection_info}[/dim]")
     console.print("[yellow]Press Ctrl+C to stop[/yellow]\n")
 
-    port_forwarder = PortForwarder()
-    try:
-        port_forwarder.start_forward(local_address=local_address, local_port=db_config["port"], target_port=db_config["local_port"])
-        exit_code = SSMSession.start_port_forwarding_to_remote(
-            bastion=db_config["bastion"],
-            host=db_config["host"],
-            port=db_config["port"],
-            local_port=db_config["local_port"],
-            region=db_config["region"],
-            profile=db_config.get("profile"),
-        )
-        if exit_code != 0:
-            console.print("[red]SSM session failed[/red]")
-    except KeyboardInterrupt:
-        console.print("\n[cyan]Stopping...[/cyan]")
-    except Exception as e:
-        console.print(f"\n[red]Error: {e}[/red]")
-        return
-    finally:
+    while True:
+        port_forwarder = PortForwarder()
+        exit_code = None
+        try:
+            port_forwarder.start_forward(local_address=local_address, local_port=db_config["port"], target_port=db_config["local_port"])
+            exit_code = SSMSession.start_port_forwarding_to_remote(
+                bastion=db_config["bastion"],
+                host=db_config["host"],
+                port=db_config["port"],
+                local_port=db_config["local_port"],
+                region=db_config["region"],
+                profile=db_config.get("profile"),
+            )
+        except KeyboardInterrupt:
+            port_forwarder.stop_all()
+            console.print("\n[green]Connection closed[/green]")
+            return
+        except Exception as e:
+            port_forwarder.stop_all()
+            console.print(f"\n[red]Error: {e}[/red]")
+            return
+
         port_forwarder.stop_all()
-        console.print("[green]Connection closed[/green]")
+
+        if exit_code == 0:
+            console.print("[green]Connection closed[/green]")
+            return
+
+        # Connection dropped unexpectedly — check token validity
+        if SSMSession._is_token_expired(region=db_config["region"], profile=db_config.get("profile")):
+            console.print("\n[red]❌ AWS tokens are expired.[/red]")
+            console.print("[yellow]Run 'devo aws-login refresh' to renew your tokens.[/yellow]")
+            return
+
+        # Tokens valid — reconnect after delay
+        try:
+            console.print(f"\n[yellow]Connection lost. Reconnecting in {_RECONNECT_DELAY}s... (Ctrl+C to cancel)[/yellow]")
+            time.sleep(_RECONNECT_DELAY)
+        except KeyboardInterrupt:
+            console.print("\n[green]Connection closed[/green]")
+            return
+
+        console.print(f"[cyan]Reconnecting to {name}...[/cyan]\n")
 
 
 def _connect_without_hostname_forwarding(name: str, db_config: dict, no_hosts: bool) -> None:
     """Connect to a database using direct localhost forwarding."""
+    if SSMSession._is_token_expired(region=db_config["region"], profile=db_config.get("profile")):
+        console.print("\n[red]❌ AWS tokens are expired.[/red]")
+        console.print("[yellow]Run 'devo aws-login refresh' to renew your tokens.[/yellow]")
+        return
+
     local_address = db_config.get("local_address", "127.0.0.1")
     profile_text = db_config.get("profile", "default")
 
@@ -228,19 +275,39 @@ def _connect_without_hostname_forwarding(name: str, db_config: dict, no_hosts: b
     console.print(f"[dim]localhost:{db_config['local_port']} -> {db_config['host']}:{db_config['port']} ({profile_text})[/dim]")
     console.print("[yellow]Press Ctrl+C to stop[/yellow]\n")
 
-    try:
-        exit_code = SSMSession.start_port_forwarding_to_remote(
-            bastion=db_config["bastion"],
-            host=db_config["host"],
-            port=db_config["port"],
-            local_port=db_config["local_port"],
-            region=db_config["region"],
-            profile=db_config.get("profile"),
-        )
-        if exit_code != 0:
-            console.print("[red]Connection failed[/red]")
-    except KeyboardInterrupt:
-        console.print("\n[green]Connection closed[/green]")
+    while True:
+        try:
+            exit_code = SSMSession.start_port_forwarding_to_remote(
+                bastion=db_config["bastion"],
+                host=db_config["host"],
+                port=db_config["port"],
+                local_port=db_config["local_port"],
+                region=db_config["region"],
+                profile=db_config.get("profile"),
+            )
+        except KeyboardInterrupt:
+            console.print("\n[green]Connection closed[/green]")
+            return
+
+        if exit_code == 0:
+            console.print("[green]Connection closed[/green]")
+            return
+
+        # Connection dropped unexpectedly — check token validity
+        if SSMSession._is_token_expired(region=db_config["region"], profile=db_config.get("profile")):
+            console.print("\n[red]❌ AWS tokens are expired.[/red]")
+            console.print("[yellow]Run 'devo aws-login refresh' to renew your tokens.[/yellow]")
+            return
+
+        # Tokens valid — reconnect after delay
+        try:
+            console.print(f"\n[yellow]Connection lost. Reconnecting in {_RECONNECT_DELAY}s... (Ctrl+C to cancel)[/yellow]")
+            time.sleep(_RECONNECT_DELAY)
+        except KeyboardInterrupt:
+            console.print("\n[green]Connection closed[/green]")
+            return
+
+        console.print(f"[cyan]Reconnecting to {name}...[/cyan]\n")
 
 
 def _resolve_hostname_forwarding(db_config: dict, no_hosts: bool) -> Optional[bool]:
@@ -266,7 +333,8 @@ def _resolve_hostname_forwarding(db_config: dict, no_hosts: bool) -> Optional[bo
 @click.command()
 @click.argument("name", required=False)
 @click.option("--no-hosts", is_flag=True, help="Disable hostname forwarding (use localhost)")
-def connect_database(name, no_hosts):
+@click.option("--all", "connect_all", is_flag=True, help="Connect to all configured databases at once")
+def connect_database(name, no_hosts, connect_all):
     """Connect to a configured database (uses hostname forwarding by default)"""
     config_manager = SSMConfigManager()
     databases = config_manager.list_databases()
@@ -274,6 +342,10 @@ def connect_database(name, no_hosts):
     if not databases:
         console.print("[red]No databases configured[/red]")
         console.print("\nAdd a database with: devo ssm database add")
+        return
+
+    if connect_all:
+        _connect_all_databases(databases, no_hosts)
         return
 
     if not name:

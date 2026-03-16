@@ -1,11 +1,15 @@
 """Manual port forwarding command for SSM."""
 
+import time
+
 import click
 from rich.console import Console
 
 from cli_tool.commands.ssm.core import SSMSession
 
 console = Console()
+
+_RECONNECT_DELAY = 3
 
 
 def register_forward_command(ssm_group):
@@ -27,16 +31,45 @@ def register_forward_command(ssm_group):
         if not local_port:
             local_port = port
 
+        if SSMSession._is_token_expired(region=region, profile=profile):
+            console.print("\n[red]❌ AWS tokens are expired.[/red]")
+            console.print("[yellow]Run 'devo aws-login refresh' to renew your tokens.[/yellow]")
+            return
+
         console.print(f"[cyan]Forwarding {host}:{port} -> localhost:{local_port}[/cyan]")
         console.print(f"[dim]Via bastion: {bastion}[/dim]")
         if profile:
             console.print(f"[dim]Profile: {profile}[/dim]")
         console.print("[yellow]Press Ctrl+C to stop[/yellow]\n")
 
-        try:
-            SSMSession.start_port_forwarding_to_remote(bastion=bastion, host=host, port=port, local_port=local_port, region=region, profile=profile)
-        except KeyboardInterrupt:
-            console.print("\n[green]Connection closed[/green]")
+        while True:
+            try:
+                exit_code = SSMSession.start_port_forwarding_to_remote(
+                    bastion=bastion, host=host, port=port, local_port=local_port, region=region, profile=profile
+                )
+            except KeyboardInterrupt:
+                console.print("\n[green]Connection closed[/green]")
+                return
+
+            if exit_code == 0:
+                console.print("[green]Connection closed[/green]")
+                return
+
+            # Connection dropped unexpectedly — check token validity
+            if SSMSession._is_token_expired(region=region, profile=profile):
+                console.print("\n[red]❌ AWS tokens are expired.[/red]")
+                console.print("[yellow]Run 'devo aws-login refresh' to renew your tokens.[/yellow]")
+                return
+
+            # Tokens valid — reconnect after delay
+            try:
+                console.print(f"\n[yellow]Connection lost. Reconnecting in {_RECONNECT_DELAY}s... (Ctrl+C to cancel)[/yellow]")
+                time.sleep(_RECONNECT_DELAY)
+            except KeyboardInterrupt:
+                console.print("\n[green]Connection closed[/green]")
+                return
+
+            console.print(f"[cyan]Reconnecting {host}:{port} -> localhost:{local_port}...[/cyan]\n")
 
 
 def forward_command():

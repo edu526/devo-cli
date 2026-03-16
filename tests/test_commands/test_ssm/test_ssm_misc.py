@@ -48,9 +48,24 @@ class TestForwardCommandFactory:
 
 @pytest.mark.unit
 class TestForwardManualCommand:
-    def test_forward_without_local_port_uses_remote_port(self, mocker):
-        """Covers line 27: local_port defaults to port when not supplied."""
+    def test_expired_tokens_aborts_before_connecting(self, mocker):
+        """Pre-check: expired tokens abort before any connection attempt."""
         mock_session = mocker.patch("cli_tool.commands.ssm.commands.forward.SSMSession")
+        mock_session._is_token_expired.return_value = True
+        grp = _make_forward_group()
+        runner = CliRunner()
+
+        result = runner.invoke(grp, ["forward", "--bastion", "i-123", "--host", "db.example.com"])
+
+        assert result.exit_code == 0
+        assert "expired" in result.output.lower()
+        mock_session.start_port_forwarding_to_remote.assert_not_called()
+
+    def test_forward_without_local_port_uses_remote_port(self, mocker):
+        """local_port defaults to port when not supplied."""
+        mock_session = mocker.patch("cli_tool.commands.ssm.commands.forward.SSMSession")
+        mock_session._is_token_expired.return_value = False
+        mock_session.start_port_forwarding_to_remote.return_value = 0
         grp = _make_forward_group()
         runner = CliRunner()
 
@@ -62,36 +77,29 @@ class TestForwardManualCommand:
         assert result.exit_code == 0
         mock_session.start_port_forwarding_to_remote.assert_called_once()
         call_kwargs = mock_session.start_port_forwarding_to_remote.call_args[1]
-        assert call_kwargs["local_port"] == 5432  # should equal remote port
+        assert call_kwargs["local_port"] == 5432
 
     def test_forward_with_profile_prints_profile(self, mocker):
-        """Covers lines 32-33: profile is printed when --profile is supplied."""
+        """Profile is printed when --profile is supplied."""
         mock_session = mocker.patch("cli_tool.commands.ssm.commands.forward.SSMSession")
+        mock_session._is_token_expired.return_value = False
+        mock_session.start_port_forwarding_to_remote.return_value = 0
         grp = _make_forward_group()
         runner = CliRunner()
 
         result = runner.invoke(
             grp,
-            [
-                "forward",
-                "--bastion",
-                "i-123",
-                "--host",
-                "db.example.com",
-                "--profile",
-                "my-profile",
-            ],
+            ["forward", "--bastion", "i-123", "--host", "db.example.com", "--profile", "my-profile"],
         )
 
         assert result.exit_code == 0
         assert "my-profile" in result.output
 
     def test_forward_keyboard_interrupt_closes_gracefully(self, mocker):
-        """Covers lines 38-39: KeyboardInterrupt is caught and a message is printed."""
-        mocker.patch(
-            "cli_tool.commands.ssm.commands.forward.SSMSession" ".start_port_forwarding_to_remote",
-            side_effect=KeyboardInterrupt,
-        )
+        """KeyboardInterrupt is caught and a close message is printed."""
+        mock_session = mocker.patch("cli_tool.commands.ssm.commands.forward.SSMSession")
+        mock_session._is_token_expired.return_value = False
+        mock_session.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt
         grp = _make_forward_group()
         runner = CliRunner()
 
@@ -106,27 +114,74 @@ class TestForwardManualCommand:
     def test_forward_with_local_port_uses_supplied_value(self, mocker):
         """When --local-port is given it is passed through unchanged."""
         mock_session = mocker.patch("cli_tool.commands.ssm.commands.forward.SSMSession")
+        mock_session._is_token_expired.return_value = False
+        mock_session.start_port_forwarding_to_remote.return_value = 0
         grp = _make_forward_group()
         runner = CliRunner()
 
         result = runner.invoke(
             grp,
-            [
-                "forward",
-                "--bastion",
-                "i-123",
-                "--host",
-                "db.example.com",
-                "--port",
-                "5432",
-                "--local-port",
-                "15432",
-            ],
+            ["forward", "--bastion", "i-123", "--host", "db.example.com", "--port", "5432", "--local-port", "15432"],
         )
 
         assert result.exit_code == 0
         call_kwargs = mock_session.start_port_forwarding_to_remote.call_args[1]
         assert call_kwargs["local_port"] == 15432
+
+    def test_forward_expired_tokens_shows_error(self, mocker):
+        """When connection drops and tokens are expired, an error is shown."""
+        mock_session = mocker.patch("cli_tool.commands.ssm.commands.forward.SSMSession")
+        mock_session.start_port_forwarding_to_remote.return_value = 1
+        # pre-check passes, post-drop check detects expiry
+        mock_session._is_token_expired.side_effect = [False, True]
+        grp = _make_forward_group()
+        runner = CliRunner()
+
+        result = runner.invoke(
+            grp,
+            ["forward", "--bastion", "i-123", "--host", "db.example.com"],
+        )
+
+        assert result.exit_code == 0
+        assert "expired" in result.output.lower()
+        assert "aws-login" in result.output.lower()
+        mock_session.start_port_forwarding_to_remote.assert_called_once()
+
+    def test_forward_reconnects_when_tokens_valid(self, mocker):
+        """When connection drops and tokens are valid, reconnect is attempted."""
+        mock_session = mocker.patch("cli_tool.commands.ssm.commands.forward.SSMSession")
+        mock_session.start_port_forwarding_to_remote.side_effect = [1, 0]
+        mock_session._is_token_expired.return_value = False
+        mocker.patch("cli_tool.commands.ssm.commands.forward.time.sleep")
+        grp = _make_forward_group()
+        runner = CliRunner()
+
+        result = runner.invoke(
+            grp,
+            ["forward", "--bastion", "i-123", "--host", "db.example.com"],
+        )
+
+        assert result.exit_code == 0
+        assert "Reconnecting" in result.output
+        assert mock_session.start_port_forwarding_to_remote.call_count == 2
+
+    def test_forward_ctrl_c_during_reconnect_delay_cancels(self, mocker):
+        """Ctrl+C during reconnect countdown cancels the reconnect."""
+        mock_session = mocker.patch("cli_tool.commands.ssm.commands.forward.SSMSession")
+        mock_session.start_port_forwarding_to_remote.return_value = 1
+        mock_session._is_token_expired.return_value = False
+        mocker.patch("cli_tool.commands.ssm.commands.forward.time.sleep", side_effect=KeyboardInterrupt)
+        grp = _make_forward_group()
+        runner = CliRunner()
+
+        result = runner.invoke(
+            grp,
+            ["forward", "--bastion", "i-123", "--host", "db.example.com"],
+        )
+
+        assert result.exit_code == 0
+        assert "Connection closed" in result.output
+        mock_session.start_port_forwarding_to_remote.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
