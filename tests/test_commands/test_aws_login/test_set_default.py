@@ -347,7 +347,7 @@ def test_set_default_profile_exits_when_credentials_unavailable(monkeypatch):
 
 @pytest.mark.unit
 def test_set_default_profile_sets_env_variable(monkeypatch, mocker):
-    """Sets AWS_PROFILE environment variable when profile is valid."""
+    """Sets AWS_PROFILE environment variable when set_env=True."""
     monkeypatch.setattr(
         "cli_tool.commands.aws_login.commands.set_default.list_aws_profiles",
         lambda: [("dev", "sso")],
@@ -360,14 +360,39 @@ def test_set_default_profile_sets_env_variable(monkeypatch, mocker):
     mocker.patch("cli_tool.commands.aws_login.commands.set_default._set_unix_profile")
     mocker.patch("cli_tool.commands.aws_login.commands.set_default._write_default_credentials")
 
-    set_default_profile("dev")
+    set_default_profile("dev", set_env=True)
 
     assert os.environ.get("AWS_PROFILE") == "dev"
 
 
 @pytest.mark.unit
+def test_set_default_profile_does_not_set_env_variable_by_default(monkeypatch, mocker):
+    """Does not set AWS_PROFILE env var or call shell-config functions by default."""
+    monkeypatch.setattr(
+        "cli_tool.commands.aws_login.commands.set_default.list_aws_profiles",
+        lambda: [("dev", "sso")],
+    )
+    monkeypatch.setattr(
+        "cli_tool.commands.aws_login.commands.set_default.check_profile_credentials_available",
+        lambda profile: (True, None),
+    )
+    monkeypatch.setattr(
+        "cli_tool.commands.aws_login.commands.set_default.get_config_value",
+        lambda key, default=None: False,
+    )
+    mock_unix = mocker.patch("cli_tool.commands.aws_login.commands.set_default._set_unix_profile")
+    mock_windows = mocker.patch("cli_tool.commands.aws_login.commands.set_default._set_windows_profile")
+    mocker.patch("cli_tool.commands.aws_login.commands.set_default._write_default_credentials")
+
+    set_default_profile("dev")
+
+    mock_unix.assert_not_called()
+    mock_windows.assert_not_called()
+
+
+@pytest.mark.unit
 def test_set_default_profile_calls_windows_on_nt(monkeypatch, mocker):
-    """Calls _set_windows_profile on Windows (os.name == 'nt')."""
+    """Calls _set_windows_profile on Windows (os.name == 'nt') when set_env=True."""
     monkeypatch.setattr(
         "cli_tool.commands.aws_login.commands.set_default.list_aws_profiles",
         lambda: [("dev", "sso")],
@@ -382,14 +407,14 @@ def test_set_default_profile_calls_windows_on_nt(monkeypatch, mocker):
     mock_windows = mocker.patch("cli_tool.commands.aws_login.commands.set_default._set_windows_profile")
     mocker.patch("cli_tool.commands.aws_login.commands.set_default._write_default_credentials")
 
-    set_default_profile("dev")
+    set_default_profile("dev", set_env=True)
 
     mock_windows.assert_called_once_with("dev")
 
 
 @pytest.mark.unit
 def test_set_default_profile_calls_unix_on_posix(monkeypatch, mocker):
-    """Calls _set_unix_profile on Unix/Linux/macOS."""
+    """Calls _set_unix_profile on Unix/Linux/macOS when set_env=True."""
     monkeypatch.setattr(
         "cli_tool.commands.aws_login.commands.set_default.list_aws_profiles",
         lambda: [("dev", "sso")],
@@ -403,7 +428,7 @@ def test_set_default_profile_calls_unix_on_posix(monkeypatch, mocker):
     mock_unix = mocker.patch("cli_tool.commands.aws_login.commands.set_default._set_unix_profile")
     mocker.patch("cli_tool.commands.aws_login.commands.set_default._write_default_credentials")
 
-    set_default_profile("dev")
+    set_default_profile("dev", set_env=True)
 
     mock_unix.assert_called_once_with("dev")
 
@@ -474,7 +499,7 @@ def test_select_profile_interactively_first_profile(mocker):
 
 @pytest.mark.unit
 def test_set_default_profile_git_bash_calls_unix_profile(monkeypatch, mocker):
-    """On Windows with Git Bash ($SHELL ends with 'bash'), calls _set_unix_profile."""
+    """On Windows with Git Bash ($SHELL ends with 'bash'), calls _set_unix_profile when set_env=True."""
     monkeypatch.setattr(
         "cli_tool.commands.aws_login.commands.set_default.list_aws_profiles",
         lambda: [("dev", "sso")],
@@ -489,7 +514,7 @@ def test_set_default_profile_git_bash_calls_unix_profile(monkeypatch, mocker):
     mock_unix = mocker.patch("cli_tool.commands.aws_login.commands.set_default._set_unix_profile")
     mocker.patch("cli_tool.commands.aws_login.commands.set_default._write_default_credentials")
 
-    set_default_profile("dev")
+    set_default_profile("dev", set_env=True)
 
     mock_unix.assert_called_once_with("dev")
 

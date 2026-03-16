@@ -23,6 +23,7 @@ from click.testing import CliRunner
 from cli_tool.commands.aws_login.command import (
     _check_credentials_via_cli,
     _check_default_credentials_expiry,
+    _set_default_hint,
     _warn_expiry,
     aws_login,
 )
@@ -281,7 +282,7 @@ class TestRefreshCmd:
 @pytest.mark.unit
 class TestSetDefaultCmd:
     def test_set_default_calls_set_default_profile(self, mocker):
-        """Covers line 182: set-default subcommand delegates to set_default_profile."""
+        """set-default subcommand delegates to set_default_profile with set_env=None (no flag)."""
         mocker.patch("cli_tool.commands.aws_login.command.check_aws_cli", return_value=True)
         mocker.patch("cli_tool.commands.aws_login.command._check_default_credentials_expiry")
         mock_set_default = mocker.patch("cli_tool.commands.aws_login.command.set_default_profile")
@@ -290,10 +291,10 @@ class TestSetDefaultCmd:
         result = runner.invoke(aws_login, ["set-default", "production"])
 
         assert result.exit_code == 0
-        mock_set_default.assert_called_once_with("production")
+        mock_set_default.assert_called_once_with("production", set_env=None)
 
     def test_set_default_without_profile_passes_none(self, mocker):
-        """set-default with no argument passes None to set_default_profile."""
+        """set-default with no argument passes None profile and set_env=None."""
         mocker.patch("cli_tool.commands.aws_login.command.check_aws_cli", return_value=True)
         mocker.patch("cli_tool.commands.aws_login.command._check_default_credentials_expiry")
         mock_set_default = mocker.patch("cli_tool.commands.aws_login.command.set_default_profile")
@@ -302,7 +303,19 @@ class TestSetDefaultCmd:
         result = runner.invoke(aws_login, ["set-default"])
 
         assert result.exit_code == 0
-        mock_set_default.assert_called_once_with(None)
+        mock_set_default.assert_called_once_with(None, set_env=None)
+
+    def test_set_default_with_set_env_flag(self, mocker):
+        """--set-env flag passes set_env=True to set_default_profile."""
+        mocker.patch("cli_tool.commands.aws_login.command.check_aws_cli", return_value=True)
+        mocker.patch("cli_tool.commands.aws_login.command._check_default_credentials_expiry")
+        mock_set_default = mocker.patch("cli_tool.commands.aws_login.command.set_default_profile")
+
+        runner = CliRunner()
+        result = runner.invoke(aws_login, ["set-default", "production", "--set-env"])
+
+        assert result.exit_code == 0
+        mock_set_default.assert_called_once_with("production", set_env=True)
 
 
 # ---------------------------------------------------------------------------
@@ -346,3 +359,41 @@ class TestListCmd:
 
         assert result.exit_code == 0
         mock_list.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# _set_default_hint
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestSetDefaultHint:
+    def test_hint_without_configured_profile(self, mocker):
+        """Returns generic command when no default profile is in config."""
+        mocker.patch("cli_tool.commands.aws_login.command.get_config_value", return_value=None)
+
+        hint = _set_default_hint()
+
+        assert "devo aws-login set-default" in hint
+        # Should not contain a specific profile name suffix
+        assert hint.count("set-default") == 1
+        assert "set-default " not in hint  # no profile appended
+
+    def test_hint_with_configured_profile(self, mocker):
+        """Returns command with specific profile name when default is configured."""
+        mocker.patch("cli_tool.commands.aws_login.command.get_config_value", return_value="production")
+
+        hint = _set_default_hint()
+
+        assert "devo aws-login set-default production" in hint
+
+    def test_hint_is_used_in_warn_expiry(self, mocker):
+        """_warn_expiry uses the dynamic hint when credentials are expiring."""
+        mocker.patch("cli_tool.commands.aws_login.command.get_config_value", return_value="prod")
+        mock_console = mocker.patch("cli_tool.commands.aws_login.command.console")
+        expiry_str = _future_iso(5)
+
+        _warn_expiry(expiry_str)
+
+        printed = " ".join(str(c) for c in mock_console.print.call_args_list)
+        assert "prod" in printed

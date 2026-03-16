@@ -12,7 +12,9 @@ from cli_tool.commands.aws_login.core.config import get_profile_config, list_aws
 from cli_tool.commands.aws_login.core.credentials import (
     check_profile_needs_refresh,
     verify_credentials,
+    write_default_credentials,
 )
+from cli_tool.core.utils.config_manager import get_config_value
 
 console = Console()
 
@@ -26,23 +28,28 @@ def _build_sso_login_cmd(first_profile: str) -> list:
 
 
 def _verify_session_profiles(session_profs: list) -> tuple:
-    """Verify credentials for each profile in the session. Returns (verified_count, failed_count)."""
+    """Verify credentials for each profile in the session.
+
+    Returns (verified_count, failed_count, verified_profile_names).
+    """
     console.print("[green]✓ Session refreshed successfully[/green]")
     verified = failed = 0
+    verified_names = []
     for prof in session_profs:
         if verify_credentials(prof):
             console.print(f"  ✓ {prof}")
             verified += 1
+            verified_names.append(prof)
         else:
             console.print(f"  ✗ {prof} (verification failed)")
             failed += 1
-    return verified, failed
+    return verified, failed, verified_names
 
 
 def _refresh_session(_session_key: str, session_profs: list) -> tuple:
     """Login to an SSO session and verify all profiles in it.
 
-    Returns (success, verified_count, failed_count).
+    Returns (success, verified_count, failed_count, verified_profile_names).
     """
     console.print(f"\n[blue]Refreshing session for {len(session_profs)} profile(s)...[/blue]")
     login_cmd = _build_sso_login_cmd(session_profs[0])
@@ -53,14 +60,14 @@ def _refresh_session(_session_key: str, session_profs: list) -> tuple:
             console.print("[red]✗ Session refresh failed[/red]")
             for prof in session_profs:
                 console.print(f"  ✗ {prof}")
-            return False, 0, len(session_profs)
+            return False, 0, len(session_profs), []
 
-        verified, failed = _verify_session_profiles(session_profs)
-        return True, verified, failed
+        verified, failed, verified_names = _verify_session_profiles(session_profs)
+        return True, verified, failed, verified_names
 
     except subprocess.TimeoutExpired:
         console.print("[red]✗ Session refresh timed out[/red]")
-        return False, 0, len(session_profs)
+        return False, 0, len(session_profs), []
     except KeyboardInterrupt:
         console.print("\n[yellow]Refresh cancelled[/yellow]")
         sys.exit(1)
@@ -123,14 +130,37 @@ def _confirm_refresh(profiles_to_refresh: list) -> bool:
 
 
 def _refresh_all_sessions(session_profiles: dict) -> tuple:
-    """Refresh each session group and aggregate counts. Returns (success_count, fail_count)."""
+    """Refresh each session group and aggregate counts.
+
+    Returns (success_count, fail_count, verified_profile_names).
+    """
     success_count = 0
     fail_count = 0
+    all_verified = []
     for session_key, session_profs in session_profiles.items():
-        _, verified, failed = _refresh_session(session_key, session_profs)
+        _, verified, failed, verified_names = _refresh_session(session_key, session_profs)
         success_count += verified
         fail_count += failed
-    return success_count, fail_count
+        all_verified.extend(verified_names)
+    return success_count, fail_count, all_verified
+
+
+def _update_default_credentials_after_refresh(refreshed_profiles: list) -> None:
+    """Re-write [default] credentials if the configured default profile was refreshed."""
+    default_profile = get_config_value("aws_login.default_credentials_profile")
+    if not default_profile:
+        return
+    if default_profile not in refreshed_profiles:
+        return
+
+    console.print(f"\n[blue]Updating [default] credentials for '{default_profile}'...[/blue]")
+    result = write_default_credentials(default_profile)
+    if result:
+        console.print("[green]✓ ~/.aws/credentials [default] updated[/green]")
+        if result.get("expiration"):
+            console.print(f"[dim]  Expires: {result['expiration']}[/dim]")
+    else:
+        console.print("[yellow]⚠ Could not update [default] credentials[/yellow]")
 
 
 def refresh_all_profiles():
@@ -157,10 +187,13 @@ def refresh_all_profiles():
     # Group profiles by SSO session to minimize logins
     session_profiles = _group_profiles_by_session(profiles_to_refresh)
 
-    success_count, fail_count = _refresh_all_sessions(session_profiles)
+    success_count, fail_count, verified_profiles = _refresh_all_sessions(session_profiles)
 
     # Summary
     console.print("\n[blue]═══ Refresh Summary ═══[/blue]")
     console.print(f"[green]✓ Refreshed: {success_count}[/green]")
     if fail_count > 0:
         console.print(f"[red]✗ Failed: {fail_count}[/red]")
+
+    if verified_profiles:
+        _update_default_credentials_after_refresh(verified_profiles)

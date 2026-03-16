@@ -935,3 +935,85 @@ def test_show_login_success_no_expiration_prints_note(mocker):
 
     printed_texts = [str(call) for call in mock_console.print.call_args_list]
     assert any("typically expire in 1 hour" in t for t in printed_texts)
+
+
+# ---------------------------------------------------------------------------
+# _update_default_credentials_if_needed
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_update_default_credentials_if_needed_skips_when_no_config(mocker):
+    """When no default profile is configured, does nothing."""
+    from cli_tool.commands.aws_login.commands.login import _update_default_credentials_if_needed
+
+    mocker.patch("cli_tool.commands.aws_login.commands.login.get_config_value", return_value=None)
+    mock_write = mocker.patch("cli_tool.commands.aws_login.commands.login.write_default_credentials")
+
+    _update_default_credentials_if_needed("dev")
+
+    mock_write.assert_not_called()
+
+
+@pytest.mark.unit
+def test_update_default_credentials_if_needed_skips_when_different_profile(mocker):
+    """When the logged-in profile is not the configured default, does nothing."""
+    from cli_tool.commands.aws_login.commands.login import _update_default_credentials_if_needed
+
+    mocker.patch("cli_tool.commands.aws_login.commands.login.get_config_value", return_value="prod")
+    mock_write = mocker.patch("cli_tool.commands.aws_login.commands.login.write_default_credentials")
+
+    _update_default_credentials_if_needed("dev")
+
+    mock_write.assert_not_called()
+
+
+@pytest.mark.unit
+def test_update_default_credentials_if_needed_writes_when_profile_matches(mocker):
+    """When the logged-in profile matches the configured default, re-writes [default]."""
+    from cli_tool.commands.aws_login.commands.login import _update_default_credentials_if_needed
+
+    mocker.patch("cli_tool.commands.aws_login.commands.login.get_config_value", return_value="dev")
+    mock_write = mocker.patch(
+        "cli_tool.commands.aws_login.commands.login.write_default_credentials",
+        return_value={"expiration": "2026-12-31T00:00:00Z"},
+    )
+
+    _update_default_credentials_if_needed("dev")
+
+    mock_write.assert_called_once_with("dev")
+
+
+@pytest.mark.unit
+def test_update_default_credentials_if_needed_handles_write_failure(mocker):
+    """When write_default_credentials returns None, does not raise."""
+    from cli_tool.commands.aws_login.commands.login import _update_default_credentials_if_needed
+
+    mocker.patch("cli_tool.commands.aws_login.commands.login.get_config_value", return_value="dev")
+    mocker.patch("cli_tool.commands.aws_login.commands.login.write_default_credentials", return_value=None)
+
+    # Should not raise
+    _update_default_credentials_if_needed("dev")
+
+
+@pytest.mark.unit
+def test_run_sso_login_updates_default_after_success(mocker):
+    """After a successful SSO login, [default] is updated if profile is the configured default."""
+    import subprocess as sp
+
+    from cli_tool.commands.aws_login.commands.login import _run_sso_login
+
+    mocker.patch("subprocess.run", return_value=MagicMock(returncode=0))
+    mocker.patch(
+        "cli_tool.commands.aws_login.commands.login.verify_credentials",
+        return_value={"account": "123", "arn": "arn:aws:iam::123:role/Dev", "user_id": "AIDA"},
+    )
+    mocker.patch(
+        "cli_tool.commands.aws_login.commands.login.get_profile_credentials_expiration",
+        return_value=None,
+    )
+    mock_update = mocker.patch("cli_tool.commands.aws_login.commands.login._update_default_credentials_if_needed")
+
+    _run_sso_login("dev")
+
+    mock_update.assert_called_once_with("dev")

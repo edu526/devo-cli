@@ -16,8 +16,15 @@ from cli_tool.commands.aws_login.commands import (
     set_default_profile,
 )
 from cli_tool.core.utils.aws import check_aws_cli
+from cli_tool.core.utils.config_manager import get_config_value
 
-_SET_DEFAULT_HINT = "[dim]  Run 'devo aws-login set-default' to refresh them.[/dim]\n"
+
+def _set_default_hint() -> str:
+    """Return a hint pointing to the exact set-default command, using the configured profile if known."""
+    profile = get_config_value("aws_login.default_credentials_profile")
+    cmd = f"devo aws-login set-default {profile}" if profile else "devo aws-login set-default"
+    return f"[dim]  Run '{cmd}' to refresh them.[/dim]\n"
+
 
 console = Console()
 
@@ -28,12 +35,12 @@ def _warn_expiry(expiry_str: str) -> None:
     now = datetime.now(timezone.utc)
     if expiry_dt <= now:
         console.print("[yellow]⚠ Default credentials in ~/.aws/credentials have expired.[/yellow]")
-        console.print(_SET_DEFAULT_HINT)
+        console.print(_set_default_hint())
         return
     minutes_left = int((expiry_dt - now).total_seconds() / 60)
     if minutes_left < 30:
         console.print(f"[yellow]⚠ Default credentials expire in {minutes_left} min.[/yellow]")
-        console.print(_SET_DEFAULT_HINT)
+        console.print(_set_default_hint())
 
 
 def _check_credentials_via_cli(in_default: bool) -> None:
@@ -53,7 +60,7 @@ def _check_credentials_via_cli(in_default: bool) -> None:
             _warn_expiry(expiry_str)
     elif in_default:
         console.print("[yellow]⚠ Default credentials in ~/.aws/credentials may be expired.[/yellow]")
-        console.print(_SET_DEFAULT_HINT)
+        console.print(_set_default_hint())
 
 
 def _check_default_credentials_expiry():
@@ -168,18 +175,24 @@ def refresh_cmd():
 
 @aws_login.command("set-default")
 @click.argument("profile", required=False)
-def set_default_cmd(profile):
+@click.option("--set-env", is_flag=True, default=False, help="Also export AWS_PROFILE in shell config (~/.bashrc, ~/.zshrc, etc.).")
+def set_default_cmd(profile, set_env):
     """Set a profile as the default.
 
-    Updates shell configuration to export AWS_PROFILE environment
-    variable. On Linux/macOS, updates ~/.bashrc or ~/.zshrc.
-    On Windows, sets user environment variable.
+    Writes temporary credentials as [default] in ~/.aws/credentials so the
+    AWS CLI works without --profile. By default, the shell config file is NOT
+    modified.
+
+    Pass --set-env to also persist AWS_PROFILE in your shell config
+    (~/. bashrc, ~/.zshrc, or equivalent). This behaviour can be enabled
+    permanently via: devo config set aws_login.set_env_profile true
 
     Examples:
       devo aws-login set-default production
       devo aws-login set-default  # interactive selection
+      devo aws-login set-default production --set-env
     """
-    set_default_profile(profile)
+    set_default_profile(profile, set_env=set_env or None)
 
 
 if __name__ == "__main__":

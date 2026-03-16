@@ -12,7 +12,9 @@ from cli_tool.commands.aws_login.core.config import list_aws_profiles, parse_sso
 from cli_tool.commands.aws_login.core.credentials import (
     get_profile_credentials_expiration,
     verify_credentials,
+    write_default_credentials,
 )
+from cli_tool.core.utils.config_manager import get_config_value
 
 console = Console()
 
@@ -88,6 +90,20 @@ def _show_login_success(profile_name: str, identity: dict) -> None:
     console.print(f"  aws s3 ls --profile {profile_name}")
 
 
+def _update_default_credentials_if_needed(profile_name: str) -> None:
+    """Re-write [default] credentials if profile_name is the configured default."""
+    if get_config_value("aws_login.default_credentials_profile") != profile_name:
+        return
+    console.print(f"\n[blue]Updating [default] credentials for '{profile_name}'...[/blue]")
+    result = write_default_credentials(profile_name)
+    if result:
+        console.print("[green]✓ ~/.aws/credentials [default] updated[/green]")
+        if result.get("expiration"):
+            console.print(f"[dim]  Expires: {result['expiration']}[/dim]")
+    else:
+        console.print("[yellow]⚠ Could not update [default] credentials[/yellow]")
+
+
 def _run_sso_login(profile_name: str) -> None:
     """Execute AWS SSO login and handle result."""
     cmd = ["aws", "sso", "login", "--profile", profile_name]
@@ -100,6 +116,7 @@ def _run_sso_login(profile_name: str) -> None:
                 _show_login_success(profile_name, identity)
             else:
                 console.print("[yellow]Warning: Authentication succeeded but credentials verification failed[/yellow]")
+            _update_default_credentials_if_needed(profile_name)
         else:
             console.print("[red]✗ SSO authentication failed[/red]")
             sys.exit(1)
