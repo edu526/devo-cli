@@ -1,0 +1,15 @@
+/* Dark mode: Catppuccin Mocha — softer than default slate */
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #1e1e2e;
+  --md-default-bg-color--light: #313244;
+  --md-default-bg-color--lighter: #45475a;
+  --md-default-bg-color--lightest: #585b70;
+
+  --md-default-fg-color: #cdd6f4;
+  --md-default-fg-color--light: #a6adc8;
+  --md-default-fg-color--lighter: #7f849c;
+  --md-default-fg-color--lightest: #6c7086;
+
+  --md-code-bg-color: #181825;
+  --md-code-fg-color: #cdd6f4;
+}
