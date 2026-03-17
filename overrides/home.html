@@ -72,20 +72,19 @@
 
   .devo-hero-text { color: white; }
 
-  /* Match tabs bar to hero start color */
-  .md-tabs { background: #004d56 !important; }
-  .md-tabs__link { color: rgba(255,255,255,0.65) !important; }
-  .md-tabs__link--active,
-  .md-tabs__link:hover { color: white !important; }
-  .md-tabs__indicator { background: white !important; }
-
   .hero-banner {
-    font-family: 'JetBrains Mono', 'Courier New', monospace;
-    font-size: 0.7rem;
-    color: rgba(178, 235, 242, 0.9);
-    margin: 0 0 1.5rem;
-    line-height: 1.3;
-    white-space: pre;
+    display: block;
+    font-family: 'JetBrains Mono', 'Courier New', monospace !important;
+    font-size: 0.7rem !important;
+    color: rgba(178, 235, 242, 0.9) !important;
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 0 1.5rem !important;
+    padding: 0 !important;
+    line-height: 1.3 !important;
+    white-space: pre !important;
+    border-radius: 0 !important;
   }
   .devo-hero h1 {
     font-size: 2.8rem;
@@ -378,12 +377,12 @@
   <!-- ── HERO ──────────────────────────────────────────────────── -->
   <section class="devo-hero">
     <div class="devo-hero-text">
-      <div class="hero-banner"> ██████╗ ███████╗██╗   ██╗ ██████╗
+      <span style="display:block;font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:rgba(178,235,242,0.9);background:none;border:none;box-shadow:none;white-space:pre;line-height:1.3;margin:0 0 1.5rem;padding:0"> ██████╗ ███████╗██╗   ██╗ ██████╗
  ██╔══██╗██╔════╝██║   ██║██╔═══██╗
  ██║  ██║█████╗  ██║   ██║██║   ██║
  ██║  ██║██╔══╝  ╚██╗ ██╔╝██║   ██║
  ██████╔╝███████╗ ╚████╔╝ ╚██████╔╝
- ╚═════╝ ╚══════╝  ╚═══╝   ╚═════╝ </div>
+ ╚═════╝ ╚══════╝  ╚═══╝   ╚═════╝ </span>
 
       <h1>Developer productivity<br><span>AI-powered workflows</span></h1>
       <p class="hero-tagline">Git + AWS management from the terminal</p>
