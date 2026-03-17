@@ -14,6 +14,7 @@ from cli_tool.commands.aws_login.core.credentials import (
     verify_credentials,
     write_default_credentials,
 )
+from cli_tool.core.ui.brand import spinner
 from cli_tool.core.utils.config_manager import get_config_value
 
 console = Console()
@@ -170,9 +171,8 @@ def refresh_all_profiles():
         console.print("[yellow]No AWS profiles found[/yellow]")
         sys.exit(0)
 
-    console.print("[blue]Checking all profiles for expiration...[/blue]\n")
-
-    profiles_to_refresh, profiles_valid = _classify_profiles(profiles)
+    with spinner("Checking all profiles for expiration..."):
+        profiles_to_refresh, profiles_valid = _classify_profiles(profiles)
 
     if not profiles_to_refresh:
         console.print("[green]✓ All profiles have valid credentials[/green]\n")

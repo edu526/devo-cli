@@ -6,6 +6,7 @@ from typing import Optional, Tuple
 from rich.console import Console
 from rich.table import Table
 
+from cli_tool.core.ui.brand import spinner
 from cli_tool.core.utils.aws import create_aws_client
 
 console = Console()
@@ -35,17 +36,17 @@ def list_tables_command(profile: Optional[str], region: str) -> None:
 
         tables = []
         last_evaluated_table_name = None
-        console.print("[cyan]Fetching tables...[/cyan]")
 
-        while True:
-            kwargs = {}
-            if last_evaluated_table_name:
-                kwargs["ExclusiveStartTableName"] = last_evaluated_table_name
-            response = dynamodb_client.list_tables(**kwargs)
-            tables.extend(response.get("TableNames", []))
-            last_evaluated_table_name = response.get("LastEvaluatedTableName")
-            if not last_evaluated_table_name:
-                break
+        with spinner("Fetching DynamoDB tables..."):
+            while True:
+                kwargs = {}
+                if last_evaluated_table_name:
+                    kwargs["ExclusiveStartTableName"] = last_evaluated_table_name
+                response = dynamodb_client.list_tables(**kwargs)
+                tables.extend(response.get("TableNames", []))
+                last_evaluated_table_name = response.get("LastEvaluatedTableName")
+                if not last_evaluated_table_name:
+                    break
 
         if not tables:
             console.print(f"[yellow]No tables found in region {region}[/yellow]")
@@ -63,16 +64,17 @@ def list_tables_command(profile: Optional[str], region: str) -> None:
         total_size = 0
         active_count = 0
 
-        for table_name in sorted(tables):
-            try:
-                status, item_count, size_bytes = _describe_single_table(dynamodb_client, table_name)
-                table.add_row(table_name, status, f"{item_count:,}", _format_size(size_bytes))
-                if status == "ACTIVE":
-                    active_count += 1
-                    total_items += item_count
-                    total_size += size_bytes
-            except Exception:
-                table.add_row(table_name, "ERROR", "-", "-")
+        with spinner(f"Loading details for {len(tables)} tables..."):
+            for table_name in sorted(tables):
+                try:
+                    status, item_count, size_bytes = _describe_single_table(dynamodb_client, table_name)
+                    table.add_row(table_name, status, f"{item_count:,}", _format_size(size_bytes))
+                    if status == "ACTIVE":
+                        active_count += 1
+                        total_items += item_count
+                        total_size += size_bytes
+                except Exception:
+                    table.add_row(table_name, "ERROR", "-", "-")
 
         console.print(table)
 

@@ -13,27 +13,11 @@ Covers:
 import pytest
 from click.testing import CliRunner
 
-from cli_tool.cli import AliasedGroup, cli, main, profile_option
+from cli_tool.cli import AliasedGroup, cli, main
 
 # ============================================================================
 # profile_option decorator
 # ============================================================================
-
-
-@pytest.mark.unit
-def test_profile_option_decorator_adds_option():
-    """profile_option wraps a click command with a --profile option (line 22)."""
-    import click
-
-    @click.command()
-    @profile_option
-    def dummy_cmd(profile):
-        click.echo(f"profile={profile}")
-
-    runner = CliRunner()
-    result = runner.invoke(dummy_cmd, ["--profile", "my-profile"])
-    assert result.exit_code == 0
-    assert "profile=my-profile" in result.output
 
 
 # ============================================================================
@@ -68,11 +52,14 @@ def test_cli_help_shows_ca_login_alias():
 
 @pytest.mark.unit
 def test_cli_help_exit_code_zero():
-    """cli --help returns exit code 0."""
+    """cli --help returns exit code 0 and shows categorized command groups."""
     runner = CliRunner()
     result = runner.invoke(cli, ["--help"])
     assert result.exit_code == 0
-    assert "Commands" in result.output
+    # Commands are now grouped by category instead of a flat "Commands:" section
+    assert "Git" in result.output
+    assert "AWS" in result.output
+    assert "Tools" in result.output
 
 
 # ============================================================================

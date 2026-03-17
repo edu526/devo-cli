@@ -107,6 +107,16 @@ def show_first_run_notice() -> None:
     """Print a one-time telemetry notice the first time the CLI runs."""
     if _get_telemetry_id_file().exists():
         return
-    print()
-    print("\033[2mTelemetry: devo-cli collects anonymous usage data to improve the tool.")
-    print("Opt-out: export DEVO_NO_TELEMETRY=1  or  devo config set telemetry.enabled false\033[0m")
+    from rich.console import Console
+    from rich.panel import Panel
+
+    Console().print(
+        Panel(
+            "[dim]devo-cli collects anonymous usage data to improve the tool.\n"
+            "Opt-out: [cyan]export DEVO_NO_TELEMETRY=1[/cyan]"
+            "  or  [cyan]devo config set telemetry.enabled false[/cyan][/dim]",
+            title="[dim]Telemetry Notice[/dim]",
+            border_style="dim",
+            padding=(0, 2),
+        )
+    )

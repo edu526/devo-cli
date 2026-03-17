@@ -7,11 +7,29 @@ set -e
 # Colors
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
+DIM='\033[2m'
 NC='\033[0m'
 
-echo -e "${BLUE}Devo CLI Installer${NC}"
+# Cleanup trap — removes temp files on exit (success or failure)
+_CLEANUP_FILES=()
+_cleanup() {
+  for f in "${_CLEANUP_FILES[@]}"; do
+    rm -rf "$f" 2>/dev/null || true
+  done
+}
+trap _cleanup EXIT
+
+echo -e "${CYAN} ██████╗ ███████╗██╗   ██╗ ██████╗ ${NC}"
+echo -e "${CYAN} ██╔══██╗██╔════╝██║   ██║██╔═══██╗${NC}"
+echo -e "${CYAN} ██║  ██║█████╗  ██║   ██║██║   ██║${NC}"
+echo -e "${CYAN} ██║  ██║██╔══╝  ╚██╗ ██╔╝██║   ██║${NC}"
+echo -e "${CYAN} ██████╔╝███████╗ ╚████╔╝ ╚██████╔╝${NC}"
+echo -e "${CYAN} ╚═════╝ ╚══════╝  ╚═══╝   ╚═════╝ ${NC}"
+echo -e "${DIM}  Developer productivity CLI · AI-powered workflows${NC}"
+echo -e "${DIM}  https://devo.heyedu.dev${NC}"
 echo ""
 
 # Configuration
@@ -72,8 +90,7 @@ else
 fi
 
 echo -e "${BLUE}Platform:${NC} ${PLATFORM}-${ARCH}"
-echo -e "${BLUE}Version:${NC} ${VERSION}"
-echo -e "${BLUE}Format:${NC} ${ARCHIVE_FORMAT}"
+echo -e "${BLUE}Version:${NC}  ${VERSION}"
 echo ""
 
 # Check if curl and tar are available
@@ -88,8 +105,9 @@ if [[ "${ARCHIVE_FORMAT}" = "tarball" ]] && ! command -v tar &> /dev/null; then
 fi
 
 # Download binary
+_CLEANUP_FILES+=("${DOWNLOAD_FILE}")
 echo -e "${BLUE}📥 Downloading Devo CLI...${NC}"
-if ! curl -fsSL "${DOWNLOAD_URL}" -o "${DOWNLOAD_FILE}"; then
+if ! curl -fL --progress-bar "${DOWNLOAD_URL}" -o "${DOWNLOAD_FILE}"; then
   echo -e "${RED}❌ Download failed${NC}" >&2
   echo "Please check:" >&2
   echo "  1. The URL is correct: ${DOWNLOAD_URL}" >&2
@@ -100,6 +118,7 @@ fi
 
 # Extract if needed
 if [[ "${ARCHIVE_FORMAT}" = "tarball" ]]; then
+  _CLEANUP_FILES+=("${BINARY_NAME}")
   echo -e "${BLUE}📦 Extracting archive...${NC}"
   if ! tar -xzf "${DOWNLOAD_FILE}"; then
     echo -e "${RED}❌ Extraction failed${NC}" >&2
@@ -117,28 +136,20 @@ if [[ "${ARCHIVE_FORMAT}" = "tarball" ]]; then
   # Make executable
   chmod +x "${BINARY_NAME}/devo"
 
-  # Test the binary (must run from within the directory)
-  echo ""
-  echo -e "${BLUE}🧪 Testing binary...${NC}"
-  if ! "${BINARY_NAME}/devo" --version; then
+  # Test the binary silently
+  if ! "${BINARY_NAME}/devo" --version >/dev/null 2>&1; then
     echo -e "${RED}❌ Binary test failed${NC}" >&2
-    rm -rf "${BINARY_NAME}"
     exit 1
   fi
 
   BINARY_PATH="${BINARY_NAME}"
 else
-  # Linux: single file binary
-  # Rename to 'devo' for consistency
+  # Linux: single file binary — rename for consistency
   mv "${DOWNLOAD_FILE}" devo
-
-  # Make executable
   chmod +x devo
 
-  # Test the binary
-  echo ""
-  echo -e "${BLUE}🧪 Testing binary...${NC}"
-  if ! ./devo --version; then
+  # Test the binary silently
+  if ! ./devo --version >/dev/null 2>&1; then
     echo -e "${RED}❌ Binary test failed${NC}" >&2
     rm -f devo
     exit 1
@@ -147,7 +158,6 @@ else
   BINARY_PATH="devo"
 fi
 
-echo ""
 echo -e "${GREEN}✅ Binary downloaded and verified${NC}"
 echo ""
 
@@ -278,11 +288,18 @@ esac
 
 echo ""
 echo -e "${GREEN}🎉 Devo CLI installed successfully!${NC}"
+
+# Show installed version
+INSTALLED_VERSION=$(devo -v 2>/dev/null || echo "")
+if [[ -n "$INSTALLED_VERSION" ]]; then
+  echo -e "   ${DIM}version: ${INSTALLED_VERSION}${NC}"
+fi
+
 echo ""
 echo "Next steps:"
-echo "  1. Configure AWS credentials: aws configure"
-echo "  2. Set up shell completion: devo completion --install"
-echo "  3. Test the CLI: devo --help"
-echo "  4. Generate a commit: devo commit"
+echo "  1. Configure AWS credentials:  aws configure"
+echo "  2. Set up shell completion:    devo autocomplete"
+echo "  3. Test the CLI:               devo --help"
+echo "  4. Generate a commit:          devo commit"
 echo ""
-echo "Documentation: https://devo.heyedu.dev"
+echo -e "${DIM}Documentation: https://devo.heyedu.dev${NC}"
