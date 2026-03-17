@@ -1,15 +1,115 @@
-/* Dark mode: Catppuccin Mocha — softer than default slate */
+/* ── Brand color tokens ───────────────────────────────────────── */
+:root {
+  --brand-cyan:        #00BCD4;
+  --brand-cyan-dark:   #0097A7;
+  --brand-cyan-dim:    rgba(0, 188, 212, 0.12);
+  --brand-bg:          #070d1a;
+  --brand-bg-surface:  #0d1117;
+  --brand-bg-raised:   #0a101f;
+}
+
+/* ── Dark mode (default) ──────────────────────────────────────── */
 [data-md-color-scheme="slate"] {
-  --md-default-bg-color: #1e1e2e;
-  --md-default-bg-color--light: #313244;
-  --md-default-bg-color--lighter: #45475a;
-  --md-default-bg-color--lightest: #585b70;
+  --md-default-bg-color:           #070d1a;
+  --md-default-bg-color--light:    #0d1525;
+  --md-default-bg-color--lighter:  #152030;
+  --md-default-bg-color--lightest: #1e2d40;
 
-  --md-default-fg-color: #cdd6f4;
-  --md-default-fg-color--light: #a6adc8;
-  --md-default-fg-color--lighter: #7f849c;
-  --md-default-fg-color--lightest: #6c7086;
+  --md-default-fg-color:           #e6edf3;
+  --md-default-fg-color--light:    #8b949e;
+  --md-default-fg-color--lighter:  #6e7681;
+  --md-default-fg-color--lightest: #484f58;
 
-  --md-code-bg-color: #181825;
-  --md-code-fg-color: #cdd6f4;
+  --md-code-bg-color:    #0d1117;
+  --md-code-fg-color:    #e6edf3;
+
+  --md-primary-fg-color:            #070d1a;
+  --md-primary-fg-color--light:     #0d1525;
+  --md-primary-fg-color--dark:      #070d1a;
+  --md-primary-bg-color:            #e6edf3;
+
+  --md-accent-fg-color:             #00BCD4;
+  --md-accent-fg-color--transparent: rgba(0, 188, 212, 0.12);
+  --md-accent-bg-color:             #070d1a;
+
+  --md-typeset-a-color:             #00BCD4;
+
+  --md-footer-bg-color:             #050b16;
+  --md-footer-bg-color--dark:       #040910;
+  --md-footer-fg-color:             #6e7681;
+  --md-footer-fg-color--light:      #8b949e;
+  --md-footer-fg-color--lighter:    #484f58;
+}
+
+/* Header — dark */
+[data-md-color-scheme="slate"] .md-header {
+  background-color: rgba(7, 13, 26, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+  --md-primary-fg-color: #e6edf3;
+  --md-primary-bg-color: #070d1a;
+}
+[data-md-color-scheme="slate"] .md-header .md-logo,
+[data-md-color-scheme="slate"] .md-header__button { color: #e6edf3 !important; }
+/* Logo is loaded as <img>, not inline SVG — invert to make it white in dark mode */
+[data-md-color-scheme="slate"] .md-header .md-logo img {
+  filter: invert(1) brightness(2);
+}
+
+/* Header — light */
+[data-md-color-scheme="default"] .md-header {
+  background-color: #ffffff;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  --md-primary-fg-color: #0d1525;
+  --md-primary-bg-color: #ffffff;
+}
+[data-md-color-scheme="default"] .md-header .md-logo,
+[data-md-color-scheme="default"] .md-header__button { color: #0d1525; }
+
+/* Tabs — light */
+[data-md-color-scheme="default"] .md-tabs {
+  background-color: #ffffff;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+}
+[data-md-color-scheme="default"] .md-tabs__link { color: #4b5563; }
+[data-md-color-scheme="default"] .md-tabs__link--active { color: #0097A7; }
+
+/* Nav tabs */
+[data-md-color-scheme="slate"] .md-tabs {
+  background-color: #070d1a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Sidebar */
+[data-md-color-scheme="slate"] .md-nav__link--active,
+[data-md-color-scheme="slate"] .md-nav__link:is(:focus, :hover) {
+  color: #00BCD4;
+}
+[data-md-color-scheme="slate"] .md-nav__link--active {
+  font-weight: 600;
+}
+
+/* Code blocks */
+[data-md-color-scheme="slate"] .highlight {
+  background: #0d1117;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+}
+
+/* Admonition borders */
+[data-md-color-scheme="slate"] .md-typeset .admonition,
+[data-md-color-scheme="slate"] .md-typeset details {
+  border-color: rgba(0, 188, 212, 0.25);
+}
+
+/* ── Light mode ───────────────────────────────────────────────── */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color:            #0097A7;
+  --md-primary-fg-color--light:     #00BCD4;
+  --md-primary-fg-color--dark:      #00838F;
+  --md-accent-fg-color:             #00BCD4;
+  --md-typeset-a-color:             #0097A7;
 }

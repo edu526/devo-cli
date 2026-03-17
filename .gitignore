@@ -162,3 +162,4 @@ config.*.json
 *.csv
 .claude
 .mcp.json
+.playwright-mcp

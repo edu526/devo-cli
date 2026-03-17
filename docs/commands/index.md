@@ -192,7 +192,7 @@ devo autocomplete [OPTIONS]
 
 ## Command Categories
 
-### AI-Powered Features
+### Automation Features
 
 - `commit` - Generate commit messages
 - `code-reviewer` - Automated code review

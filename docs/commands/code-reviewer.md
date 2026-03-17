@@ -1,6 +1,6 @@
 # devo code-reviewer
 
-AI-powered code review analyzing git diffs for quality, security, and best practices.
+Automated code review analyzing git diffs for quality, security, and best practices.
 
 ## Synopsis
 

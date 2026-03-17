@@ -1,4 +1,4 @@
-.PHONY: help install uninstall clean test lint format build publish refresh venv completion binary binary-all build-windows run
+.PHONY: help install uninstall clean test lint format build publish refresh venv completion binary binary-all build-windows run docs
 
 # Default target
 help:
@@ -18,6 +18,7 @@ help:
 	@echo "  make clean         - Clean build artifacts"
 	@echo ""
 	@echo "Build & Release:"
+	@echo "  make docs          - Serve documentation locally (mkdocs)"
 	@echo "  make build         - Build distribution packages"
 	@echo "  make binary        - Build standalone binary for current platform"
 	@echo "  make binary-all    - Build binary with platform-specific naming"
@@ -28,6 +29,11 @@ help:
 	@echo "  make install       - First time setup"
 	@echo "  make completion    - Enable tab completion"
 	@echo "  make refresh       - After code changes"
+
+# Serve documentation locally
+docs:
+	@echo "Starting documentation server..."
+	zensical serve --open --config-file zensical.yml
 
 # Create virtual environment
 venv:
