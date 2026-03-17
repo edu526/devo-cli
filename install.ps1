@@ -31,6 +31,10 @@ try {
     # Don't stop on errors - we'll handle them manually
     $ErrorActionPreference = "Continue"
 
+    # Force UTF-8 so banner characters render correctly on all Windows terminals
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    $OutputEncoding = [System.Text.Encoding]::UTF8
+
     # Configuration
     $Repo = "edu526/devo-cli"
     $BinaryName = "devo-windows-amd64.zip"  # Changed to ZIP
@@ -63,8 +67,9 @@ try {
     $TempExtract = Join-Path $env:TEMP "devo-cli-extract"
 
     try {
-        $ProgressPreference = 'Continue'
+        $ProgressPreference = 'SilentlyContinue'
         Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempZip -UseBasicParsing -ErrorAction Stop
+        $ProgressPreference = 'Continue'
 
         # Verify file was downloaded
         if (!(Test-Path $TempZip)) {
@@ -72,6 +77,7 @@ try {
         }
 
         $FileSize = (Get-Item $TempZip).Length / 1MB
+        Write-Host "  $([math]::Round($FileSize, 1)) MB downloaded" -ForegroundColor DarkGray
 
         # Check if file is suspiciously small
         if ($FileSize -lt 5) {
