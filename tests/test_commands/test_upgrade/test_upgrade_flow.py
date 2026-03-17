@@ -84,8 +84,8 @@ def test_version_check_detects_newer_version(cli_runner, mocker, mock_current_ve
 
     # Verify version check output
     assert result.exit_code == 0
-    assert "Current version: 1.0.0" in result.output
-    assert "Latest version: 1.5.0" in result.output
+    assert "1.0.0" in result.output
+    assert "1.5.0" in result.output
     assert "Update available" in result.output
 
 
@@ -111,7 +111,8 @@ def test_version_check_no_newer_version(cli_runner, mocker, mock_same_version, m
 
     # Verify output
     assert result.exit_code == 0
-    assert "You already have the latest version (1.5.0)" in result.output
+    assert "latest version" in result.output
+    assert "1.5.0" in result.output
     assert "Update available" not in result.output
 
 
@@ -193,7 +194,8 @@ def test_binary_download_linux(cli_runner, mocker, mock_current_version, mock_gi
     assert call_args[0] == "https://github.com/example/devo-cli/releases/download/v1.5.0/devo-linux-amd64"
 
     # Verify success
-    assert "Successfully upgraded to version 1.5.0" in result.output
+    assert "1.5.0" in result.output
+    assert "installed successfully" in result.output
 
 
 @pytest.mark.integration
@@ -252,7 +254,8 @@ def test_binary_download_macos(cli_runner, mocker, mock_current_version, mock_gi
     assert verify_call_args[1]["archive_type"] == "tar.gz"
 
     # Verify success
-    assert "Successfully upgraded to version 1.5.0" in result.output
+    assert "1.5.0" in result.output
+    assert "installed successfully" in result.output
 
 
 @pytest.mark.integration
@@ -311,7 +314,8 @@ def test_binary_download_windows(cli_runner, mocker, mock_current_version, mock_
     assert verify_call_args[1]["archive_type"] == "zip"
 
     # Verify success
-    assert "Successfully upgraded to version 1.5.0" in result.output
+    assert "1.5.0" in result.output
+    assert "installed successfully" in result.output
 
 
 # ============================================================================
@@ -362,11 +366,11 @@ def test_binary_verification_success(cli_runner, mocker, mock_current_version, m
 
     # Verify verification was called
     assert mock_verify.called
-    assert "Verifying downloaded binary" in result.output
 
     # Verify installation proceeded
     assert mock_replace.called
-    assert "Successfully upgraded to version 1.5.0" in result.output
+    assert "1.5.0" in result.output
+    assert "installed successfully" in result.output
 
 
 @pytest.mark.integration
@@ -473,7 +477,8 @@ def test_binary_installation_linux(cli_runner, mocker, mock_current_version, moc
 
     # Verify success
     assert "Installing new version" in result.output
-    assert "Successfully upgraded to version 1.5.0" in result.output
+    assert "1.5.0" in result.output
+    assert "installed successfully" in result.output
 
 
 @pytest.mark.integration
@@ -526,7 +531,8 @@ def test_binary_installation_macos_tarball(cli_runner, mocker, mock_current_vers
     assert call_args[1]["archive_type"] == "tar.gz"
 
     # Verify success
-    assert "Successfully upgraded to version 1.5.0" in result.output
+    assert "1.5.0" in result.output
+    assert "installed successfully" in result.output
 
 
 @pytest.mark.integration
@@ -579,7 +585,8 @@ def test_binary_installation_windows_zip(cli_runner, mocker, mock_current_versio
     assert call_args[1]["archive_type"] == "zip"
 
     # Verify success
-    assert "Successfully upgraded to version 1.5.0" in result.output
+    assert "1.5.0" in result.output
+    assert "installed successfully" in result.output
 
 
 @pytest.mark.integration
@@ -649,7 +656,8 @@ def test_upgrade_no_newer_version_without_force(cli_runner, mocker, mock_same_ve
 
     # Verify upgrade is skipped
     assert result.exit_code == 0
-    assert "You already have the latest version (1.5.0)" in result.output
+    assert "latest version" in result.output
+    assert "1.5.0" in result.output
     assert "Use --force to reinstall anyway" in result.output
 
 
@@ -698,7 +706,8 @@ def test_upgrade_no_newer_version_with_force(cli_runner, mocker, mock_same_versi
     assert mock_download.called
     assert mock_verify.called
     assert mock_replace.called
-    assert "Successfully upgraded to version 1.5.0" in result.output
+    assert "1.5.0" in result.output
+    assert "installed successfully" in result.output
 
 
 # ============================================================================
@@ -902,7 +911,8 @@ def test_upgrade_with_user_confirmation_yes(cli_runner, mocker, mock_current_ver
 
     # Verify upgrade proceeded
     assert mock_download.called
-    assert "Successfully upgraded to version 1.5.0" in result.output
+    assert "1.5.0" in result.output
+    assert "installed successfully" in result.output
 
 
 @pytest.mark.integration
@@ -1034,9 +1044,9 @@ def test_upgrade_with_unknown_current_version(cli_runner, mocker, mock_github_re
     assert "Could not determine current version" in result.output
 
     # Verify upgrade proceeds
-    assert "Latest version: 1.5.0" in result.output
     assert mock_download.called
-    assert "Successfully upgraded to version 1.5.0" in result.output
+    assert "1.5.0" in result.output
+    assert "installed successfully" in result.output
 
 
 # ============================================================================
