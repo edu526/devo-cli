@@ -122,12 +122,11 @@ def test_ssm_tunnel_complete_workflow(cli_runner, mock_ssm_config, sample_databa
     # Simulate KeyboardInterrupt after tunnel is established (user stops tunnel)
     mock_ssm_session.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
-    connect_result = cli_runner.invoke(connect_database, ["test-db"])
+    connect_result = cli_runner.invoke(connect_database, ["test-db", "--no-hosts"])
 
     # Verify tunnel was established
     assert connect_result.exit_code == 0
-    assert "Connecting to test-db" in connect_result.output
-    assert "localhost:15432" in connect_result.output or "127.0.0.1:15432" in connect_result.output
+    assert "Starting connections" in connect_result.output
     assert "Connection closed" in connect_result.output
 
     # Verify SSM session was called with correct parameters
@@ -174,13 +173,13 @@ def test_ssm_tunnel_with_hostname_forwarding(cli_runner, mock_ssm_config, mocker
 
     # Mock SSMSession
     mock_ssm_session = mocker.patch("cli_tool.commands.ssm.commands.database.connect.SSMSession")
+    mock_ssm_session._is_token_expired.return_value = False
     mock_ssm_session.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
-    connect_result = cli_runner.invoke(connect_database, ["hostname-db"], input="n\n")  # Decline localhost fallback
+    connect_result = cli_runner.invoke(connect_database, ["hostname-db"])
 
-    # Verify the command prompts about missing /etc/hosts entry
-    assert "not found in /etc/hosts" in connect_result.output or "Connecting to hostname-db" in connect_result.output
-    assert "hosts setup" in connect_result.output or "prod-db.local" in connect_result.output
+    # Verify the command reports missing /etc/hosts entry
+    assert "Not in /etc/hosts" in connect_result.output or "hosts setup" in connect_result.output
 
     # Note: SSM session is not called when user declines localhost fallback
 
@@ -206,11 +205,11 @@ def test_ssm_tunnel_cleanup_on_error(cli_runner, mock_ssm_config, sample_databas
     mock_ssm_session._is_token_expired.return_value = False
     mock_ssm_session.start_port_forwarding_to_remote.side_effect = Exception("SSM session failed: Unable to connect to bastion")
 
-    connect_result = cli_runner.invoke(connect_database, ["test-db"])
+    connect_result = cli_runner.invoke(connect_database, ["test-db", "--no-hosts"])
 
-    # Verify the command shows connection info (even though SSM session will fail)
-    # The exception is raised during SSM session, not during command setup
-    assert "Connecting to test-db" in connect_result.output or "test-db.example.com" in connect_result.output
+    # Verify the command shows connection info and handles the error
+    assert "Starting connections" in connect_result.output
+    assert "error" in connect_result.output.lower()
 
     # ========== Step 2: Verify Manual Cleanup with Clear Command ==========
 
@@ -267,12 +266,12 @@ def test_ssm_tunnel_multiple_simultaneous_tunnels(cli_runner, mock_ssm_config, m
     mock_ssm_session_1._is_token_expired.return_value = False
     mock_ssm_session_1.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
-    connect_result_1 = cli_runner.invoke(connect_database, ["db1"])
+    connect_result_1 = cli_runner.invoke(connect_database, ["db1", "--no-hosts"])
 
     # Verify first tunnel
     assert connect_result_1.exit_code == 0
-    assert "Connecting to db1" in connect_result_1.output
-    assert "localhost:15432" in connect_result_1.output or "127.0.0.1:15432" in connect_result_1.output
+    assert "Starting connections" in connect_result_1.output
+    assert "Connection closed" in connect_result_1.output
 
     # Verify correct parameters for db1
     mock_ssm_session_1.start_port_forwarding_to_remote.assert_called_once_with(
@@ -286,12 +285,12 @@ def test_ssm_tunnel_multiple_simultaneous_tunnels(cli_runner, mock_ssm_config, m
     mock_ssm_session_2._is_token_expired.return_value = False
     mock_ssm_session_2.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
-    connect_result_2 = cli_runner.invoke(connect_database, ["db2"])
+    connect_result_2 = cli_runner.invoke(connect_database, ["db2", "--no-hosts"])
 
     # Verify second tunnel
     assert connect_result_2.exit_code == 0
-    assert "Connecting to db2" in connect_result_2.output
-    assert "localhost:13306" in connect_result_2.output or "127.0.0.1:13306" in connect_result_2.output
+    assert "Starting connections" in connect_result_2.output
+    assert "Connection closed" in connect_result_2.output
 
     # Verify correct parameters for db2
     mock_ssm_session_2.start_port_forwarding_to_remote.assert_called_once_with(
@@ -305,12 +304,12 @@ def test_ssm_tunnel_multiple_simultaneous_tunnels(cli_runner, mock_ssm_config, m
     mock_ssm_session_3._is_token_expired.return_value = False
     mock_ssm_session_3.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
-    connect_result_3 = cli_runner.invoke(connect_database, ["db3"])
+    connect_result_3 = cli_runner.invoke(connect_database, ["db3", "--no-hosts"])
 
     # Verify third tunnel
     assert connect_result_3.exit_code == 0
-    assert "Connecting to db3" in connect_result_3.output
-    assert "localhost:17017" in connect_result_3.output or "127.0.0.1:17017" in connect_result_3.output
+    assert "Starting connections" in connect_result_3.output
+    assert "Connection closed" in connect_result_3.output
 
     # Verify correct parameters for db3 (different region)
     mock_ssm_session_3.start_port_forwarding_to_remote.assert_called_once_with(
@@ -339,11 +338,11 @@ def test_ssm_tunnel_hosts_file_rollback_on_error(cli_runner, mock_ssm_config, sa
     mock_ssm_session._is_token_expired.side_effect = [False, True]
     mock_ssm_session.start_port_forwarding_to_remote.return_value = 1  # Non-zero exit code
 
-    connect_result = cli_runner.invoke(connect_database, ["test-db"])
+    connect_result = cli_runner.invoke(connect_database, ["test-db", "--no-hosts"])
 
-    # Verify tunnel failure is reported
+    # Verify tunnel failure is reported (token expiry detected after SSM returns)
     assert connect_result.exit_code == 0  # Command handles error gracefully
-    assert "failed" in connect_result.output.lower() or "error" in connect_result.output.lower() or "expired" in connect_result.output.lower()
+    assert "expired" in connect_result.output.lower()
 
     # Note: In a real scenario, /etc/hosts cleanup would be manual
     # The hosts clear command can be used to clean up entries if needed
@@ -401,11 +400,11 @@ def test_ssm_tunnel_state_persistence_across_connections(cli_runner, mock_ssm_co
     mock_ssm_session_1._is_token_expired.return_value = False
     mock_ssm_session_1.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
-    connect_result_1 = cli_runner.invoke(connect_database, ["persistent-db"])
+    connect_result_1 = cli_runner.invoke(connect_database, ["persistent-db", "--no-hosts"])
 
     # Verify first connection
     assert connect_result_1.exit_code == 0
-    assert "Connecting to persistent-db" in connect_result_1.output
+    assert "Starting connections" in connect_result_1.output
 
     # Verify SSM session was called with correct parameters
     mock_ssm_session_1.start_port_forwarding_to_remote.assert_called_once_with(
@@ -419,11 +418,11 @@ def test_ssm_tunnel_state_persistence_across_connections(cli_runner, mock_ssm_co
     mock_ssm_session_2._is_token_expired.return_value = False
     mock_ssm_session_2.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
-    connect_result_2 = cli_runner.invoke(connect_database, ["persistent-db"])
+    connect_result_2 = cli_runner.invoke(connect_database, ["persistent-db", "--no-hosts"])
 
     # Verify second connection uses same configuration
     assert connect_result_2.exit_code == 0
-    assert "Connecting to persistent-db" in connect_result_2.output
+    assert "Starting connections" in connect_result_2.output
 
     # Verify SSM session was called with same parameters
     mock_ssm_session_2.start_port_forwarding_to_remote.assert_called_once_with(
@@ -437,11 +436,11 @@ def test_ssm_tunnel_state_persistence_across_connections(cli_runner, mock_ssm_co
     mock_ssm_session_3._is_token_expired.return_value = False
     mock_ssm_session_3.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
-    connect_result_3 = cli_runner.invoke(connect_database, ["persistent-db"])
+    connect_result_3 = cli_runner.invoke(connect_database, ["persistent-db", "--no-hosts"])
 
     # Verify third connection still works
     assert connect_result_3.exit_code == 0
-    assert "Connecting to persistent-db" in connect_result_3.output
+    assert "Starting connections" in connect_result_3.output
 
     # Verify configuration persisted across all connections
     mock_ssm_session_3.start_port_forwarding_to_remote.assert_called_once_with(
@@ -491,11 +490,11 @@ def test_ssm_tunnel_with_aws_profile_switching(cli_runner, mock_ssm_config, mock
     mock_ssm_session_dev._is_token_expired.return_value = False
     mock_ssm_session_dev.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
-    connect_result_dev = cli_runner.invoke(connect_database, ["dev-db"])
+    connect_result_dev = cli_runner.invoke(connect_database, ["dev-db", "--no-hosts"])
 
     # Verify dev connection
     assert connect_result_dev.exit_code == 0
-    assert "Connecting to dev-db" in connect_result_dev.output
+    assert "Starting connections" in connect_result_dev.output
 
     # Verify correct profile was used
     mock_ssm_session_dev.start_port_forwarding_to_remote.assert_called_once_with(
@@ -509,11 +508,11 @@ def test_ssm_tunnel_with_aws_profile_switching(cli_runner, mock_ssm_config, mock
     mock_ssm_session_prod._is_token_expired.return_value = False
     mock_ssm_session_prod.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
-    connect_result_prod = cli_runner.invoke(connect_database, ["prod-db"])
+    connect_result_prod = cli_runner.invoke(connect_database, ["prod-db", "--no-hosts"])
 
     # Verify prod connection
     assert connect_result_prod.exit_code == 0
-    assert "Connecting to prod-db" in connect_result_prod.output
+    assert "Starting connections" in connect_result_prod.output
 
     # Verify correct profile was used (different from dev)
     mock_ssm_session_prod.start_port_forwarding_to_remote.assert_called_once_with(

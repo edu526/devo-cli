@@ -187,11 +187,10 @@ def test_connect_database_without_hostname_forwarding(cli_runner, mock_ssm_confi
     mock_ssm_session._is_token_expired.return_value = False
     mock_ssm_session.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
-    result = cli_runner.invoke(connect_database, ["test-db"])
+    result = cli_runner.invoke(connect_database, ["test-db", "--no-hosts"])
 
     assert result.exit_code == 0
-    assert "Connecting to test-db" in result.output
-    assert "localhost:15432" in result.output
+    assert "Starting connections" in result.output
     assert "Connection closed" in result.output
 
     # Verify SSM session was started
