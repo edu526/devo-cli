@@ -2,9 +2,12 @@
 
 {% block content %}
 <style>
-  /* ── Reset content area ───────────────────────────────────────── */
-  .md-content__inner { padding: 0 !important; max-width: 100% !important; }
-  .md-content { max-width: 100% !important; }
+  /* ── Break out of MkDocs container — full viewport width ──────── */
+  .md-main__inner        { max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
+  .md-content            { max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
+  .md-content__inner     { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
+  .md-sidebar--primary,
+  .md-sidebar--secondary { display: none !important; }
   .md-content__inner > h1:first-child { display: none; }
 
   /* ── Shared ───────────────────────────────────────────────────── */
