@@ -31,17 +31,29 @@ try {
     # Don't stop on errors - we'll handle them manually
     $ErrorActionPreference = "Continue"
 
+    # Disable the built-in progress bar (fills the entire screen on PS 5.1)
+    $ProgressPreference = 'SilentlyContinue'
+
     # Configuration
     $Repo = "edu526/devo-cli"
     $BinaryName = "devo-windows-amd64.zip"  # Changed to ZIP
 
-    Write-Host " ██████╗ ███████╗██╗   ██╗ ██████╗ " -ForegroundColor Cyan
-    Write-Host " ██╔══██╗██╔════╝██║   ██║██╔═══██╗" -ForegroundColor Cyan
-    Write-Host " ██║  ██║█████╗  ██║   ██║██║   ██║" -ForegroundColor Cyan
-    Write-Host " ██║  ██║██╔══╝  ╚██╗ ██╔╝██║   ██║" -ForegroundColor Cyan
-    Write-Host " ██████╔╝███████╗ ╚████╔╝ ╚██████╔╝" -ForegroundColor Cyan
-    Write-Host " ╚═════╝ ╚══════╝  ╚═══╝   ╚═════╝ " -ForegroundColor Cyan
-    Write-Host "  Developer productivity CLI · AI-powered workflows" -ForegroundColor DarkGray
+    # Try to enable UTF-8 for terminals that support it
+    try {
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+        $OutputEncoding = [System.Text.Encoding]::UTF8
+    } catch {
+        # Ignore - some hosts don't support changing encoding
+    }
+
+    Write-Host ""
+    Write-Host "  ____  _______     _____  " -ForegroundColor Cyan
+    Write-Host " |  _ \| ____\ \   / / _ \ " -ForegroundColor Cyan
+    Write-Host " | | | |  _|  \ \ / / | | |" -ForegroundColor Cyan
+    Write-Host " | |_| | |___  \ V /| |_| |" -ForegroundColor Cyan
+    Write-Host " |____/|_____|  \_/  \___/ " -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  Developer productivity CLI" -ForegroundColor DarkGray
     Write-Host "  https://devo.heyedu.dev" -ForegroundColor DarkGray
     Write-Host ""
 
@@ -63,7 +75,6 @@ try {
     $TempExtract = Join-Path $env:TEMP "devo-cli-extract"
 
     try {
-        $ProgressPreference = 'Continue'
         Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempZip -UseBasicParsing -ErrorAction Stop
 
         # Verify file was downloaded
@@ -107,7 +118,21 @@ try {
             Remove-Item $TempExtract -Recurse -Force
         }
 
-        Expand-Archive -Path $TempZip -DestinationPath $TempExtract -Force
+        # Use .NET API instead of Expand-Archive to avoid the progress bar
+        # that Expand-Archive shows even with $ProgressPreference = SilentlyContinue
+        try {
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            [System.IO.Compression.ZipFile]::ExtractToDirectory($TempZip, $TempExtract)
+        } catch {
+            Write-Host ""
+            Write-Host "ERROR: Failed to extract ZIP file!" -ForegroundColor Red
+            Write-Host "Details: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "The downloaded file may be corrupted. Try running the installer again." -ForegroundColor Yellow
+            Remove-Item $TempZip -ErrorAction SilentlyContinue
+            Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue
+            Pause-OnError ""
+        }
 
         # Verify extraction - search for devo.exe at root or in a subdirectory
         $TempExeRoot = Join-Path $TempExtract "devo.exe"
@@ -122,7 +147,12 @@ try {
                 $SourceDir = Split-Path -Parent $TempExe
             } else {
                 Write-Host ""
-                Write-Host "ERROR: Extraction failed - devo.exe not found" -ForegroundColor Red
+                Write-Host "ERROR: Extraction failed - devo.exe not found in ZIP" -ForegroundColor Red
+                Write-Host ""
+                Write-Host "ZIP contents:" -ForegroundColor Yellow
+                Get-ChildItem -Path $TempExtract -Recurse | ForEach-Object {
+                    Write-Host "  $($_.FullName.Replace($TempExtract, ''))" -ForegroundColor Gray
+                }
                 Remove-Item $TempZip -ErrorAction SilentlyContinue
                 Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue
                 Pause-OnError ""
