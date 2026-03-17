@@ -4,6 +4,7 @@ from rich.console import Console
 
 from cli_tool.commands.eventbridge.core.rules_manager import RulesManager
 from cli_tool.commands.eventbridge.utils.formatters import format_json_output, format_table_output
+from cli_tool.core.ui.brand import spinner
 from cli_tool.core.utils.aws import select_profile
 
 console = Console()
@@ -20,10 +21,9 @@ def list_rules(ctx, env, region, status, output):
         # Create rules manager
         manager = RulesManager(profile, region)
 
-        console.print(f"\n[blue]Fetching EventBridge rules from {region}...[/blue]\n")
-
         # Fetch and filter rules
-        filtered_rules = manager.get_filtered_rules(env=env, status=status)
+        with spinner(f"Fetching EventBridge rules from {region}..."):
+            filtered_rules = manager.get_filtered_rules(env=env, status=status)
 
         if not filtered_rules:
             filter_msg = f" for environment '{env}'" if env else ""

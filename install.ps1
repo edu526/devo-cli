@@ -35,9 +35,14 @@ try {
     $Repo = "edu526/devo-cli"
     $BinaryName = "devo-windows-amd64.zip"  # Changed to ZIP
 
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "    Devo CLI Installer for Windows" -ForegroundColor Cyan
-    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host " ██████╗ ███████╗██╗   ██╗ ██████╗ " -ForegroundColor Cyan
+    Write-Host " ██╔══██╗██╔════╝██║   ██║██╔═══██╗" -ForegroundColor Cyan
+    Write-Host " ██║  ██║█████╗  ██║   ██║██║   ██║" -ForegroundColor Cyan
+    Write-Host " ██║  ██║██╔══╝  ╚██╗ ██╔╝██║   ██║" -ForegroundColor Cyan
+    Write-Host " ██████╔╝███████╗ ╚████╔╝ ╚██████╔╝" -ForegroundColor Cyan
+    Write-Host " ╚═════╝ ╚══════╝  ╚═══╝   ╚═════╝ " -ForegroundColor Cyan
+    Write-Host "  Developer productivity CLI · AI-powered workflows" -ForegroundColor DarkGray
+    Write-Host "  https://devo.heyedu.dev" -ForegroundColor DarkGray
     Write-Host ""
 
     # Determine download URL
@@ -53,16 +58,13 @@ try {
 
     # Download binary
     Write-Host "Downloading Devo CLI from GitHub..." -ForegroundColor Blue
-    Write-Host "URL: $DownloadUrl" -ForegroundColor Gray
     Write-Host ""
     $TempZip = Join-Path $env:TEMP "devo-cli.zip"
     $TempExtract = Join-Path $env:TEMP "devo-cli-extract"
 
     try {
-        # Show progress
-        $ProgressPreference = 'SilentlyContinue'
-        Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempZip -UseBasicParsing -ErrorAction Stop
         $ProgressPreference = 'Continue'
+        Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempZip -UseBasicParsing -ErrorAction Stop
 
         # Verify file was downloaded
         if (!(Test-Path $TempZip)) {
@@ -356,17 +358,25 @@ try {
     }
 
     Write-Host ""
-    Write-Host "========================================" -ForegroundColor Green
     Write-Host "  Devo CLI installed successfully!" -ForegroundColor Green
-    Write-Host "========================================" -ForegroundColor Green
+
+    # Show installed version
+    try {
+        $installedVersion = & $DestPath -v 2>&1 | Out-String
+        if ($installedVersion) {
+            Write-Host "  version: $($installedVersion.Trim())" -ForegroundColor DarkGray
+        }
+    } catch {}
+
     Write-Host ""
     Write-Host "Next steps:" -ForegroundColor Cyan
     Write-Host "  1. Restart your terminal to apply PATH changes"
-    Write-Host "  2. Configure AWS credentials: aws configure"
-    Write-Host "  3. Test the CLI: devo --help"
-    Write-Host "  4. Generate a commit: devo commit"
+    Write-Host "  2. Configure AWS credentials:  aws configure"
+    Write-Host "  3. Set up shell completion:     devo autocomplete"
+    Write-Host "  4. Test the CLI:               devo --help"
+    Write-Host "  5. Generate a commit:          devo commit"
     Write-Host ""
-    Write-Host "Documentation: https://devo.heyedu.dev" -ForegroundColor Gray
+    Write-Host "Documentation: https://devo.heyedu.dev" -ForegroundColor DarkGray
 
     # Pause before exiting so user can read the output
     Pause-OnSuccess

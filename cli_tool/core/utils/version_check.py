@@ -147,8 +147,17 @@ def show_update_notification():
         has_update, current_version, latest_version = check_for_updates()
 
         if has_update and latest_version:
-            print()
-            print(f"\033[2m→ Update available: v{latest_version} (current: v{current_version}) - Run 'devo upgrade'\033[0m")
+            from rich.console import Console
+            from rich.panel import Panel
+
+            Console().print(
+                Panel(
+                    f"[cyan]devo upgrade[/cyan]  →  [bold cyan]v{latest_version}[/bold cyan] available" f"  [dim](current: v{current_version})[/dim]",
+                    title="[yellow]Update available[/yellow]",
+                    border_style="yellow",
+                    padding=(0, 2),
+                )
+            )
     except Exception:
         # Silently fail - don't interrupt user's workflow
         pass

@@ -2,14 +2,18 @@
 UI Components for displaying tool interactions and results.
 """
 
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict, List
 
 from rich.console import Console, Group
 from rich.live import Live
 from rich.panel import Panel
+from rich.spinner import Spinner
 from rich.syntax import Syntax
 from rich.table import Table
+
+from cli_tool.core.ui import theme
 
 
 class StreamingDisplayManager:
@@ -178,19 +182,19 @@ class ConsoleUI:
 
     def show_tool_input(self, tool_name: str, icon: str, parameters: Dict[str, Any]):
         """Display tool input parameters in a formatted panel."""
-        params_text = "\n".join([f"• {key}: [green]'{value}'[/green]" for key, value in parameters.items()])
+        params_text = "\n".join([f"• {key}: [{theme.SUCCESS}]'{value}'[/{theme.SUCCESS}]" for key, value in parameters.items()])
 
         self.console.print(
             Panel(
-                f"[bold cyan]{icon} {tool_name}[/bold cyan]\n\n[yellow]Parameters:[/yellow]\n{params_text}",
+                f"[bold {theme.BRAND}]{icon} {tool_name}[/bold {theme.BRAND}]\n\n[{theme.WARNING}]Parameters:[/{theme.WARNING}]\n{params_text}",
                 title="📥 Tool Input",
-                border_style="blue",
+                border_style=theme.BORDER_INFO,
             )
         )
 
     def show_tool_output(self, title: str, content: str, success: bool = True):
         """Display generic tool output in a formatted panel."""
-        border_style = "green" if success else "red"
+        border_style = theme.BORDER_SUCCESS if success else theme.BORDER_ERROR
         icon = "✅" if success else "❌"
 
         self.console.print(
@@ -207,7 +211,7 @@ class ConsoleUI:
             Panel(
                 f"❌ Error in {tool_name}: {error_message}",
                 title="📤 Tool Output - Error",
-                border_style="red",
+                border_style=theme.BORDER_ERROR,
             )
         )
 
@@ -217,7 +221,7 @@ class ConsoleUI:
             Panel(
                 f"📄 File: {file_path}\n❌ {error_message}",
                 title="📤 Tool Output - File Error",
-                border_style="red",
+                border_style=theme.BORDER_ERROR,
             )
         )
 
@@ -232,7 +236,7 @@ class ConsoleUI:
                 end_line = start_line + line_count - 1
                 title += " (lines {}-{})".format(start_line, end_line)
 
-            self.console.print(Panel(syntax, title=title, border_style="green"))
+            self.console.print(Panel(syntax, title=title, border_style=theme.BORDER_SUCCESS))
         except Exception:
             # Fallback to plain text if syntax highlighting fails
             self.show_tool_output("{} (lines {}+)".format(file_path, start_line), content)
@@ -297,8 +301,6 @@ class ConsoleUI:
             output_text += f"\n🔍 Usages ({len(usages)}):\n"
             for usage in usages:
                 output_text += f"   {usage}\n"
-            # if len(usages) > 5:
-            # output_text += f"   ... and {len(usages) - 5} more usages\n"
         else:
             output_text += f"\n🔍 No usages found for '{symbol_name}'\n"
 
@@ -320,17 +322,30 @@ class ConsoleUI:
                 f"🔄 Current branch: {current_branch}\n"
                 f"🎯 Base branch: {base_branch}",
                 title="🧠 Request to AI",
-                border_style="cyan",
+                border_style=theme.BORDER_BRAND,
             )
         )
 
     def show_request_preview(self, preview_content: str):
         """Display request preview panel."""
-        self.console.print(Panel(preview_content, title="📋 Request Preview", border_style="blue"))
+        self.console.print(Panel(preview_content, title="📋 Request Preview", border_style=theme.BORDER_INFO))
 
     def show_processing_status(self):
         """Display processing status."""
-        self.console.print("\n🔄 [bold yellow]AI is processing the request...[/bold yellow]\n")
+        self.console.print(f"\n🔄 [bold {theme.WARNING}]AI is processing the request...[/bold {theme.WARNING}]\n")
+
+    @contextmanager
+    def spinner(self, message: str, style: str = "cyan"):
+        """Context manager that shows an animated spinner while a block runs.
+
+        Usage::
+
+            with console_ui.spinner("Fetching data..."):
+                result = slow_operation()
+        """
+        spinner_widget = Spinner("dots", text=f" [{style}]{message}[/{style}]")
+        with Live(spinner_widget, console=self.console, transient=True, refresh_per_second=12):
+            yield
 
     def show_ai_thinking(self, thought: str):
         """Display AI thinking process in real-time using streaming panels."""
@@ -344,7 +359,7 @@ class ConsoleUI:
         self._streaming_manager.start_streaming()
 
         # Create the panel with current thought
-        panel = Panel(f"💭 {thought}", title="🧠 AI Thinking", border_style="cyan", padding=(0, 1))
+        panel = Panel(f"💭 {thought}", title="🧠 AI Thinking", border_style=theme.BORDER_BRAND, padding=(0, 1))
 
         # Update the streaming panel
         self._streaming_manager.update_event_panel(event_id, panel)
@@ -371,7 +386,7 @@ class ConsoleUI:
         if details:
             content += f"\n\n📋 {details}"
 
-        self.console.print(Panel(content, title="🤖 AI Action", border_style="blue", padding=(0, 1)))
+        self.console.print(Panel(content, title="🤖 AI Action", border_style=theme.BORDER_INFO, padding=(0, 1)))
 
     def show_ai_progress(self, step: str, current: int, total: int):
         """Display AI progress through analysis steps."""
@@ -384,7 +399,7 @@ class ConsoleUI:
             Panel(
                 f"📊 Step {current}/{total}: {step}\n\nProgress: [{progress_bar}] {current}/{total}",
                 title="⚡ AI Progress",
-                border_style="green",
+                border_style=theme.BORDER_SUCCESS,
                 padding=(0, 1),
             )
         )
@@ -399,7 +414,7 @@ class ConsoleUI:
             Panel(
                 f"✍️ {writing_status}\n\n📝 Current output:\n{content_preview}",
                 title="📄 AI Writing in Real-Time",
-                border_style="yellow",
+                border_style=theme.BORDER_WARNING,
                 padding=(0, 1),
             )
         )
@@ -442,7 +457,7 @@ class ConsoleUI:
         panel = Panel(
             f"🤖 {status}\n\n{display_content}",
             title="🧠 Live AI Response",
-            border_style="yellow",
+            border_style=theme.BORDER_WARNING,
             padding=(0, 1),
         )
 
@@ -473,7 +488,7 @@ class ConsoleUI:
             Panel(
                 f"🎯 AI Analysis Completed!\n\n📝 Response length: {response_length:,} characters\n📊 Processing JSON response...",
                 title="✅ Analysis Complete",
-                border_style="green",
+                border_style=theme.BORDER_SUCCESS,
             )
         )
 
@@ -489,7 +504,7 @@ class ConsoleUI:
                 Panel(
                     analysis_result["summary"],
                     title="📋 Analysis Summary",
-                    border_style="cyan",
+                    border_style=theme.BORDER_BRAND,
                 )
             )
 
@@ -497,12 +512,12 @@ class ConsoleUI:
         if "pr_context" in analysis_result:
             context = analysis_result["pr_context"]
             context_info = (
-                f"🔄 Current branch: [bold green]{context.get('current_branch', 'N/A')}[/bold green]\n"
-                f"🎯 Base branch: [bold blue]{context.get('base_branch', 'N/A')}[/bold blue]\n"
+                f"🔄 Current branch: [bold {theme.SUCCESS}]{context.get('current_branch', 'N/A')}[/bold {theme.SUCCESS}]\n"
+                f"🎯 Base branch: [bold {theme.INFO}]{context.get('base_branch', 'N/A')}[/bold {theme.INFO}]\n"
                 f"📁 Total files changed: {context.get('total_files', 0)}\n"
                 f"📄 Supported files analyzed: {context.get('supported_files', 0)}"
             )
-            self.console.print(Panel(context_info, title="📊 PR Context", border_style="blue"))
+            self.console.print(Panel(context_info, title="📊 PR Context", border_style=theme.BORDER_INFO))
 
         # Show issues in cards format
         issues = analysis_result.get("issues", [])
@@ -513,7 +528,7 @@ class ConsoleUI:
                 Panel(
                     "✅ No issues found in the analysis!",
                     title="🎉 Great News!",
-                    border_style="green",
+                    border_style=theme.BORDER_SUCCESS,
                 )
             )
 
@@ -565,9 +580,9 @@ class ConsoleUI:
 
     def _build_issue_card_location(self, file_path: str, line_number) -> list:
         """Build location lines for an issue card."""
-        lines = [f"📍 [cyan]Location:[/cyan] {file_path}"]
+        lines = [f"📍 [{theme.BRAND}]Location:[/{theme.BRAND}] {file_path}"]
         if line_number != "-":
-            lines.append(f"📏 [cyan]Line:[/cyan] {line_number}")
+            lines.append(f"📏 [{theme.BRAND}]Line:[/{theme.BRAND}] {line_number}")
         lines.append("")
         return lines
 
@@ -577,14 +592,14 @@ class ConsoleUI:
 
         impact = issue.get("impact", None)
         if impact and impact.strip():
-            lines.append("💥 [cyan]Impact:[/cyan]")
+            lines.append(f"💥 [{theme.BRAND}]Impact:[/{theme.BRAND}]")
             lines.extend(self._format_multiline_text(impact))
             lines.append("")
 
         affected_references = issue.get("affected_references", None)
         if affected_references:
             lines.append("")
-            lines.append("🔗 [cyan]Affected References:[/cyan]")
+            lines.append(f"🔗 [{theme.BRAND}]Affected References:[/{theme.BRAND}]")
             if isinstance(affected_references, list):
                 for ref in affected_references:
                     lines.append(f"   • {ref}")
@@ -594,7 +609,7 @@ class ConsoleUI:
         security_reference = issue.get("security_reference", None)
         if security_reference and security_reference.strip():
             lines.append("")
-            lines.append("🔒 [cyan]Security Reference:[/cyan]")
+            lines.append(f"🔒 [{theme.BRAND}]Security Reference:[/{theme.BRAND}]")
             lines.extend(self._format_multiline_text(security_reference))
 
         return lines
@@ -604,20 +619,20 @@ class ConsoleUI:
         card_content = self._build_issue_card_header(index, type_info, severity_info)
         card_content.extend(self._build_issue_card_location(issue.get("file", "N/A"), issue.get("line", "-")))
 
-        card_content.append("📝 [cyan]Description:[/cyan]")
+        card_content.append(f"📝 [{theme.BRAND}]Description:[/{theme.BRAND}]")
         card_content.extend(self._format_multiline_text(issue.get("description", "No description provided")))
         card_content.append("")
 
         card_content.extend(self._build_issue_card_optional_sections(issue))
 
-        card_content.append("💡 [cyan]Suggestion:[/cyan]")
+        card_content.append(f"💡 [{theme.BRAND}]Suggestion:[/{theme.BRAND}]")
         card_content.extend(self._format_multiline_text(issue.get("suggestion", "No suggestion provided")))
 
         return card_content
 
     def _show_issues_cards(self, issues: List[Dict[str, Any]]):
         """Display issues as individual cards for better readability."""
-        self.console.print(f"\n[bold magenta]🚨 Issues Found ({len(issues)} total)[/bold magenta]\n")
+        self.console.print(f"\n[bold {theme.HIGHLIGHT}]🚨 Issues Found ({len(issues)} total)[/bold {theme.HIGHLIGHT}]\n")
 
         for i, issue in enumerate(issues, 1):
             severity = issue.get("severity", "unknown").lower()
@@ -645,13 +660,13 @@ class ConsoleUI:
         table = Table(
             title="📁 Files Analyzed",
             show_header=True,
-            header_style="bold blue",
+            header_style=f"bold {theme.INFO}",
             expand=True,
             show_lines=True,
         )
 
-        table.add_column("File Path", style="cyan", min_width=40, no_wrap=False)
-        table.add_column("Status", style="green", min_width=15, no_wrap=True)
+        table.add_column("File Path", style=theme.BRAND, min_width=40, no_wrap=False)
+        table.add_column("Status", style=theme.SUCCESS, min_width=15, no_wrap=True)
 
         for file_path in files:
             table.add_row(file_path, "✅ Analyzed")
@@ -668,16 +683,16 @@ class ConsoleUI:
         # Token Usage Metrics
         accumulated_usage = metrics.get("accumulated_usage", {})
         if accumulated_usage:
-            content.append("📊 [bold cyan]Token Usage:[/bold cyan]")
+            content.append(f"📊 [bold {theme.BRAND}]Token Usage:[/bold {theme.BRAND}]")
             input_tokens = accumulated_usage.get("inputTokens", 0)
             output_tokens = accumulated_usage.get("outputTokens", 0)
             total_tokens = accumulated_usage.get("totalTokens", 0)
             total_duration = metrics.get("total_duration", 0)
 
-            content.append(f"   🔼 Input tokens: [green]{input_tokens:,}[/green]")
-            content.append(f"   🔽 Output tokens: [yellow]{output_tokens:,}[/yellow]")
+            content.append(f"   🔼 Input tokens: [{theme.SUCCESS}]{input_tokens:,}[/{theme.SUCCESS}]")
+            content.append(f"   🔽 Output tokens: [{theme.WARNING}]{output_tokens:,}[/{theme.WARNING}]")
             content.append(f"   📈 Total tokens: [bold]{total_tokens:,}[/bold]")
-            content.append(f"   ⏱️ Total duration: [green]{total_duration:.2f}s[/green]")
+            content.append(f"   ⏱️ Total duration: [{theme.SUCCESS}]{total_duration:.2f}s[/{theme.SUCCESS}]")
             content.append("")
 
         if not content:
@@ -688,7 +703,7 @@ class ConsoleUI:
             Panel(
                 "\n".join(content).rstrip(),
                 title="📈 Execution Metrics",
-                border_style="green",
+                border_style=theme.BORDER_SUCCESS,
                 padding=(0, 1),
             )
         )
