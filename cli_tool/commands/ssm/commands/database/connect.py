@@ -164,9 +164,7 @@ def _process_db_for_table(
 
     if use_hostname_forwarding and not _is_port_bindable(local_address, db_config["port"]):
         connect_to = f"{local_address}:{db_config['port']}"
-        console.print(
-            f"[red]✗ {name}: Port {db_config['port']} on {local_address} is occupied by a local service. " f"Stop it or use --no-hosts.[/red]"
-        )
+        console.print(f"[red]✗ {name}: Port {db_config['port']} on {local_address} is occupied by a local service. Stop it or use --no-hosts.[/red]")
         return (name, connect_to, "-", remote, profile, "[red]✗ Port occupied by local service[/red]"), None, True
 
     # In --no-hosts mode, avoid using the remote DB port as the local SSM port (it may be
