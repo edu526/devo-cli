@@ -112,13 +112,46 @@ cli.add_command(register_eventbridge_commands())
 cli.add_command(ssm)
 
 
+def _collect_command_names(group: click.Group) -> set:
+    """Recursively collect all valid command names from a Click group."""
+    names = set()
+    for name, cmd in group.commands.items():
+        names.add(name)
+        if isinstance(cmd, click.Group):
+            names.update(_collect_command_names(cmd))
+    return names
+
+
+def _parse_command_name(argv: list) -> str | None:
+    """Extract the full command path from argv, ignoring flags and argument values."""
+    known = _collect_command_names(cli)
+    tokens = [a for a in argv if not a.startswith("-") and a in known]
+    return " ".join(tokens) if tokens else None
+
+
 def main():
+    from cli_tool.core.utils.telemetry import capture_command, capture_error, show_first_run_notice
+    from cli_tool.core.utils.version_check import show_update_notification
+
+    show_first_run_notice()
+
+    import sys
+
+    cmd_name = _parse_command_name(sys.argv[1:])
+
+    telemetry_thread = None
     try:
         cli(obj={})
+        telemetry_thread = capture_command(cmd_name, success=True)
+    except SystemExit as e:
+        telemetry_thread = capture_command(cmd_name, success=(e.code == 0))
+        raise
+    except Exception as e:
+        telemetry_thread = capture_error(cmd_name, e)
+        raise
     finally:
-        # Show update notification after command execution
-        from cli_tool.core.utils.version_check import show_update_notification
-
+        if telemetry_thread:
+            telemetry_thread.join(timeout=2)
         show_update_notification()
 
 

@@ -4,6 +4,8 @@ This file provides guidance to AI coding assistants (Claude Code, Cursor, Copilo
 
 ## Commands
 
+> **All commands must be run inside the virtual environment.** Activate it with `source .venv/bin/activate` before running any command.
+
 ```bash
 # Setup
 make venv              # Create virtual environment

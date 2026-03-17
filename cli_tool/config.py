@@ -37,6 +37,10 @@ CODEARTIFACT_REQUIRED_ROLE = os.getenv(
 _domains_config = get_config_value("codeartifact.domains", [])
 CODEARTIFACT_DOMAINS = [(d["domain"], d["repository"], d["namespace"]) for d in _domains_config] if _domains_config else []
 
+# PostHog telemetry
+POSTHOG_API_KEY = "phc_DGUSmVSQTZCtAWTaEiyppy6to6bHvUVX5MOwA18JktP"
+POSTHOG_HOST = "https://us.i.posthog.com"
+
 # Legacy AWS config names (for backward compatibility)
 AWS_REGION = CODEARTIFACT_REGION
 AWS_ACCOUNT_ID = CODEARTIFACT_ACCOUNT_ID

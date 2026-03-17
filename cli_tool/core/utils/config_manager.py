@@ -43,6 +43,7 @@ def get_default_config():
             "domains": [],
         },
         "version_check": {"enabled": True},
+        "telemetry": {"enabled": True},
         "aws_login": {"set_env_profile": False},
         "ssm": {"databases": {}, "instances": {}},
         "dynamodb": {"export_templates": {}},
