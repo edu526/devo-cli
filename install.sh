@@ -28,7 +28,7 @@ echo -e "${CYAN} ██║  ██║█████╗  ██║   ██║�
 echo -e "${CYAN} ██║  ██║██╔══╝  ╚██╗ ██╔╝██║   ██║${NC}"
 echo -e "${CYAN} ██████╔╝███████╗ ╚████╔╝ ╚██████╔╝${NC}"
 echo -e "${CYAN} ╚═════╝ ╚══════╝  ╚═══╝   ╚═════╝ ${NC}"
-echo -e "${DIM}  Developer productivity CLI · AI-powered workflows${NC}"
+echo -e "${DIM}  Developer productivity CLI${NC}"
 echo -e "${DIM}  https://devo.heyedu.dev${NC}"
 echo ""
 
@@ -188,6 +188,8 @@ else
   choice=0
 fi
 
+INSTALLED_BINARY=""
+
 case $choice in
   0)
     # Custom directory from environment variable
@@ -198,12 +200,14 @@ case $choice in
     if [[ "${ARCHIVE_FORMAT}" = "tarball" ]]; then
       # macOS: move entire directory
       mv "${BINARY_PATH}" "$INSTALL_DIR/"
+      INSTALLED_BINARY="$INSTALL_DIR/${BINARY_NAME}/devo"
       echo -e "${GREEN}✅ Installed to ${INSTALL_DIR}/${BINARY_NAME}${NC}"
       echo ""
       echo -e "${YELLOW}Note: Run with: ${INSTALL_DIR}/${BINARY_NAME}/devo${NC}"
     else
       # Linux: move single binary
       mv "${BINARY_PATH}" "$INSTALL_DIR/"
+      INSTALLED_BINARY="$INSTALL_DIR/devo"
       echo -e "${GREEN}✅ Installed to ${INSTALL_DIR}/devo${NC}"
     fi
     ;;
@@ -215,6 +219,7 @@ case $choice in
       # macOS: move directory and create symlink
       if sudo mv "${BINARY_PATH}" /usr/local/lib/; then
         sudo ln -sf "/usr/local/lib/${BINARY_NAME}/devo" /usr/local/bin/devo
+        INSTALLED_BINARY="/usr/local/bin/devo"
         echo -e "${GREEN}✅ Installed to /usr/local/lib/${BINARY_NAME}${NC}"
         echo -e "${GREEN}✅ Symlink created at /usr/local/bin/devo${NC}"
       else
@@ -224,6 +229,7 @@ case $choice in
     else
       # Linux: move single binary
       if sudo mv "${BINARY_PATH}" /usr/local/bin/; then
+        INSTALLED_BINARY="/usr/local/bin/devo"
         echo -e "${GREEN}✅ Installed to /usr/local/bin/devo${NC}"
       else
         echo -e "${RED}❌ Installation failed${NC}" >&2
@@ -241,11 +247,13 @@ case $choice in
       mkdir -p ~/.local/lib
       mv "${BINARY_PATH}" ~/.local/lib/
       ln -sf "$HOME/.local/lib/${BINARY_NAME}/devo" ~/.local/bin/devo
+      INSTALLED_BINARY="$HOME/.local/bin/devo"
       echo -e "${GREEN}✅ Installed to ~/.local/lib/${BINARY_NAME}${NC}"
       echo -e "${GREEN}✅ Symlink created at ~/.local/bin/devo${NC}"
     else
       # Linux: move single binary
       mv "${BINARY_PATH}" ~/.local/bin/
+      INSTALLED_BINARY="$HOME/.local/bin/devo"
       echo -e "${GREEN}✅ Installed to ~/.local/bin/devo${NC}"
     fi
 
@@ -270,11 +278,13 @@ case $choice in
     echo ""
 
     if [[ "${ARCHIVE_FORMAT}" = "tarball" ]]; then
+      INSTALLED_BINARY="./${BINARY_PATH}/devo"
       echo -e "${GREEN}✅ Binary ready in ${BINARY_PATH}${NC}"
       echo ""
       echo -e "${YELLOW}To use: ./${BINARY_PATH}/devo${NC}"
       echo -e "${YELLOW}To add to PATH, move to a directory in PATH or create a symlink${NC}"
     else
+      INSTALLED_BINARY="./devo"
       echo -e "${GREEN}✅ Binary ready in current directory${NC}"
       echo ""
       echo -e "${YELLOW}To use from anywhere, add to PATH or move to a directory in PATH${NC}"
@@ -289,10 +299,12 @@ esac
 echo ""
 echo -e "${GREEN}🎉 Devo CLI installed successfully!${NC}"
 
-# Show installed version
-INSTALLED_VERSION=$(devo -v 2>/dev/null || echo "")
-if [[ -n "$INSTALLED_VERSION" ]]; then
-  echo -e "   ${DIM}version: ${INSTALLED_VERSION}${NC}"
+# Show installed version (use the binary we just installed, not PATH lookup)
+if [[ -n "$INSTALLED_BINARY" ]]; then
+  INSTALLED_VERSION=$("$INSTALLED_BINARY" -v 2>/dev/null || echo "")
+  if [[ -n "$INSTALLED_VERSION" ]]; then
+    echo -e "   ${DIM}version: ${INSTALLED_VERSION}${NC}"
+  fi
 fi
 
 echo ""
