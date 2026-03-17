@@ -8,6 +8,7 @@ copyright: "&copy; 2026 Devo CLI · MIT License"
 
 theme:
   name: material
+  custom_dir: overrides
   logo: assets/logo.svg
   favicon: assets/favicon.svg
   palette:

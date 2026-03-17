@@ -1,0 +1,541 @@
+{% extends "main.html" %}
+
+{% block content %}
+<style>
+  /* ── Reset content area ───────────────────────────────────────── */
+  .md-content__inner { padding: 0 !important; max-width: 100% !important; }
+  .md-content { max-width: 100% !important; }
+  .md-content__inner > h1:first-child { display: none; }
+
+  /* ── Shared ───────────────────────────────────────────────────── */
+  .devo-section {
+    padding: 5rem 2rem;
+  }
+  .devo-section h2 {
+    font-size: 2rem;
+    font-weight: 700;
+    text-align: center;
+    margin: 0 0 0.5rem;
+    color: var(--md-default-fg-color);
+  }
+  .devo-section .subtitle {
+    text-align: center;
+    color: var(--md-default-fg-color--light);
+    margin: 0 0 3rem;
+    font-size: 1.05rem;
+  }
+
+  .devo-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.75rem 1.6rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-decoration: none !important;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+  .devo-btn-primary {
+    background: white;
+    color: #006064;
+  }
+  .devo-btn-primary:hover { background: #e0f7fa; transform: translateY(-1px); }
+  .devo-btn-accent {
+    background: #00BCD4;
+    color: white;
+  }
+  .devo-btn-accent:hover { background: #0097A7; transform: translateY(-1px); }
+  .devo-btn-ghost {
+    background: transparent;
+    color: white;
+    border: 2px solid rgba(255,255,255,0.5);
+  }
+  .devo-btn-ghost:hover { border-color: white; background: rgba(255,255,255,0.1); }
+
+  /* ── Hero ─────────────────────────────────────────────────────── */
+  .devo-hero {
+    background: linear-gradient(135deg, #004d56 0%, #00838f 60%, #00acc1 100%);
+    padding: 5rem 2rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+    align-items: center;
+  }
+  [data-md-color-scheme="slate"] .devo-hero {
+    background: linear-gradient(135deg, #0d1b2a 0%, #102030 50%, #1a3a4a 100%);
+  }
+
+  .devo-hero-text { color: white; }
+
+  .hero-banner {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: rgba(178, 235, 242, 0.9);
+    margin: 0 0 1.5rem;
+    line-height: 1.3;
+    letter-spacing: 0;
+  }
+  .devo-hero h1 {
+    font-size: 2.8rem;
+    font-weight: 800;
+    color: white;
+    margin: 0 0 0.75rem;
+    line-height: 1.15;
+  }
+  .devo-hero h1 span { color: #b2ebf2; }
+  .hero-tagline {
+    font-size: 1.1rem;
+    color: rgba(255,255,255,0.75);
+    margin: 0 0 0.5rem;
+  }
+  .hero-badges {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin: 0 0 2rem;
+  }
+  .hero-badge {
+    font-size: 0.75rem;
+    background: rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.8);
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+  }
+  .devo-hero-actions { display: flex; gap: 1rem; flex-wrap: wrap; }
+
+  /* ── Terminal ─────────────────────────────────────────────────── */
+  .devo-terminal {
+    background: #0d1117;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06);
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 0.82rem;
+  }
+  .terminal-bar {
+    background: #161b22;
+    padding: 0.65rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    border-bottom: 1px solid #21262d;
+  }
+  .t-dot { width: 12px; height: 12px; border-radius: 50%; }
+  .t-dot.r { background: #ff5f57; }
+  .t-dot.y { background: #ffbd2e; }
+  .t-dot.g { background: #28c840; }
+  .terminal-bar span {
+    color: #8b949e; font-size: 0.72rem;
+    margin: 0 auto;
+  }
+  .terminal-body { padding: 1.5rem 1.5rem 1.75rem; min-height: 320px; }
+
+  .t-line {
+    line-height: 1.85;
+    opacity: 0;
+    transform: translateY(3px);
+    animation: t-in 0.12s ease forwards;
+  }
+  .t-line.cmd  { color: #79c0ff; }
+  .t-line.cmd::before { content: "$ "; color: #3fb950; font-weight: 600; }
+  .t-line.ok   { color: #3fb950; }
+  .t-line.spin { color: #58a6ff; }
+  .t-line.dim  { color: #8b949e; }
+  .t-line.gap  { min-height: 1.85em; }
+
+  /* staggered delays */
+  .d1  { animation-delay: 0.4s;  }
+  .d2  { animation-delay: 1.1s;  }
+  .d3  { animation-delay: 1.9s;  }
+  .d4  { animation-delay: 2.9s;  }
+  .d5  { animation-delay: 3.3s;  }
+  .d6  { animation-delay: 4.0s;  }
+  .d7  { animation-delay: 4.7s;  }
+  .d8  { animation-delay: 5.5s;  }
+  .d9  { animation-delay: 5.9s;  }
+  .d10 { animation-delay: 6.6s;  }
+  .d11 { animation-delay: 7.4s;  }
+  .d12 { animation-delay: 8.2s;  }
+  .d13 { animation-delay: 8.6s;  }
+  .d14 { animation-delay: 9.3s;  }
+  .d15 { animation-delay: 10.0s; }
+
+  .t-cursor {
+    display: inline-block;
+    width: 7px; height: 0.9em;
+    background: #3fb950;
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    opacity: 0;
+    animation: t-blink 1s step-end infinite;
+    animation-delay: 10.5s;
+  }
+
+  @keyframes t-in {
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes t-blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
+  }
+
+  /* ── Install ──────────────────────────────────────────────────── */
+  .devo-install {
+    background: var(--md-default-bg-color);
+    padding: 4.5rem 2rem;
+    text-align: center;
+  }
+  .install-tabs {
+    display: inline-flex;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--md-default-bg-color--lighter);
+    margin-bottom: 1.5rem;
+  }
+  .i-tab {
+    padding: 0.5rem 1.4rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    background: transparent;
+    color: var(--md-default-fg-color--light);
+    border: none;
+    transition: all 0.15s;
+  }
+  .i-tab.active { background: #00BCD4; color: white; }
+  .i-panel { display: none; }
+  .i-panel.active { display: block; }
+  .i-cmd {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: #0d1117;
+    border-radius: 8px;
+    padding: 1rem 1.25rem 1rem 1.5rem;
+    max-width: 620px;
+    width: 100%;
+    text-align: left;
+  }
+  .i-cmd code {
+    flex: 1;
+    color: #e6edf3 !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.9rem !important;
+    background: transparent !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    word-break: break-all;
+  }
+  .i-copy {
+    background: none;
+    border: 1px solid #30363d;
+    border-radius: 5px;
+    color: #8b949e;
+    padding: 0.3rem 0.65rem;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-family: inherit;
+    transition: all 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .i-copy:hover  { border-color: #00BCD4; color: #00BCD4; }
+  .i-copy.copied { border-color: #3fb950; color: #3fb950; }
+
+  /* ── Features ─────────────────────────────────────────────────── */
+  .devo-features {
+    background: var(--md-default-bg-color--light);
+  }
+  [data-md-color-scheme="slate"] .devo-features {
+    background: #181825;
+  }
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+    max-width: 1040px;
+    margin: 0 auto;
+  }
+  .f-card {
+    background: var(--md-default-bg-color);
+    border-radius: 10px;
+    padding: 1.5rem;
+    border: 1px solid var(--md-default-bg-color--lighter);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .f-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 32px rgba(0,188,212,0.12);
+    border-color: rgba(0,188,212,0.3);
+  }
+  [data-md-color-scheme="slate"] .f-card {
+    background: #1e1e2e;
+    border-color: #313244;
+  }
+  .f-icon { font-size: 1.75rem; margin-bottom: 0.75rem; }
+  .f-card h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0 0 0.4rem;
+    color: var(--md-default-fg-color);
+  }
+  .f-card p {
+    font-size: 0.85rem;
+    color: var(--md-default-fg-color--light);
+    margin: 0;
+    line-height: 1.65;
+  }
+
+  /* ── Quick Start ──────────────────────────────────────────────── */
+  .devo-quickstart { background: var(--md-default-bg-color); }
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
+    max-width: 860px;
+    margin: 0 auto 3rem;
+    position: relative;
+  }
+  .steps::before {
+    content: '';
+    position: absolute;
+    top: 24px;
+    left: calc(16% + 16px);
+    right: calc(16% + 16px);
+    height: 2px;
+    background: linear-gradient(90deg, #00BCD4 0%, #00BCD4 100%);
+    opacity: 0.25;
+  }
+  .step { text-align: center; }
+  .step-num {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #00BCD4, #0097A7);
+    color: white;
+    font-weight: 700;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1rem;
+    box-shadow: 0 4px 12px rgba(0,188,212,0.35);
+  }
+  .step h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0 0 0.4rem;
+  }
+  .step p {
+    font-size: 0.875rem;
+    color: var(--md-default-fg-color--light);
+    margin: 0;
+    line-height: 1.55;
+  }
+  .step p code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    background: var(--md-code-bg-color);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+  }
+  .qs-cta { text-align: center; }
+
+  /* ── Responsive ───────────────────────────────────────────────── */
+  @media (max-width: 800px) {
+    .devo-hero {
+      grid-template-columns: 1fr;
+      padding: 3rem 1.25rem;
+      gap: 2.5rem;
+    }
+    .hero-banner { display: none; }
+    .devo-hero h1 { font-size: 2.1rem; }
+    .features-grid { grid-template-columns: 1fr; }
+    .steps { grid-template-columns: 1fr; gap: 1.5rem; }
+    .steps::before { display: none; }
+    .devo-section { padding: 3.5rem 1.25rem; }
+  }
+  @media (max-width: 1024px) and (min-width: 801px) {
+    .features-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+
+<div class="devo-home">
+
+  <!-- ── HERO ──────────────────────────────────────────────────── -->
+  <section class="devo-hero">
+    <div class="devo-hero-text">
+      <pre class="hero-banner"> ██████╗ ███████╗██╗   ██╗ ██████╗
+ ██╔══██╗██╔════╝██║   ██║██╔═══██╗
+ ██║  ██║█████╗  ██║   ██║██║   ██║
+ ██║  ██║██╔══╝  ╚██╗ ██╔╝██║   ██║
+ ██████╔╝███████╗ ╚████╔╝ ╚██████╔╝
+ ╚═════╝ ╚══════╝  ╚═══╝   ╚═════╝ </pre>
+
+      <h1>Developer productivity<br><span>AI-powered workflows</span></h1>
+      <p class="hero-tagline">Git + AWS management from the terminal</p>
+      <div class="hero-badges">
+        <span class="hero-badge">Linux</span>
+        <span class="hero-badge">macOS</span>
+        <span class="hero-badge">Windows</span>
+        <span class="hero-badge">No Python required</span>
+      </div>
+      <div class="devo-hero-actions">
+        <a href="getting-started/quickstart/" class="devo-btn devo-btn-primary">Get Started →</a>
+        <a href="https://github.com/edu526/devo-cli" class="devo-btn devo-btn-ghost">GitHub</a>
+      </div>
+    </div>
+
+    <div class="devo-terminal" id="devo-terminal">
+      <div class="terminal-bar">
+        <span class="t-dot r"></span>
+        <span class="t-dot y"></span>
+        <span class="t-dot g"></span>
+        <span>devo — zsh</span>
+      </div>
+      <div class="terminal-body" id="terminal-body">
+        <div class="t-line cmd  d1">devo commit</div>
+        <div class="t-line spin d2">&nbsp; ⠋ Analyzing staged changes...</div>
+        <div class="t-line ok   d3">&nbsp; ✔ feat(auth): add SSO token refresh</div>
+        <div class="t-line gap  d4"></div>
+        <div class="t-line cmd  d5">devo aws-login</div>
+        <div class="t-line ok   d6">&nbsp; ✔ production  · expires in 8h</div>
+        <div class="t-line ok   d7">&nbsp; ✔ staging     · expires in 7h</div>
+        <div class="t-line gap  d8"></div>
+        <div class="t-line cmd  d9">devo dynamodb export users</div>
+        <div class="t-line spin d10">&nbsp; ⠋ Fetching tables...</div>
+        <div class="t-line ok   d11">&nbsp; ✔ Exported 1,248 rows → users.csv</div>
+        <div class="t-line gap  d12"></div>
+        <div class="t-line cmd  d13">devo upgrade --check</div>
+        <div class="t-line ok   d15">&nbsp; ✨ Already on latest version v3.6.1</div>
+        <span class="t-cursor"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── INSTALL ────────────────────────────────────────────────── -->
+  <section class="devo-install">
+    <h2 style="font-size:2rem;font-weight:700;margin:0 0 0.5rem;">Quick Install</h2>
+    <p style="color:var(--md-default-fg-color--light);margin:0 0 2rem;font-size:1.05rem;">One command to get started</p>
+
+    <div class="install-tabs">
+      <button class="i-tab active" onclick="iTab(this,'unix')">Linux / macOS</button>
+      <button class="i-tab" onclick="iTab(this,'win')">Windows (PowerShell)</button>
+    </div>
+
+    <div id="tab-unix" class="i-panel active">
+      <div class="i-cmd">
+        <code>curl -fsSL https://devo.heyedu.dev/install.sh | bash</code>
+        <button class="i-copy" onclick="iCopy(this,'curl -fsSL https://devo.heyedu.dev/install.sh | bash')">copy</button>
+      </div>
+    </div>
+    <div id="tab-win" class="i-panel">
+      <div class="i-cmd">
+        <code>irm https://devo.heyedu.dev/install.ps1 | iex</code>
+        <button class="i-copy" onclick="iCopy(this,'irm https://devo.heyedu.dev/install.ps1 | iex')">copy</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FEATURES ───────────────────────────────────────────────── -->
+  <section class="devo-section devo-features">
+    <h2>Everything you need</h2>
+    <p class="subtitle">Built for teams that move fast</p>
+    <div class="features-grid">
+      <div class="f-card">
+        <div class="f-icon">🤖</div>
+        <h3>AI Commit Messages</h3>
+        <p>Generate conventional commit messages from staged changes using AWS Bedrock. No context switching.</p>
+      </div>
+      <div class="f-card">
+        <div class="f-icon">🔍</div>
+        <h3>Code Review</h3>
+        <p>Automated security analysis and best-practice checks on your branch before it hits the PR.</p>
+      </div>
+      <div class="f-card">
+        <div class="f-icon">🔐</div>
+        <h3>AWS SSO Login</h3>
+        <p>Authenticate all your AWS profiles at once and track credential expiry with a single command.</p>
+      </div>
+      <div class="f-card">
+        <div class="f-icon">🗄️</div>
+        <h3>DynamoDB Export</h3>
+        <p>Export table data to CSV, JSON, JSONL or TSV with filtering and pagination — no console needed.</p>
+      </div>
+      <div class="f-card">
+        <div class="f-icon">🔗</div>
+        <h3>SSM Port Forwarding</h3>
+        <p>Connect to private RDS, ECS tasks and internal services without a VPN or bastion host.</p>
+      </div>
+      <div class="f-card">
+        <div class="f-icon">📦</div>
+        <h3>Standalone Binaries</h3>
+        <p>Single binary for Linux, macOS and Windows. Self-updating via <code style="font-size:0.78rem;background:var(--md-code-bg-color);padding:0.1rem 0.35rem;border-radius:4px;">devo upgrade</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── QUICK START ────────────────────────────────────────────── -->
+  <section class="devo-section devo-quickstart">
+    <h2>Up and running in 3 steps</h2>
+    <p class="subtitle">From zero to first AI commit message in minutes</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Install</h3>
+        <p>Run the one-line installer for your platform</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Configure AWS</h3>
+        <p>Set up SSO and authenticate with <code>devo aws-login</code></p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Commit</h3>
+        <p>Stage your changes and run <code>devo commit</code></p>
+      </div>
+    </div>
+    <div class="qs-cta">
+      <a href="getting-started/quickstart/" class="devo-btn devo-btn-accent">Read the Quick Start Guide →</a>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  /* Install tabs */
+  function iTab(btn, id) {
+    document.querySelectorAll('.i-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.i-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + id).classList.add('active');
+  }
+
+  /* Copy to clipboard */
+  function iCopy(btn, text) {
+    navigator.clipboard.writeText(text).then(function () {
+      btn.textContent = 'copied!';
+      btn.classList.add('copied');
+      setTimeout(function () {
+        btn.textContent = 'copy';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  }
+
+  /* Terminal animation loop */
+  function replayTerminal() {
+    var lines = document.querySelectorAll('#terminal-body .t-line, #terminal-body .t-cursor');
+    lines.forEach(function (el) {
+      el.style.animation = 'none';
+      void el.offsetWidth; /* reflow */
+      el.style.animation = '';
+    });
+  }
+  /* Replay every ~14s (10s animation + 4s pause) */
+  setInterval(replayTerminal, 14000);
+</script>
+{% endblock %}
