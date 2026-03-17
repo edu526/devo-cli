@@ -2,6 +2,7 @@
 
 import platform
 import signal
+import socket
 import subprocess
 from typing import Dict, Optional
 
@@ -36,6 +37,19 @@ class PortForwarder:
                 signal.signal(sig, _cleanup_handler)
             except (OSError, ValueError):
                 pass  # Not in main thread or signal not available
+
+    @staticmethod
+    def _check_port_free(address: str, port: int) -> None:
+        """Raise OSError if address:port is already in use by another process."""
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind((address, port))
+            except OSError:
+                raise OSError(
+                    f"Port {port} is already in use at {address}.\n"
+                    "A local service (e.g. a local database) is occupying this port.\n"
+                    "Stop that service or use --no-hosts to connect without hostname forwarding."
+                )
 
     def start_forward(self, local_address: str, local_port: int, target_port: int) -> Optional[int]:
         """

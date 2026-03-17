@@ -1,25 +1,30 @@
 """Unit tests for SSM database connect command module."""
 
-import threading
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import click
 import pytest
 
 from cli_tool.commands.ssm.commands.database.connect import (
-    _check_hostname_in_hosts,
-    _connect_all_databases,
-    _connect_with_hostname_forwarding,
-    _connect_without_hostname_forwarding,
-    _process_database_connection,
-    _resolve_hostname_forwarding,
+    ForwarderRegistry,
+    _connect_databases,
+    _find_free_port,
+    _is_port_bindable,
+    _process_db_for_table,
+    _run_attempt,
+    _run_connection_loop,
     _show_database_selection,
+    _validate_tokens,
+    _wait_before_reconnect,
     connect_database,
 )
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+_FIND_FREE_PORT = "cli_tool.commands.ssm.commands.database.connect._find_free_port"
+_MODULE = "cli_tool.commands.ssm.commands.database.connect"
 
 
 def _make_db_config(**overrides):
@@ -38,76 +43,473 @@ def _make_db_config(**overrides):
 
 
 # ---------------------------------------------------------------------------
-# _check_hostname_in_hosts
+# ForwarderRegistry
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-class TestCheckHostnameInHosts:
-    def test_host_found_in_managed_entries(self):
-        db_config = _make_db_config(host="db.example.com")
-        with patch("cli_tool.commands.ssm.commands.database.connect.HostsManager") as mock_hm_cls:
-            mock_hm = MagicMock()
-            mock_hm.get_managed_entries.return_value = [("127.0.0.1", "db.example.com")]
-            mock_hm_cls.return_value = mock_hm
-            result = _check_hostname_in_hosts(db_config)
-        assert result is True
+class TestForwarderRegistry:
+    def test_add_and_stop_all(self):
+        """stop_all calls stop_all on all registered forwarders."""
+        registry = ForwarderRegistry()
+        pf1, pf2 = MagicMock(), MagicMock()
+        registry.add(pf1)
+        registry.add(pf2)
+        registry.stop_all()
+        pf1.stop_all.assert_called_once()
+        pf2.stop_all.assert_called_once()
 
-    def test_host_not_found_in_managed_entries(self):
-        db_config = _make_db_config(host="other.example.com")
-        with patch("cli_tool.commands.ssm.commands.database.connect.HostsManager") as mock_hm_cls:
-            mock_hm = MagicMock()
-            mock_hm.get_managed_entries.return_value = [("127.0.0.1", "db.example.com")]
-            mock_hm_cls.return_value = mock_hm
-            result = _check_hostname_in_hosts(db_config)
-        assert result is False
+    def test_remove_unregisters_forwarder(self):
+        """remove prevents stop_all from calling stop_all on removed forwarder."""
+        registry = ForwarderRegistry()
+        pf = MagicMock()
+        registry.add(pf)
+        registry.remove(pf)
+        registry.stop_all()
+        pf.stop_all.assert_not_called()
 
-    def test_empty_managed_entries(self):
-        db_config = _make_db_config(host="db.example.com")
-        with patch("cli_tool.commands.ssm.commands.database.connect.HostsManager") as mock_hm_cls:
-            mock_hm = MagicMock()
-            mock_hm.get_managed_entries.return_value = []
-            mock_hm_cls.return_value = mock_hm
-            result = _check_hostname_in_hosts(db_config)
-        assert result is False
+    def test_remove_nonexistent_is_noop(self):
+        """Removing a forwarder not in registry does not raise."""
+        registry = ForwarderRegistry()
+        pf = MagicMock()
+        registry.remove(pf)  # should not raise
 
 
 # ---------------------------------------------------------------------------
-# _resolve_hostname_forwarding
+# _is_port_bindable
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-class TestResolveHostnameForwarding:
-    def test_localhost_returns_false(self):
-        db_config = _make_db_config(local_address="127.0.0.1")
-        result = _resolve_hostname_forwarding(db_config, no_hosts=False)
-        assert result is False
+class TestIsPortBindable:
+    def test_returns_true_when_port_is_free(self):
+        with patch(f"{_MODULE}.socket.socket") as mock_socket_cls:
+            mock_sock = MagicMock()
+            mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
+            mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
+            mock_sock.bind.return_value = None
+            assert _is_port_bindable("127.0.0.2", 5432) is True
 
-    def test_no_hosts_flag_returns_false(self):
-        db_config = _make_db_config(local_address="10.0.0.1")
-        result = _resolve_hostname_forwarding(db_config, no_hosts=True)
-        assert result is False
+    def test_returns_false_when_port_is_occupied(self):
+        with patch(f"{_MODULE}.socket.socket") as mock_socket_cls:
+            mock_sock = MagicMock()
+            mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
+            mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
+            mock_sock.bind.side_effect = OSError("address already in use")
+            assert _is_port_bindable("127.0.0.2", 5432) is False
 
-    def test_host_in_hosts_file_returns_true(self):
-        db_config = _make_db_config(local_address="10.0.0.1")
-        with patch("cli_tool.commands.ssm.commands.database.connect._check_hostname_in_hosts", return_value=True):
-            result = _resolve_hostname_forwarding(db_config, no_hosts=False)
+
+# ---------------------------------------------------------------------------
+# _find_free_port
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestFindFreePort:
+    def test_returns_preferred_port_when_free(self):
+        with patch(f"{_MODULE}.socket.socket") as mock_socket_cls:
+            mock_sock = MagicMock()
+            mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
+            mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
+            mock_sock.bind.return_value = None
+            result = _find_free_port(15432)
+        assert result == 15432
+
+    def test_increments_to_next_port_when_occupied(self):
+        bind_calls = []
+
+        def bind_side_effect(addr):
+            bind_calls.append(addr[1])
+            if addr[1] == 15432:
+                raise OSError("address already in use")
+
+        with patch(f"{_MODULE}.socket.socket") as mock_socket_cls:
+            mock_sock = MagicMock()
+            mock_sock.bind.side_effect = bind_side_effect
+            mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
+            mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
+            result = _find_free_port(15432)
+        assert result == 15433
+        assert 15432 in bind_calls
+        assert 15433 in bind_calls
+
+    def test_skips_multiple_occupied_ports(self):
+        def bind_side_effect(addr):
+            if addr[1] in (15432, 15433, 15434):
+                raise OSError("in use")
+
+        with patch(f"{_MODULE}.socket.socket") as mock_socket_cls:
+            mock_sock = MagicMock()
+            mock_sock.bind.side_effect = bind_side_effect
+            mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
+            mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
+            result = _find_free_port(15432)
+        assert result == 15435
+
+
+# ---------------------------------------------------------------------------
+# _validate_tokens
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestValidateTokens:
+    def test_returns_true_when_all_tokens_valid(self):
+        databases = {"db1": _make_db_config(profile="a"), "db2": _make_db_config(profile="b")}
+        with patch(f"{_MODULE}.SSMSession") as mock_session:
+            mock_session._is_token_expired.return_value = False
+            result = _validate_tokens(databases)
         assert result is True
+        assert mock_session._is_token_expired.call_count == 2
 
-    def test_host_not_in_hosts_user_confirms_localhost(self):
-        db_config = _make_db_config(local_address="10.0.0.1")
-        with patch("cli_tool.commands.ssm.commands.database.connect._check_hostname_in_hosts", return_value=False):
-            with patch("cli_tool.commands.ssm.commands.database.connect.click.confirm", return_value=True):
-                result = _resolve_hostname_forwarding(db_config, no_hosts=False)
+    def test_returns_false_and_prints_error_when_expired(self):
+        databases = {"db1": _make_db_config()}
+        with patch(f"{_MODULE}.SSMSession") as mock_session:
+            mock_session._is_token_expired.return_value = True
+            with patch(f"{_MODULE}.console") as mock_console:
+                result = _validate_tokens(databases)
+        assert result is False
+        output = " ".join(str(c) for c in mock_console.print.call_args_list)
+        assert "expired" in output.lower()
+
+    def test_deduplicates_profile_region_pairs(self):
+        """Same (profile, region) is checked only once."""
+        databases = {
+            "db1": _make_db_config(profile="a", region="us-east-1"),
+            "db2": _make_db_config(profile="a", region="us-east-1"),
+            "db3": _make_db_config(profile="b", region="eu-west-1"),
+        }
+        with patch(f"{_MODULE}.SSMSession") as mock_session:
+            mock_session._is_token_expired.return_value = False
+            _validate_tokens(databases)
+        assert mock_session._is_token_expired.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# _wait_before_reconnect
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestWaitBeforeReconnect:
+    def test_returns_true_and_prints_reconnect_message(self):
+        """Returns True and prints reconnecting message after sleep."""
+        with patch(f"{_MODULE}.time.sleep"):
+            with patch(f"{_MODULE}.console") as mock_console:
+                result = _wait_before_reconnect("mydb")
+        assert result is True
+        output = " ".join(str(c) for c in mock_console.print.call_args_list)
+        assert "Reconnecting" in output
+
+    def test_returns_false_on_keyboard_interrupt(self):
+        """Returns False when Ctrl+C is pressed during sleep."""
+        with patch(f"{_MODULE}.time.sleep", side_effect=KeyboardInterrupt):
+            result = _wait_before_reconnect("mydb")
         assert result is False
 
-    def test_host_not_in_hosts_user_cancels(self):
-        db_config = _make_db_config(local_address="10.0.0.1")
-        with patch("cli_tool.commands.ssm.commands.database.connect._check_hostname_in_hosts", return_value=False):
-            with patch("cli_tool.commands.ssm.commands.database.connect.click.confirm", return_value=False):
-                result = _resolve_hostname_forwarding(db_config, no_hosts=False)
-        assert result is None
+
+# ---------------------------------------------------------------------------
+# _run_attempt
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestRunAttempt:
+    def test_returns_exit_code_from_ssm(self):
+        db_config = _make_db_config()
+        with patch(f"{_MODULE}.SSMSession") as mock_session:
+            mock_session.start_port_forwarding_to_remote.return_value = 0
+            result = _run_attempt(db_config, 15432, use_hostname_forwarding=False)
+        assert result == 0
+
+    def test_starts_port_forwarder_when_hostname_forwarding(self):
+        db_config = _make_db_config(local_address="127.0.0.2")
+        with patch(f"{_MODULE}.PortForwarder") as mock_pf_cls:
+            mock_pf = MagicMock()
+            mock_pf_cls.return_value = mock_pf
+            with patch(f"{_MODULE}.SSMSession") as mock_session:
+                mock_session.start_port_forwarding_to_remote.return_value = 0
+                _run_attempt(db_config, 15432, use_hostname_forwarding=True)
+        mock_pf.start_forward.assert_called_once_with("127.0.0.2", 5432, 15432)
+        mock_pf.stop_all.assert_called_once()
+
+    def test_skips_port_forwarder_without_hostname_forwarding(self):
+        db_config = _make_db_config()
+        with patch(f"{_MODULE}.PortForwarder") as mock_pf_cls:
+            with patch(f"{_MODULE}.SSMSession") as mock_session:
+                mock_session.start_port_forwarding_to_remote.return_value = 0
+                _run_attempt(db_config, 15432, use_hostname_forwarding=False)
+        mock_pf_cls.assert_not_called()
+
+    def test_stop_all_called_even_on_exception(self):
+        """finally block ensures stop_all is called even when SSM raises."""
+        db_config = _make_db_config(local_address="127.0.0.2")
+        with patch(f"{_MODULE}.PortForwarder") as mock_pf_cls:
+            mock_pf = MagicMock()
+            mock_pf_cls.return_value = mock_pf
+            with patch(f"{_MODULE}.SSMSession") as mock_session:
+                mock_session.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt
+                with pytest.raises(KeyboardInterrupt):
+                    _run_attempt(db_config, 15432, use_hostname_forwarding=True)
+        mock_pf.stop_all.assert_called_once()
+
+    def test_registers_and_removes_forwarder_in_registry(self):
+        db_config = _make_db_config(local_address="127.0.0.2")
+        registry = ForwarderRegistry()
+        with patch(f"{_MODULE}.PortForwarder") as mock_pf_cls:
+            mock_pf = MagicMock()
+            mock_pf_cls.return_value = mock_pf
+            with patch(f"{_MODULE}.SSMSession") as mock_session:
+                mock_session.start_port_forwarding_to_remote.return_value = 0
+                _run_attempt(db_config, 15432, use_hostname_forwarding=True, registry=registry)
+        assert mock_pf not in registry._forwarders
+
+
+# ---------------------------------------------------------------------------
+# _process_db_for_table
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestProcessDbForTable:
+    def test_host_not_in_managed_returns_none_port(self):
+        db_config = _make_db_config(local_address="127.0.0.2")
+        row, port, _ = _process_db_for_table("mydb", db_config, False, set(), lambda p: p)
+        assert port is None
+        assert "Not in /etc/hosts" in row[5]
+
+    def test_no_hostname_forwarding_returns_none_when_no_flag(self):
+        """When local_address is 127.0.0.1 and --no-hosts not passed, skips connection."""
+        db_config = _make_db_config(local_address="127.0.0.1", local_port=15432)
+        row, port, _ = _process_db_for_table("mydb", db_config, False, set(), lambda p: p)
+        assert port is None
+        assert "No hostname forwarding" in row[5]
+
+    def test_no_hosts_flag_connects_via_localhost(self):
+        """--no-hosts skips socat and connects directly via 127.0.0.1."""
+        db_config = _make_db_config(local_address="127.0.0.2", local_port=15432)
+        managed = {"db.example.com"}
+        row, port, use_hf = _process_db_for_table("mydb", db_config, True, managed, lambda p: p)
+        assert port == 15432
+        assert use_hf is False
+        assert "127.0.0.1" in row[1]
+
+    def test_no_hosts_flag_with_default_address_connects_via_localhost(self):
+        """--no-hosts also works when local_address is 127.0.0.1 (not configured for forwarding)."""
+        db_config = _make_db_config(local_address="127.0.0.1", local_port=15432)
+        row, port, use_hf = _process_db_for_table("mydb", db_config, True, set(), lambda p: p)
+        assert port == 15432
+        assert use_hf is False
+        assert "127.0.0.1" in row[1]
+
+    def test_connected_returns_actual_port(self):
+        db_config = _make_db_config(local_address="127.0.0.2", local_port=15432)
+        managed = {"db.example.com"}
+        with patch(f"{_MODULE}._is_port_bindable", return_value=True):
+            row, port, use_hf = _process_db_for_table("mydb", db_config, False, managed, lambda p: p)
+        assert port == 15432
+        assert use_hf is True
+        assert "Connected" in row[5]
+
+    def test_port_conflict_shows_warning_status(self):
+        db_config = _make_db_config(local_address="127.0.0.2", local_port=15432)
+        managed = {"db.example.com"}
+        with patch(f"{_MODULE}._is_port_bindable", return_value=True):
+            with patch(f"{_MODULE}.console"):
+                row, port, _ = _process_db_for_table("mydb", db_config, False, managed, lambda p: 15433)
+        assert port == 15433
+        assert "15433" in row[5]
+
+    def test_socat_port_occupied_returns_error_row(self):
+        """When local_address:port is already bound, returns error row and None port."""
+        db_config = _make_db_config(local_address="127.0.0.2", local_port=15432)
+        managed = {"db.example.com"}
+        with patch(f"{_MODULE}._is_port_bindable", return_value=False):
+            with patch(f"{_MODULE}.console"):
+                row, port, _ = _process_db_for_table("mydb", db_config, False, managed, lambda p: p)
+        assert port is None
+        assert "occupied" in row[5].lower() or "Port" in row[5]
+
+
+# ---------------------------------------------------------------------------
+# _run_connection_loop
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestRunConnectionLoop:
+    def test_exit_code_zero_triggers_reconnect(self):
+        """Exit code 0 (session ended) should trigger reconnect, not stop."""
+        db_config = _make_db_config()
+        wait_calls = []
+        with patch(f"{_MODULE}._run_attempt", side_effect=[0, KeyboardInterrupt]):
+            with patch(f"{_MODULE}.SSMSession") as mock_session:
+                mock_session._is_token_expired.return_value = False
+                with patch(f"{_MODULE}._wait_before_reconnect", side_effect=lambda n: wait_calls.append(n) or True):
+                    _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False)
+        assert len(wait_calls) == 1  # reconnect was attempted
+
+    def test_keyboard_interrupt_returns_cleanly(self):
+        db_config = _make_db_config()
+        with patch(f"{_MODULE}._run_attempt", side_effect=KeyboardInterrupt):
+            _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False)
+
+    def test_exception_prints_error_and_returns(self):
+        db_config = _make_db_config()
+        with patch(f"{_MODULE}._run_attempt", side_effect=RuntimeError("refused")):
+            with patch(f"{_MODULE}.console") as mock_console:
+                _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False)
+        output = " ".join(str(c) for c in mock_console.print.call_args_list)
+        assert "refused" in output
+
+    def test_expired_tokens_after_disconnect_stops_reconnect(self):
+        db_config = _make_db_config()
+        with patch(f"{_MODULE}._run_attempt", return_value=1):
+            with patch(f"{_MODULE}.SSMSession") as mock_session:
+                mock_session._is_token_expired.return_value = True
+                with patch(f"{_MODULE}.console") as mock_console:
+                    _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False)
+        output = " ".join(str(c) for c in mock_console.print.call_args_list)
+        assert "expired" in output.lower()
+
+    def test_reconnects_when_tokens_valid(self):
+        db_config = _make_db_config()
+        with patch(f"{_MODULE}._run_attempt", side_effect=[1, KeyboardInterrupt]):
+            with patch(f"{_MODULE}.SSMSession") as mock_session:
+                mock_session._is_token_expired.return_value = False
+                with patch(f"{_MODULE}._wait_before_reconnect", return_value=True):
+                    with patch(f"{_MODULE}.console") as mock_console:
+                        _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False)
+        output = " ".join(str(c) for c in mock_console.print.call_args_list)
+        assert "Reconnected to mydb" in output
+
+    def test_ctrl_c_during_reconnect_delay_cancels(self):
+        db_config = _make_db_config()
+        with patch(f"{_MODULE}._run_attempt", return_value=1):
+            with patch(f"{_MODULE}.SSMSession") as mock_session:
+                mock_session._is_token_expired.return_value = False
+                with patch(f"{_MODULE}._wait_before_reconnect", return_value=False):
+                    _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False)
+
+
+# ---------------------------------------------------------------------------
+# _connect_databases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestConnectDatabases:
+    def test_expired_tokens_aborts(self):
+        databases = {"db1": _make_db_config()}
+        with patch(f"{_MODULE}._validate_tokens", return_value=False):
+            with patch(f"{_MODULE}.HostsManager"):
+                with patch(f"{_MODULE}.threading.Thread") as mock_thread:
+                    _connect_databases(databases, no_hosts=False)
+        mock_thread.assert_not_called()
+
+    def test_no_hostname_forwarding_prints_no_connect_message(self):
+        databases = {"db1": _make_db_config()}  # local_address=127.0.0.1
+        with patch(f"{_MODULE}._validate_tokens", return_value=True):
+            with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
+                mock_hm_cls.return_value.get_managed_entries.return_value = []
+                with patch(f"{_MODULE}.console") as mock_console:
+                    _connect_databases(databases, no_hosts=False)
+        calls_str = str(mock_console.print.call_args_list)
+        assert "No databases" in calls_str
+
+    def test_host_not_in_etc_hosts_skips_connection(self):
+        databases = {"db1": _make_db_config(local_address="127.0.0.2")}
+        with patch(f"{_MODULE}._validate_tokens", return_value=True):
+            with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
+                mock_hm_cls.return_value.get_managed_entries.return_value = []
+                with patch(f"{_MODULE}.console") as mock_console:
+                    _connect_databases(databases, no_hosts=False)
+        calls_str = str(mock_console.print.call_args_list)
+        assert "No databases" in calls_str
+
+    def test_single_db_starts_one_thread(self):
+        databases = {"db1": _make_db_config(local_address="127.0.0.2")}
+        mock_thread = MagicMock()
+        mock_thread.is_alive.return_value = False
+
+        with patch(f"{_MODULE}._validate_tokens", return_value=True):
+            with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
+                mock_hm_cls.return_value.get_managed_entries.return_value = [("127.0.0.2", "db.example.com")]
+                with patch(f"{_MODULE}._is_port_bindable", return_value=True):
+                    with patch(f"{_MODULE}.threading.Thread", return_value=mock_thread):
+                        with patch(_FIND_FREE_PORT, return_value=15432):
+                            with patch(f"{_MODULE}.time.sleep"):
+                                _connect_databases(databases, no_hosts=False)
+
+        mock_thread.start.assert_called_once()
+
+    def test_keyboard_interrupt_calls_registry_stop_all(self):
+        databases = {"db1": _make_db_config(local_address="127.0.0.2")}
+        mock_thread = MagicMock()
+        mock_thread.is_alive.return_value = True
+        mock_registry = MagicMock()
+
+        with patch(f"{_MODULE}._validate_tokens", return_value=True):
+            with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
+                mock_hm_cls.return_value.get_managed_entries.return_value = [("127.0.0.2", "db.example.com")]
+                with patch(f"{_MODULE}._is_port_bindable", return_value=True):
+                    with patch(f"{_MODULE}.threading.Thread", return_value=mock_thread):
+                        with patch(_FIND_FREE_PORT, return_value=15432):
+                            with patch(f"{_MODULE}.ForwarderRegistry", return_value=mock_registry):
+                                with patch(f"{_MODULE}.time.sleep", side_effect=[None, KeyboardInterrupt]):
+                                    _connect_databases(databases, no_hosts=False)
+
+        mock_registry.stop_all.assert_called_once()
+
+    def test_unique_ports_assigned_to_each_db(self):
+        databases = {
+            "db1": _make_db_config(local_address="127.0.0.2", local_port=15432),
+            "db2": _make_db_config(local_address="127.0.0.3", local_port=15432, host="other.com"),
+        }
+        thread_args = []
+
+        def capture_thread(**kwargs):
+            thread_args.append(kwargs.get("args", ()))
+            mock_t = MagicMock()
+            mock_t.is_alive.return_value = False
+            return mock_t
+
+        with patch(f"{_MODULE}._validate_tokens", return_value=True):
+            with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
+                mock_hm_cls.return_value.get_managed_entries.return_value = [
+                    ("127.0.0.2", "db.example.com"),
+                    ("127.0.0.3", "other.com"),
+                ]
+                with patch(f"{_MODULE}._is_port_bindable", return_value=True):
+                    with patch(f"{_MODULE}.threading.Thread", side_effect=capture_thread):
+                        with patch(_FIND_FREE_PORT, side_effect=lambda p: p):
+                            with patch(f"{_MODULE}.time.sleep"):
+                                _connect_databases(databases, no_hosts=False)
+
+        assert len(thread_args) == 2
+        assert thread_args[0][2] != thread_args[1][2]  # actual_local_port differs
+
+    def test_port_conflict_warning_printed(self):
+        databases = {
+            "db1": _make_db_config(local_address="127.0.0.2", local_port=15432),
+            "db2": _make_db_config(local_address="127.0.0.3", local_port=15432, host="other.com"),
+        }
+        with patch(f"{_MODULE}._validate_tokens", return_value=True):
+            with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
+                mock_hm_cls.return_value.get_managed_entries.return_value = [
+                    ("127.0.0.2", "db.example.com"),
+                    ("127.0.0.3", "other.com"),
+                ]
+                with patch(f"{_MODULE}._is_port_bindable", return_value=True):
+                    with patch(f"{_MODULE}.threading.Thread") as mock_thread_cls:
+                        mock_thread_cls.return_value.is_alive.return_value = False
+                        with patch(_FIND_FREE_PORT, side_effect=lambda p: p):
+                            with patch(f"{_MODULE}.time.sleep"):
+                                with patch(f"{_MODULE}.console") as mock_console:
+                                    _connect_databases(databases, no_hosts=False)
+
+        output = " ".join(str(c) for c in mock_console.print.call_args_list)
+        assert "in use" in output.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -119,353 +521,45 @@ class TestResolveHostnameForwarding:
 class TestShowDatabaseSelection:
     def test_select_first_database(self):
         databases = {"db1": _make_db_config(), "db2": _make_db_config(host="other.com")}
-        with patch("cli_tool.commands.ssm.commands.database.connect.click.prompt", return_value=1):
+        with patch(f"{_MODULE}.click.prompt", return_value=1):
             result = _show_database_selection(databases)
         assert result == "db1"
 
     def test_select_all_databases(self):
         databases = {"db1": _make_db_config()}
-        with patch("cli_tool.commands.ssm.commands.database.connect.click.prompt", return_value=2):
+        with patch(f"{_MODULE}.click.prompt", return_value=2):
             result = _show_database_selection(databases)
         assert result == "ALL"
 
     def test_invalid_selection_returns_none(self):
         databases = {"db1": _make_db_config()}
-        with patch("cli_tool.commands.ssm.commands.database.connect.click.prompt", return_value=99):
+        with patch(f"{_MODULE}.click.prompt", return_value=99):
             result = _show_database_selection(databases)
         assert result is None
 
     def test_keyboard_interrupt_returns_none(self):
         databases = {"db1": _make_db_config()}
-        with patch("cli_tool.commands.ssm.commands.database.connect.click.prompt", side_effect=KeyboardInterrupt):
+        with patch(f"{_MODULE}.click.prompt", side_effect=KeyboardInterrupt):
             result = _show_database_selection(databases)
         assert result is None
 
     def test_click_abort_returns_none(self):
         databases = {"db1": _make_db_config()}
-        with patch("cli_tool.commands.ssm.commands.database.connect.click.prompt", side_effect=click.Abort):
+        with patch(f"{_MODULE}.click.prompt", side_effect=click.Abort):
             result = _show_database_selection(databases)
         assert result is None
 
     def test_select_second_database(self):
         databases = {"db1": _make_db_config(), "db2": _make_db_config(host="other.com")}
-        with patch("cli_tool.commands.ssm.commands.database.connect.click.prompt", return_value=2):
+        with patch(f"{_MODULE}.click.prompt", return_value=2):
             result = _show_database_selection(databases)
         assert result == "db2"
 
     def test_selection_zero_invalid(self):
         databases = {"db1": _make_db_config()}
-        with patch("cli_tool.commands.ssm.commands.database.connect.click.prompt", return_value=0):
+        with patch(f"{_MODULE}.click.prompt", return_value=0):
             result = _show_database_selection(databases)
         assert result is None
-
-
-# ---------------------------------------------------------------------------
-# _process_database_connection
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestProcessDatabaseConnection:
-    def _make_table(self):
-        from rich.table import Table
-
-        t = Table()
-        t.add_column("Database")
-        t.add_column("Connect To")
-        t.add_column("Local Port")
-        t.add_column("Remote")
-        t.add_column("Profile")
-        t.add_column("Status")
-        return t
-
-    def test_hostname_forwarding_host_not_in_managed(self):
-        table = self._make_table()
-        threads = []
-        db_config = _make_db_config(local_address="10.0.0.1")
-        managed_hosts = set()  # host NOT in managed
-        mock_port_forwarder = MagicMock()
-
-        _process_database_connection("mydb", db_config, False, managed_hosts, mock_port_forwarder, table, threads, lambda p: p, lambda n, c, lp: None)
-        # Should add warning row, not start thread
-        assert len(threads) == 0
-
-    def test_no_hostname_forwarding_localhost(self):
-        table = self._make_table()
-        threads = []
-        db_config = _make_db_config(local_address="127.0.0.1")
-        managed_hosts = set()
-        mock_port_forwarder = MagicMock()
-
-        _process_database_connection("mydb", db_config, False, managed_hosts, mock_port_forwarder, table, threads, lambda p: p, lambda n, c, lp: None)
-        # local_address is 127.0.0.1, so no hostname forwarding
-        assert len(threads) == 0
-
-    def test_no_hosts_flag_disables_hostname_forwarding(self):
-        table = self._make_table()
-        threads = []
-        db_config = _make_db_config(local_address="10.0.0.1")
-        managed_hosts = {"db.example.com"}
-        mock_port_forwarder = MagicMock()
-
-        _process_database_connection("mydb", db_config, True, managed_hosts, mock_port_forwarder, table, threads, lambda p: p, lambda n, c, lp: None)
-        # no_hosts=True → no hostname forwarding
-        assert len(threads) == 0
-
-    def test_successful_connection_starts_thread(self):
-        table = self._make_table()
-        threads = []
-        db_config = _make_db_config(local_address="10.0.0.1")
-        managed_hosts = {"db.example.com"}
-        mock_port_forwarder = MagicMock()
-
-        with patch("time.sleep"):
-            _process_database_connection(
-                "mydb", db_config, False, managed_hosts, mock_port_forwarder, table, threads, lambda p: p, lambda n, c, lp: None
-            )
-        assert len(threads) == 1
-        assert threads[0][0] == "mydb"
-
-    def test_port_forwarder_exception_handled(self):
-        table = self._make_table()
-        threads = []
-        db_config = _make_db_config(local_address="10.0.0.1")
-        managed_hosts = {"db.example.com"}
-        mock_port_forwarder = MagicMock()
-        mock_port_forwarder.start_forward.side_effect = Exception("port in use")
-
-        with patch("time.sleep"):
-            _process_database_connection(
-                "mydb", db_config, False, managed_hosts, mock_port_forwarder, table, threads, lambda p: p, lambda n, c, lp: None
-            )
-        assert len(threads) == 0
-
-    def test_port_conflict_uses_next_available_port(self):
-        """get_unique_local_port should return a different port when preferred is taken."""
-        table = self._make_table()
-        threads = []
-        db_config = _make_db_config(local_address="10.0.0.1", port=5432, local_port=5432)
-        managed_hosts = {"db.example.com"}
-        mock_port_forwarder = MagicMock()
-        used_ports = {5432}
-
-        def get_unique_port(preferred):
-            if preferred not in used_ports:
-                used_ports.add(preferred)
-                return preferred
-            alt = 15433
-            used_ports.add(alt)
-            return alt
-
-        with patch("time.sleep"):
-            _process_database_connection(
-                "mydb", db_config, False, managed_hosts, mock_port_forwarder, table, threads, get_unique_port, lambda n, c, lp: None
-            )
-        assert len(threads) == 1
-
-
-# ---------------------------------------------------------------------------
-# _connect_with_hostname_forwarding
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestConnectWithHostnameForwarding:
-    def test_expired_tokens_aborts_before_connecting(self):
-        """Pre-check: expired tokens abort before any connection attempt."""
-        db_config = _make_db_config()
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-            mock_session._is_token_expired.return_value = True
-            _connect_with_hostname_forwarding("mydb", db_config)
-        mock_session.start_port_forwarding_to_remote.assert_not_called()
-
-    def test_successful_connection(self):
-        db_config = _make_db_config()
-        with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder") as mock_pf_cls:
-            mock_pf = MagicMock()
-            mock_pf_cls.return_value = mock_pf
-            with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-                mock_session._is_token_expired.return_value = False
-                mock_session.start_port_forwarding_to_remote.return_value = 0
-                _connect_with_hostname_forwarding("mydb", db_config)
-        mock_pf.stop_all.assert_called_once()
-
-    def test_nonzero_exit_code_checks_tokens_and_exits(self):
-        """Non-zero exit triggers token check; expired tokens stop the reconnect loop."""
-        db_config = _make_db_config()
-        with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder") as mock_pf_cls:
-            mock_pf = MagicMock()
-            mock_pf_cls.return_value = mock_pf
-            with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-                mock_session.start_port_forwarding_to_remote.return_value = 1
-                # pre-check passes, post-drop check detects expiry
-                mock_session._is_token_expired.side_effect = [False, True]
-                _connect_with_hostname_forwarding("mydb", db_config)
-        mock_pf.stop_all.assert_called_once()
-        assert mock_session._is_token_expired.call_count == 2
-
-    def test_keyboard_interrupt_handled(self):
-        db_config = _make_db_config()
-        with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder") as mock_pf_cls:
-            mock_pf = MagicMock()
-            mock_pf_cls.return_value = mock_pf
-            with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-                mock_session._is_token_expired.return_value = False
-                mock_session.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt
-                _connect_with_hostname_forwarding("mydb", db_config)
-        mock_pf.stop_all.assert_called_once()
-
-    def test_exception_returns_after_stop(self):
-        db_config = _make_db_config()
-        with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder") as mock_pf_cls:
-            mock_pf = MagicMock()
-            mock_pf_cls.return_value = mock_pf
-            with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-                mock_session._is_token_expired.return_value = False
-                mock_session.start_port_forwarding_to_remote.side_effect = Exception("connection refused")
-                _connect_with_hostname_forwarding("mydb", db_config)
-        mock_pf.stop_all.assert_called_once()
-
-    def test_no_profile_in_config(self):
-        db_config = _make_db_config()
-        del db_config["profile"]
-        with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder") as mock_pf_cls:
-            mock_pf = MagicMock()
-            mock_pf_cls.return_value = mock_pf
-            with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-                mock_session._is_token_expired.return_value = False
-                mock_session.start_port_forwarding_to_remote.return_value = 0
-                _connect_with_hostname_forwarding("mydb", db_config)
-        mock_pf.stop_all.assert_called_once()
-
-    def test_expired_tokens_shows_error_message(self):
-        """Token expiry error is displayed when tokens are expired after a disconnect."""
-        db_config = _make_db_config()
-        with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder") as mock_pf_cls:
-            mock_pf = MagicMock()
-            mock_pf_cls.return_value = mock_pf
-            with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-                mock_session.start_port_forwarding_to_remote.return_value = 1
-                # pre-check passes, post-drop check detects expiry
-                mock_session._is_token_expired.side_effect = [False, True]
-                with patch("cli_tool.commands.ssm.commands.database.connect.console") as mock_console:
-                    _connect_with_hostname_forwarding("mydb", db_config)
-        output = " ".join(str(c) for c in mock_console.print.call_args_list)
-        assert "expired" in output.lower()
-        assert "aws-login" in output.lower()
-
-    def test_reconnects_when_tokens_valid(self):
-        """When tokens are valid after a disconnect, reconnect is attempted."""
-        db_config = _make_db_config()
-        with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder") as mock_pf_cls:
-            mock_pf = MagicMock()
-            mock_pf_cls.return_value = mock_pf
-            with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-                # First call drops, second exits cleanly
-                mock_session.start_port_forwarding_to_remote.side_effect = [1, 0]
-                mock_session._is_token_expired.return_value = False
-                with patch("cli_tool.commands.ssm.commands.database.connect.time.sleep"):
-                    _connect_with_hostname_forwarding("mydb", db_config)
-        assert mock_session.start_port_forwarding_to_remote.call_count == 2
-        assert mock_pf.stop_all.call_count == 2
-
-    def test_ctrl_c_during_reconnect_delay_cancels(self):
-        """Ctrl+C during the reconnect countdown stops the reconnect loop."""
-        db_config = _make_db_config()
-        with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder") as mock_pf_cls:
-            mock_pf = MagicMock()
-            mock_pf_cls.return_value = mock_pf
-            with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-                mock_session.start_port_forwarding_to_remote.return_value = 1
-                mock_session._is_token_expired.return_value = False
-                with patch("cli_tool.commands.ssm.commands.database.connect.time.sleep", side_effect=KeyboardInterrupt):
-                    _connect_with_hostname_forwarding("mydb", db_config)
-        mock_session.start_port_forwarding_to_remote.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# _connect_without_hostname_forwarding
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestConnectWithoutHostnameForwarding:
-    def test_expired_tokens_aborts_before_connecting(self):
-        """Pre-check: expired tokens abort before any connection attempt."""
-        db_config = _make_db_config(local_address="127.0.0.1")
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-            mock_session._is_token_expired.return_value = True
-            _connect_without_hostname_forwarding("mydb", db_config, no_hosts=False)
-        mock_session.start_port_forwarding_to_remote.assert_not_called()
-
-    def test_successful_connection_localhost(self):
-        db_config = _make_db_config(local_address="127.0.0.1")
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-            mock_session._is_token_expired.return_value = False
-            mock_session.start_port_forwarding_to_remote.return_value = 0
-            _connect_without_hostname_forwarding("mydb", db_config, no_hosts=False)
-        mock_session.start_port_forwarding_to_remote.assert_called_once()
-
-    def test_nonzero_exit_code_checks_tokens_and_exits(self):
-        """Non-zero exit triggers token check; expired tokens stop the reconnect loop."""
-        db_config = _make_db_config(local_address="127.0.0.1")
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-            mock_session.start_port_forwarding_to_remote.return_value = 1
-            # pre-check passes, post-drop check detects expiry
-            mock_session._is_token_expired.side_effect = [False, True]
-            _connect_without_hostname_forwarding("mydb", db_config, no_hosts=False)
-        mock_session.start_port_forwarding_to_remote.assert_called_once()
-        assert mock_session._is_token_expired.call_count == 2
-
-    def test_keyboard_interrupt_handled(self):
-        db_config = _make_db_config(local_address="127.0.0.1")
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-            mock_session._is_token_expired.return_value = False
-            mock_session.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt
-            _connect_without_hostname_forwarding("mydb", db_config, no_hosts=False)
-        mock_session.start_port_forwarding_to_remote.assert_called_once()
-
-    def test_no_hosts_flag_with_non_localhost(self):
-        db_config = _make_db_config(local_address="10.0.0.1")
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-            mock_session._is_token_expired.return_value = False
-            mock_session.start_port_forwarding_to_remote.return_value = 0
-            _connect_without_hostname_forwarding("mydb", db_config, no_hosts=True)
-        mock_session.start_port_forwarding_to_remote.assert_called_once()
-
-    def test_expired_tokens_shows_error_message(self):
-        """Token expiry error is displayed when tokens are expired after a disconnect."""
-        db_config = _make_db_config(local_address="127.0.0.1")
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-            mock_session.start_port_forwarding_to_remote.return_value = 1
-            # pre-check passes, post-drop check detects expiry
-            mock_session._is_token_expired.side_effect = [False, True]
-            with patch("cli_tool.commands.ssm.commands.database.connect.console") as mock_console:
-                _connect_without_hostname_forwarding("mydb", db_config, no_hosts=False)
-        output = " ".join(str(c) for c in mock_console.print.call_args_list)
-        assert "expired" in output.lower()
-        assert "aws-login" in output.lower()
-
-    def test_reconnects_when_tokens_valid(self):
-        """When tokens are valid after a disconnect, reconnect is attempted."""
-        db_config = _make_db_config(local_address="127.0.0.1")
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-            # First call drops, second exits cleanly
-            mock_session.start_port_forwarding_to_remote.side_effect = [1, 0]
-            mock_session._is_token_expired.return_value = False
-            with patch("cli_tool.commands.ssm.commands.database.connect.time.sleep"):
-                _connect_without_hostname_forwarding("mydb", db_config, no_hosts=False)
-        assert mock_session.start_port_forwarding_to_remote.call_count == 2
-
-    def test_ctrl_c_during_reconnect_delay_cancels(self):
-        """Ctrl+C during the reconnect countdown stops the reconnect loop."""
-        db_config = _make_db_config(local_address="127.0.0.1")
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-            mock_session.start_port_forwarding_to_remote.return_value = 1
-            mock_session._is_token_expired.return_value = False
-            with patch("cli_tool.commands.ssm.commands.database.connect.time.sleep", side_effect=KeyboardInterrupt):
-                _connect_without_hostname_forwarding("mydb", db_config, no_hosts=False)
-        mock_session.start_port_forwarding_to_remote.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -479,10 +573,8 @@ class TestConnectDatabaseCommand:
         from click.testing import CliRunner
 
         runner = CliRunner()
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMConfigManager") as mock_cm_cls:
-            mock_cm = MagicMock()
-            mock_cm.list_databases.return_value = {}
-            mock_cm_cls.return_value = mock_cm
+        with patch(f"{_MODULE}.SSMConfigManager") as mock_cm_cls:
+            mock_cm_cls.return_value.list_databases.return_value = {}
             result = runner.invoke(connect_database, [])
         assert "No databases configured" in result.output
 
@@ -490,11 +582,10 @@ class TestConnectDatabaseCommand:
         from click.testing import CliRunner
 
         runner = CliRunner()
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMConfigManager") as mock_cm_cls:
-            mock_cm = MagicMock()
+        with patch(f"{_MODULE}.SSMConfigManager") as mock_cm_cls:
+            mock_cm = mock_cm_cls.return_value
             mock_cm.list_databases.return_value = {"db1": _make_db_config()}
             mock_cm.get_database.return_value = None
-            mock_cm_cls.return_value = mock_cm
             result = runner.invoke(connect_database, ["nonexistent"])
         assert "not found" in result.output
 
@@ -502,295 +593,84 @@ class TestConnectDatabaseCommand:
         from click.testing import CliRunner
 
         runner = CliRunner()
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMConfigManager") as mock_cm_cls:
-            mock_cm = MagicMock()
-            mock_cm.list_databases.return_value = {"db1": _make_db_config()}
-            mock_cm_cls.return_value = mock_cm
-            with patch("cli_tool.commands.ssm.commands.database.connect._show_database_selection", return_value=None):
+        with patch(f"{_MODULE}.SSMConfigManager") as mock_cm_cls:
+            mock_cm_cls.return_value.list_databases.return_value = {"db1": _make_db_config()}
+            with patch(f"{_MODULE}._show_database_selection", return_value=None):
                 result = runner.invoke(connect_database, [])
         assert result.exit_code == 0
 
-    def test_select_all_databases(self):
+    def test_select_all_from_menu(self):
         from click.testing import CliRunner
 
         runner = CliRunner()
         databases = {"db1": _make_db_config()}
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMConfigManager") as mock_cm_cls:
-            mock_cm = MagicMock()
-            mock_cm.list_databases.return_value = databases
-            mock_cm_cls.return_value = mock_cm
-            with patch("cli_tool.commands.ssm.commands.database.connect._show_database_selection", return_value="ALL"):
-                with patch("cli_tool.commands.ssm.commands.database.connect._connect_all_databases") as mock_all:
+        with patch(f"{_MODULE}.SSMConfigManager") as mock_cm_cls:
+            mock_cm_cls.return_value.list_databases.return_value = databases
+            with patch(f"{_MODULE}._show_database_selection", return_value="ALL"):
+                with patch(f"{_MODULE}._connect_databases") as mock_conn:
                     runner.invoke(connect_database, [])
-        mock_all.assert_called_once_with(databases, False)
+        mock_conn.assert_called_once_with(databases, False)
 
     def test_connect_all_flag_skips_menu(self):
-        """--all flag connects to all databases without showing the selection menu."""
         from click.testing import CliRunner
 
         runner = CliRunner()
         databases = {"db1": _make_db_config(), "db2": _make_db_config(host="other.com")}
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMConfigManager") as mock_cm_cls:
-            mock_cm = MagicMock()
-            mock_cm.list_databases.return_value = databases
-            mock_cm_cls.return_value = mock_cm
-            with patch("cli_tool.commands.ssm.commands.database.connect._connect_all_databases") as mock_all:
-                with patch("cli_tool.commands.ssm.commands.database.connect._show_database_selection") as mock_sel:
+        with patch(f"{_MODULE}.SSMConfigManager") as mock_cm_cls:
+            mock_cm_cls.return_value.list_databases.return_value = databases
+            with patch(f"{_MODULE}._connect_databases") as mock_conn:
+                with patch(f"{_MODULE}._show_database_selection") as mock_sel:
                     runner.invoke(connect_database, ["--all"])
-        mock_all.assert_called_once_with(databases, False)
+        mock_conn.assert_called_once_with(databases, False)
         mock_sel.assert_not_called()
 
     def test_connect_all_flag_with_no_hosts(self):
-        """--all --no-hosts passes no_hosts=True to _connect_all_databases."""
         from click.testing import CliRunner
 
         runner = CliRunner()
         databases = {"db1": _make_db_config()}
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMConfigManager") as mock_cm_cls:
-            mock_cm = MagicMock()
-            mock_cm.list_databases.return_value = databases
-            mock_cm_cls.return_value = mock_cm
-            with patch("cli_tool.commands.ssm.commands.database.connect._connect_all_databases") as mock_all:
+        with patch(f"{_MODULE}.SSMConfigManager") as mock_cm_cls:
+            mock_cm_cls.return_value.list_databases.return_value = databases
+            with patch(f"{_MODULE}._connect_databases") as mock_conn:
                 runner.invoke(connect_database, ["--all", "--no-hosts"])
-        mock_all.assert_called_once_with(databases, True)
+        mock_conn.assert_called_once_with(databases, True)
 
-    def test_connect_with_hostname_forwarding(self):
+    def test_single_db_by_name_calls_connect_databases_with_one_item(self):
         from click.testing import CliRunner
 
         runner = CliRunner()
         db_config = _make_db_config()
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMConfigManager") as mock_cm_cls:
-            mock_cm = MagicMock()
+        with patch(f"{_MODULE}.SSMConfigManager") as mock_cm_cls:
+            mock_cm = mock_cm_cls.return_value
             mock_cm.list_databases.return_value = {"db1": db_config}
             mock_cm.get_database.return_value = db_config
-            mock_cm_cls.return_value = mock_cm
-            with patch("cli_tool.commands.ssm.commands.database.connect._resolve_hostname_forwarding", return_value=True):
-                with patch("cli_tool.commands.ssm.commands.database.connect._connect_with_hostname_forwarding") as mock_conn:
-                    runner.invoke(connect_database, ["db1"])
-        mock_conn.assert_called_once_with("db1", db_config)
+            with patch(f"{_MODULE}._connect_databases") as mock_conn:
+                runner.invoke(connect_database, ["db1"])
+        mock_conn.assert_called_once_with({"db1": db_config}, False)
 
-    def test_connect_without_hostname_forwarding(self):
+    def test_no_hosts_flag_passed_for_single_db(self):
         from click.testing import CliRunner
 
         runner = CliRunner()
         db_config = _make_db_config()
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMConfigManager") as mock_cm_cls:
-            mock_cm = MagicMock()
+        with patch(f"{_MODULE}.SSMConfigManager") as mock_cm_cls:
+            mock_cm = mock_cm_cls.return_value
             mock_cm.list_databases.return_value = {"db1": db_config}
             mock_cm.get_database.return_value = db_config
-            mock_cm_cls.return_value = mock_cm
-            with patch("cli_tool.commands.ssm.commands.database.connect._resolve_hostname_forwarding", return_value=False):
-                with patch("cli_tool.commands.ssm.commands.database.connect._connect_without_hostname_forwarding") as mock_conn:
-                    runner.invoke(connect_database, ["db1"])
-        mock_conn.assert_called_once_with("db1", db_config, False)
+            with patch(f"{_MODULE}._connect_databases") as mock_conn:
+                runner.invoke(connect_database, ["db1", "--no-hosts"])
+        mock_conn.assert_called_once_with({"db1": db_config}, True)
 
-    def test_resolve_returns_none_aborts(self):
-        from click.testing import CliRunner
-
-        runner = CliRunner()
-        db_config = _make_db_config()
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMConfigManager") as mock_cm_cls:
-            mock_cm = MagicMock()
-            mock_cm.list_databases.return_value = {"db1": db_config}
-            mock_cm.get_database.return_value = db_config
-            mock_cm_cls.return_value = mock_cm
-            with patch("cli_tool.commands.ssm.commands.database.connect._resolve_hostname_forwarding", return_value=None):
-                with patch("cli_tool.commands.ssm.commands.database.connect._connect_with_hostname_forwarding") as mock_conn:
-                    runner.invoke(connect_database, ["db1"])
-        mock_conn.assert_not_called()
-
-    def test_no_hosts_flag_passed(self):
-        from click.testing import CliRunner
-
-        runner = CliRunner()
-        db_config = _make_db_config()
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMConfigManager") as mock_cm_cls:
-            mock_cm = MagicMock()
-            mock_cm.list_databases.return_value = {"db1": db_config}
-            mock_cm.get_database.return_value = db_config
-            mock_cm_cls.return_value = mock_cm
-            with patch("cli_tool.commands.ssm.commands.database.connect._resolve_hostname_forwarding", return_value=False) as mock_resolve:
-                with patch("cli_tool.commands.ssm.commands.database.connect._connect_without_hostname_forwarding"):
-                    runner.invoke(connect_database, ["db1", "--no-hosts"])
-        mock_resolve.assert_called_once_with(db_config, True)
-
-
-# ---------------------------------------------------------------------------
-# _connect_all_databases
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestConnectAllDatabases:
-    def test_expired_tokens_aborts_before_connecting(self):
-        """Token check fires before any connection is attempted."""
-        databases = {"db1": _make_db_config(), "db2": _make_db_config(host="other.com")}
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-            mock_session._is_token_expired.return_value = True
-            with patch("cli_tool.commands.ssm.commands.database.connect.console") as mock_console:
-                _connect_all_databases(databases, no_hosts=False)
-        output = " ".join(str(c) for c in mock_console.print.call_args_list)
-        assert "expired" in output.lower()
-        assert "aws-login" in output.lower()
-        mock_session.start_port_forwarding_to_remote.assert_not_called()
-
-    def test_checks_each_unique_profile_region(self):
-        """Each unique (profile, region) is checked once."""
-        databases = {
-            "db1": _make_db_config(profile="profile-a", region="us-east-1"),
-            "db2": _make_db_config(profile="profile-a", region="us-east-1"),  # duplicate — not rechecked
-            "db3": _make_db_config(profile="profile-b", region="eu-west-1"),  # different profile
-        }
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-            mock_session._is_token_expired.return_value = False
-            with patch("cli_tool.commands.ssm.commands.database.connect.HostsManager") as mock_hm_cls:
-                mock_hm = MagicMock()
-                mock_hm.get_managed_entries.return_value = []
-                mock_hm_cls.return_value = mock_hm
-                with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder"):
-                    with patch("cli_tool.commands.ssm.commands.database.connect._process_database_connection"):
-                        _connect_all_databases(databases, no_hosts=False)
-        assert mock_session._is_token_expired.call_count == 2  # profile-a and profile-b
-
-    def test_no_databases_to_connect(self):
-        databases = {"db1": _make_db_config()}
-        with patch("cli_tool.commands.ssm.commands.database.connect.HostsManager") as mock_hm_cls:
-            mock_hm = MagicMock()
-            mock_hm.get_managed_entries.return_value = []
-            mock_hm_cls.return_value = mock_hm
-            with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder"):
-                with patch("cli_tool.commands.ssm.commands.database.connect._process_database_connection"):
-                    # All threads list remains empty → should print "No databases to connect"
-                    with patch("cli_tool.commands.ssm.commands.database.connect.console") as mock_console:
-                        _connect_all_databases(databases, no_hosts=False)
-                    # Verify that the "No databases to connect" message was printed
-                    calls_str = str(mock_console.print.call_args_list)
-                    assert "No databases" in calls_str or "No databases to connect" in calls_str
-
-    def test_threads_run_until_keyboard_interrupt(self):
-        databases = {"db1": _make_db_config(local_address="10.0.0.1")}
-
-        mock_thread = MagicMock()
-        mock_thread.is_alive.side_effect = [True, KeyboardInterrupt]
-
-        with patch("cli_tool.commands.ssm.commands.database.connect.HostsManager") as mock_hm_cls:
-            mock_hm = MagicMock()
-            mock_hm.get_managed_entries.return_value = [("10.0.0.1", "db.example.com")]
-            mock_hm_cls.return_value = mock_hm
-            with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder") as mock_pf_cls:
-                mock_pf = MagicMock()
-                mock_pf_cls.return_value = mock_pf
-                with patch("cli_tool.commands.ssm.commands.database.connect.threading.Thread", return_value=mock_thread):
-                    with patch("time.sleep", side_effect=KeyboardInterrupt):
-                        with patch("cli_tool.commands.ssm.commands.database.connect._process_database_connection") as mock_proc:
-
-                            def add_thread(name, db_config, no_hosts, managed_hosts, pf, table, threads, get_port, start_conn):
-                                threads.append(("db1", mock_thread))
-
-                            mock_proc.side_effect = add_thread
-                            _connect_all_databases(databases, no_hosts=False)
-                mock_pf.stop_all.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# _connect_all_databases — get_unique_local_port / start_connection (lines 40-48, 51-61)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestConnectAllDatabasesInternals:
-    def test_get_unique_local_port_returns_next_port_when_preferred_taken(self):
-        """
-        Lines 43-48: get_unique_local_port increments to find the next free port
-        when the preferred port is already in use.
-        """
-        databases = {
-            "db1": _make_db_config(local_address="127.0.0.1", local_port=15432),
-            "db2": _make_db_config(local_address="127.0.0.1", local_port=15432),
-        }
-
-        assigned_ports = []
-
-        def capture_start(name, db_config, local_port):
-            assigned_ports.append((name, local_port))
-
-        with patch("cli_tool.commands.ssm.commands.database.connect.HostsManager") as mock_hm_cls:
-            mock_hm = MagicMock()
-            mock_hm.get_managed_entries.return_value = []
-            mock_hm_cls.return_value = mock_hm
-            with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder"):
-                with patch("cli_tool.commands.ssm.commands.database.connect._process_database_connection") as mock_proc:
-
-                    def process(name, db_cfg, no_hosts, managed, pf, table, threads, get_port, start_conn):
-                        assigned_ports.append((name, get_port(db_cfg.get("local_port", 15432))))
-
-                    mock_proc.side_effect = process
-                    _connect_all_databases(databases, no_hosts=False)
-
-        # Both DBs wanted port 15432; the second should have gotten a different port
-        assert len(assigned_ports) == 2
-        assert assigned_ports[0][1] != assigned_ports[1][1] or assigned_ports[0][1] == 15432
-
-    def test_start_connection_exception_is_printed(self):
-        """
-        Lines 60-61: when SSMSession.start_port_forwarding_to_remote raises inside
-        start_connection, the exception is caught and printed.
-        """
-        databases = {"db1": _make_db_config(local_address="127.0.0.1")}
-
-        with patch("cli_tool.commands.ssm.commands.database.connect.HostsManager") as mock_hm_cls:
-            mock_hm = MagicMock()
-            mock_hm.get_managed_entries.return_value = []
-            mock_hm_cls.return_value = mock_hm
-            with patch("cli_tool.commands.ssm.commands.database.connect.PortForwarder"):
-                with patch("cli_tool.commands.ssm.commands.database.connect._process_database_connection") as mock_proc:
-
-                    def process(name, db_cfg, no_hosts, managed, pf, table, threads, get_port, start_conn):
-                        # Call start_conn directly to exercise lines 50-61
-                        try:
-                            start_conn(name, db_cfg, db_cfg.get("local_port", 15432))
-                        except Exception:
-                            pass
-
-                    mock_proc.side_effect = process
-                    with patch("cli_tool.commands.ssm.commands.database.connect.SSMSession") as mock_session:
-                        mock_session.start_port_forwarding_to_remote.side_effect = RuntimeError("connection refused")
-                        # Should not raise — exception is caught inside start_connection
-                        _connect_all_databases(databases, no_hosts=False)
-
-
-# ---------------------------------------------------------------------------
-# connect_database — name = selection path (line 286)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestConnectDatabaseSelectionName:
     def test_selection_name_used_for_db_lookup(self):
-        """
-        Line 286: when _show_database_selection returns a name (not None, not 'ALL'),
-        that name is used to call get_database and proceed with connection.
-        """
         from click.testing import CliRunner
 
         runner = CliRunner()
         db_config = _make_db_config()
-        with patch("cli_tool.commands.ssm.commands.database.connect.SSMConfigManager") as mock_cm_cls:
-            mock_cm = MagicMock()
+        with patch(f"{_MODULE}.SSMConfigManager") as mock_cm_cls:
+            mock_cm = mock_cm_cls.return_value
             mock_cm.list_databases.return_value = {"selected-db": db_config}
             mock_cm.get_database.return_value = db_config
-            mock_cm_cls.return_value = mock_cm
-            with patch(
-                "cli_tool.commands.ssm.commands.database.connect._show_database_selection",
-                return_value="selected-db",
-            ):
-                with patch(
-                    "cli_tool.commands.ssm.commands.database.connect._resolve_hostname_forwarding",
-                    return_value=False,
-                ):
-                    with patch("cli_tool.commands.ssm.commands.database.connect._connect_without_hostname_forwarding") as mock_conn:
-                        runner.invoke(connect_database, [])
-
-        # get_database should have been called with the selection name
+            with patch(f"{_MODULE}._show_database_selection", return_value="selected-db"):
+                with patch(f"{_MODULE}._connect_databases"):
+                    runner.invoke(connect_database, [])
         mock_cm.get_database.assert_called_once_with("selected-db")
-        mock_conn.assert_called_once_with("selected-db", db_config, False)

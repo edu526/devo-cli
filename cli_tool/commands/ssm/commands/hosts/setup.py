@@ -3,6 +3,7 @@
 import click
 from rich.console import Console
 
+from cli_tool.commands.ssm.commands.database.connect import _find_free_port
 from cli_tool.commands.ssm.core import SSMConfigManager
 from cli_tool.commands.ssm.utils import HostsManager
 
@@ -42,18 +43,16 @@ def hosts_setup():
         else:
             local_address = db_config["local_address"]
 
-        # Check for local_port conflicts (multiple DBs trying to use same local port)
-        local_port = db_config.get("local_port", db_config["port"])
-
-        if local_port in used_local_ports:
-            console.print(f"[yellow]⚠[/yellow] {name}: Local port {local_port} already used by {used_local_ports[local_port]}")
-            console.print(f"[dim]  Assigning unique local port {next_available_port}...[/dim]")
-
-            # Assign unique local port
-            local_port = next_available_port
+        # Check for local_port conflicts against other configured DBs and the OS
+        preferred_port = db_config.get("local_port", db_config["port"])
+        while preferred_port in used_local_ports:
+            preferred_port = next_available_port
             next_available_port += 1
+        local_port = _find_free_port(preferred_port)
+        next_available_port = max(next_available_port, local_port + 1)
 
-            # Update config with new local_port
+        if local_port != db_config.get("local_port", db_config["port"]):
+            console.print(f"[yellow]⚠[/yellow] {name}: Local port conflict, assigned {local_port}")
             config = config_manager.load()
             config["databases"][name]["local_port"] = local_port
             config_manager.save(config)
