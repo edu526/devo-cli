@@ -127,7 +127,7 @@ Securely connect to private databases and services using AWS Systems Manager.
 
 1. [AWS Setup](aws-setup.md) - Configure credentials
 2. [AWS Login Workflow](aws-login-workflow.md) - Setup SSO authentication
-3. [Commit Workflow](commit-workflow.md) - Start using AI commit messages
+3. [Commit Workflow](commit-workflow.md) - Automate your commit messages
 4. [Shell Completion](shell-completion.md) - Enable tab completion
 
 ### For Teams

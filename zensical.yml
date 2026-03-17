@@ -1,5 +1,5 @@
 site_name: Devo CLI
-site_description: Developer productivity CLI · AI-powered workflows
+site_description: Developer productivity CLI — Git, AWS and cloud tools from your terminal
 site_url: https://devo.heyedu.dev
 repo_url: https://github.com/edu526/devo-cli
 repo_name: edu526/devo-cli
@@ -8,21 +8,22 @@ copyright: "&copy; 2026 Devo CLI · MIT License"
 
 theme:
   name: material
+  custom_dir: overrides
   logo: assets/logo.svg
   favicon: assets/favicon.svg
   palette:
-    - scheme: default
-      primary: cyan
-      accent: cyan
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
     - scheme: slate
-      primary: cyan
-      accent: cyan
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
   font:
     text: Roboto
     code: JetBrains Mono
