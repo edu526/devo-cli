@@ -94,6 +94,49 @@ def test_is_command_available_uses_where_on_windows(mocker):
 
 
 # ============================================================================
+# _check_port_free
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_check_port_free_succeeds_when_port_available():
+    """Does not raise when the port is not in use."""
+    pf = _make_forwarder("Linux")
+    with patch("cli_tool.commands.ssm.core.port_forwarder.socket.socket") as mock_socket_cls:
+        mock_sock = MagicMock()
+        mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
+        mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
+        mock_sock.bind.return_value = None  # bind succeeds
+        pf._check_port_free("127.0.0.2", 5432)  # should not raise
+
+
+@pytest.mark.unit
+def test_check_port_free_raises_when_port_occupied():
+    """Raises OSError with a clear message when the port is already in use."""
+    pf = _make_forwarder("Linux")
+    with patch("cli_tool.commands.ssm.core.port_forwarder.socket.socket") as mock_socket_cls:
+        mock_sock = MagicMock()
+        mock_sock.bind.side_effect = OSError("address already in use")
+        mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
+        mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
+        with pytest.raises(OSError, match="Port 5432 is already in use at 127.0.0.2"):
+            pf._check_port_free("127.0.0.2", 5432)
+
+
+@pytest.mark.unit
+def test_check_port_free_error_mentions_local_service():
+    """Error message tells the user a local service is occupying the port."""
+    pf = _make_forwarder("Linux")
+    with patch("cli_tool.commands.ssm.core.port_forwarder.socket.socket") as mock_socket_cls:
+        mock_sock = MagicMock()
+        mock_sock.bind.side_effect = OSError("in use")
+        mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
+        mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
+        with pytest.raises(OSError, match="local service"):
+            pf._check_port_free("127.0.0.2", 5432)
+
+
+# ============================================================================
 # start_forward — Unix path
 # ============================================================================
 
@@ -164,7 +207,6 @@ def test_start_forward_unix_socat_dies_immediately(mocker):
 def test_start_forward_unix_stops_existing_before_restart(mocker):
     """Stops an existing forward on the same key before starting a new one."""
     pf = _make_forwarder("Linux")
-    # Pre-populate with an existing process
     existing_proc = MagicMock()
     pf.processes["127.0.0.2:5432"] = existing_proc
 
