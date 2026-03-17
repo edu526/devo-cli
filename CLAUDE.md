@@ -1,1 +1,5 @@
-See AGENTS.md for project instructions and guidelines.
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+See [AGENTS.md](./AGENTS.md) for full project instructions and guidelines.
