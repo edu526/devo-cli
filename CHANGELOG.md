@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v3.6.0 (2026-03-17)
+
+### Bug Fixes
+
+- **ssm**: Merge implicitly concatenated f-strings in error message
+  ([`f98586c`](https://github.com/edu526/devo-cli/commit/f98586c102d43e5d80fc591642932371bc2e6a25))
+
+### Features
+
+- **ssm**: Improve database connect --no-hosts flow and reconnection
+  ([`f626fa5`](https://github.com/edu526/devo-cli/commit/f626fa5ca3c7f1bacb796d22e5983c9c178b8cad))
+
+### Testing
+
+- **ssm**: Update connect tests to reflect --no-hosts requirement for localhost DBs
+  ([`58a0d1e`](https://github.com/edu526/devo-cli/commit/58a0d1e7b9bf246e55d5b966735517390ff8cf6c))
+
+
 ## v3.5.0 (2026-03-16)
 
 ### Bug Fixes
