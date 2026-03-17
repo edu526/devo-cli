@@ -7,6 +7,7 @@ from pathlib import Path
 
 import click
 import requests
+from rich.progress import BarColumn, DownloadColumn, Progress, TextColumn, TimeRemainingColumn, TransferSpeedColumn
 
 _MACOS_MAGIC = {b"\xcf\xfa\xed\xfe", b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf"}
 
@@ -89,12 +90,19 @@ def download_binary(url, dest_path):
         total_size = int(response.headers.get("content-length", 0))
         block_size = 8192
 
-        with Path(dest_path).open("wb") as f:
-            with click.progressbar(length=total_size, label="Downloading", show_percent=True, show_pos=True) as bar:
+        with Progress(
+            TextColumn("[cyan]{task.description}"),
+            BarColumn(),
+            DownloadColumn(),
+            TransferSpeedColumn(),
+            TimeRemainingColumn(),
+        ) as progress:
+            task = progress.add_task("Downloading", total=total_size or None)
+            with Path(dest_path).open("wb") as f:
                 for chunk in response.iter_content(chunk_size=block_size):
                     if chunk:
                         f.write(chunk)
-                        bar.update(len(chunk))
+                        progress.update(task, advance=len(chunk))
 
         return True
     except Exception as e:

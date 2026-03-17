@@ -6,11 +6,17 @@ import tempfile
 from pathlib import Path
 
 import click
+from rich.console import Console
+from rich.panel import Panel
 
 from cli_tool.commands.upgrade.core.downloader import download_binary, verify_binary
 from cli_tool.commands.upgrade.core.installer import replace_binary
 from cli_tool.commands.upgrade.core.platform import detect_platform, get_binary_name, get_executable_path
 from cli_tool.commands.upgrade.core.version import get_current_version, get_latest_release
+from cli_tool.core.ui import theme
+from cli_tool.core.ui.brand import spinner
+
+_console = Console()
 
 
 def _determine_archive_suffix(system: str) -> str:
@@ -38,10 +44,12 @@ def _download_and_verify(asset_url: str, archive_type) -> Path:
     if not download_binary(asset_url, tmp_path):
         sys.exit(1)
 
-    click.echo("\nVerifying downloaded binary...")
-    if not verify_binary(tmp_path, is_archive=bool(archive_type), archive_type=archive_type):
-        click.echo("Error: Downloaded binary failed verification", err=True)
-        click.echo("The file may be corrupted. Please try again.", err=True)
+    with spinner("Verifying binary..."):
+        verified = verify_binary(tmp_path, is_archive=bool(archive_type), archive_type=archive_type)
+
+    if not verified:
+        _console.print("[red]Error:[/red] Downloaded binary failed verification")
+        _console.print("[dim]The file may be corrupted. Please try again.[/dim]")
         sys.exit(1)
 
     return tmp_path
@@ -60,7 +68,7 @@ def _resolve_latest_version(release_info: dict) -> str:
     """Extract and validate the latest version tag from release_info. Exits on failure."""
     latest_version = release_info.get("tag_name", "").lstrip("v")
     if not latest_version:
-        click.echo("Error: Could not determine latest version", err=True)
+        _console.print("[red]Error:[/red] Could not determine latest version")
         sys.exit(1)
     return latest_version
 
@@ -68,11 +76,11 @@ def _resolve_latest_version(release_info: dict) -> str:
 def _handle_up_to_date(current_version: str, latest_version: str, force: bool, check: bool) -> bool:
     """Print up-to-date message and return True if upgrade should be skipped."""
     if current_version != "unknown" and current_version == latest_version:
-        click.echo(f"✨ You already have the latest version ({current_version})")
+        _console.print(f"[green]✨[/green] Already on the latest version [cyan]v{current_version}[/cyan]")
         if check:
             return True
         if not force:
-            click.echo("Use --force to reinstall anyway")
+            _console.print("[dim]Use --force to reinstall anyway[/dim]")
             return True
     return False
 
@@ -83,39 +91,45 @@ def _resolve_asset_url(release_info: dict, binary_name: str, system: str, arch: 
         if asset["name"] == binary_name:
             return asset["browser_download_url"]
 
-    click.echo(f"Error: Binary not found for {system}-{arch}", err=True)
-    click.echo(f"Looking for: {binary_name}", err=True)
+    _console.print(f"[red]Error:[/red] Binary not found for {system}-{arch}")
+    _console.print(f"[dim]Looking for: {binary_name}[/dim]")
     sys.exit(1)
 
 
 def _validate_executable_path(current_exe):
     """Validate that the current executable location is writable. Exits on failure."""
     if not current_exe:
-        click.echo("Error: Could not determine current executable location", err=True)
-        click.echo("Please install manually from GitHub Releases", err=True)
+        _console.print("[red]Error:[/red] Could not determine current executable location")
+        _console.print("[dim]Please install manually from GitHub Releases[/dim]")
         sys.exit(1)
 
-    click.echo(f"Binary location: {current_exe}")
+    _console.print(f"[dim]Binary location:[/dim] {current_exe}")
 
     if not os.access(current_exe.parent, os.W_OK):
-        click.echo(f"Error: No write permission to {current_exe.parent}", err=True)
-        click.echo("Try running with sudo or install to a user-writable location", err=True)
+        _console.print(f"[red]Error:[/red] No write permission to {current_exe.parent}")
+        _console.print("[dim]Try running with sudo or install to a user-writable location[/dim]")
         sys.exit(1)
 
 
 def _install_and_cleanup(tmp_path: Path, current_exe: Path, archive_type, latest_version: str) -> None:
     """Install the new binary, clean up the temp file, and exit the process."""
     try:
-        click.echo("\nInstalling new version...")
+        _console.print("\n[cyan]Installing new version...[/cyan]")
         if not replace_binary(tmp_path, current_exe, archive_type=archive_type):
             sys.exit(1)
 
         _cleanup_tmp(tmp_path)
 
-        click.echo(f"\n✨ Successfully upgraded to version {latest_version}!")
-        click.echo("\nVerify the upgrade:")
-        click.echo("  devo --version")
-        click.echo("\n💡 Tip: Run 'devo completion --install' to set up shell completion")
+        _console.print(
+            Panel(
+                f"[bold cyan]v{latest_version}[/bold cyan] installed successfully\n\n"
+                f"[dim]Verify:[/dim]  [cyan]devo --version[/cyan]\n"
+                f"[dim]Tip:[/dim]     [cyan]devo autocomplete[/cyan]  to set up shell completion",
+                title="[green]Upgrade complete[/green]",
+                border_style=theme.BORDER_SUCCESS,
+                padding=(0, 2),
+            )
+        )
 
         # os._exit is intentional here: prevents old binary process from accessing the new binary
         os._exit(0)  # noqa: S112
@@ -140,11 +154,11 @@ def _check_version_status(check: bool) -> tuple:
     """
     current_version = get_current_version()
     if current_version == "unknown":
-        click.echo("Warning: Could not determine current version", err=True)
+        _console.print("[yellow]Warning:[/yellow] Could not determine current version")
 
     release_info = get_latest_release()
     if not release_info:
-        click.echo("Error: Could not fetch latest release information", err=True)
+        _console.print("[red]Error:[/red] Could not fetch latest release information")
         sys.exit(1)
 
     latest_version = _resolve_latest_version(release_info)
@@ -155,7 +169,7 @@ def _perform_upgrade(release_info: dict, force: bool) -> None:
     """Resolve platform info, download and install the new binary."""
     platform_info = detect_platform()
     if not platform_info:
-        click.echo("Error: Unsupported platform", err=True)
+        _console.print("[red]Error:[/red] Unsupported platform")
         sys.exit(1)
 
     system, arch = platform_info
@@ -168,11 +182,10 @@ def _perform_upgrade(release_info: dict, force: bool) -> None:
     _validate_executable_path(current_exe)
 
     if not force:
-        if not click.confirm("Do you want to continue with the upgrade?"):
-            click.echo("Upgrade cancelled")
+        if not click.confirm("\nDo you want to continue with the upgrade?"):
+            _console.print("[dim]Upgrade cancelled[/dim]")
             return
 
-    click.echo(f"\nDownloading {binary_name}...")
     tmp_path = _download_and_verify(asset_url, archive_type)
 
     latest_version = release_info.get("tag_name", "").lstrip("v")
@@ -194,25 +207,36 @@ def upgrade(force, check):
         clear_cache()
 
     try:
-        click.echo("Checking for updates...")
-
-        current_version, release_info, latest_version = _check_version_status(check)
+        with spinner("Checking for updates..."):
+            current_version, release_info, latest_version = _check_version_status(check)
 
         if _handle_up_to_date(current_version, latest_version, force, check):
             return
 
-        click.echo(f"Current version: {current_version}")
-        click.echo(f"Latest version: {latest_version}")
-
         if check:
-            click.echo(click.style("\n→ Update available - Run 'devo upgrade' to update", dim=True))
+            _console.print(
+                Panel(
+                    f"[cyan]devo upgrade[/cyan]  →  [bold cyan]v{latest_version}[/bold cyan] available" f"  [dim](current: v{current_version})[/dim]",
+                    title="[yellow]Update available[/yellow]",
+                    border_style=theme.BORDER_WARNING,
+                    padding=(0, 2),
+                )
+            )
             return
+
+        _console.print(
+            Panel(
+                f"[dim]Current:[/dim]  [cyan]v{current_version}[/cyan]\n" f"[dim]Latest:[/dim]   [bold cyan]v{latest_version}[/bold cyan]",
+                border_style=theme.BORDER_BRAND,
+                padding=(0, 2),
+            )
+        )
 
         _perform_upgrade(release_info, force)
 
     except KeyboardInterrupt:
-        click.echo("\n\nUpgrade cancelled by user")
+        _console.print("\n[dim]Upgrade cancelled by user[/dim]")
         sys.exit(1)
     except Exception as e:
-        click.echo(f"\nError during upgrade: {str(e)}", err=True)
+        _console.print(f"\n[red]Error during upgrade:[/red] {str(e)}")
         sys.exit(1)
