@@ -1,331 +1,508 @@
 {% extends "main.html" %}
 
+{% block header %}{% endblock %}
+{% block tabs %}{% endblock %}
+{% block site_nav %}{% endblock %}
+{% block footer %}{% endblock %}
+
 {% block content %}
 <style>
-  /* ── Reset MkDocs container ────────────────────────────────────── */
-  .md-header         { display: none !important; }
+  /* ── Reset ──────────────────────────────────────────────────────── */
   .md-main__inner    { max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
   .md-content        { max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
   .md-content__inner { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
-  .md-sidebar--primary,
-  .md-sidebar--secondary { display: none !important; }
   .md-content__inner > h1:first-child { display: none; }
+  *, *::before, *::after { box-sizing: border-box; }
+  /* Ocultar elementos MkDocs que generan espacio/color en el top */
+  body { background: #070d1a !important; }
+  [data-md-component="skip"],
+  [data-md-component="announce"],
+  [data-md-component="outdated"] { display: none !important; }
+  .md-skip { display: none !important; }
 
-  /* ── Shared ────────────────────────────────────────────────────── */
+  .devo-home { background: #070d1a; color: #e6edf3; font-family: 'Roboto', sans-serif; }
+
+  /* ── Navbar ─────────────────────────────────────────────────────── */
+  #devo-navbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    transition: background 0.4s ease, border-color 0.4s ease, backdrop-filter 0.4s ease;
+    animation: navFadeIn 0.6s ease forwards;
+    border-bottom: 1px solid transparent;
+  }
+  #devo-navbar.scrolled {
+    background: rgba(7, 13, 26, 0.88);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom-color: rgba(255,255,255,0.05);
+  }
+  .nav-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .nav-logo {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.05rem;
+    font-weight: 800;
+    text-decoration: none !important;
+    letter-spacing: -0.03em;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0;
+  }
+  .nav-logo-brand {
+    background: linear-gradient(135deg, #ffffff 10%, #00BCD4 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .nav-logo-domain {
+    color: #6b7280;
+    -webkit-text-fill-color: #6b7280;
+    font-weight: 400;
+    font-size: 0.95rem;
+  }
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+  }
+  .nav-link {
+    color: #8b949e;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none !important;
+    transition: color 0.2s;
+    -webkit-text-fill-color: #8b949e;
+  }
+  .nav-link:hover { color: #f0f6fc; -webkit-text-fill-color: #f0f6fc; }
+  .nav-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.4rem 1rem;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    background: rgba(0,188,212,0.1);
+    border: 1px solid rgba(0,188,212,0.25);
+    color: #00BCD4 !important;
+    -webkit-text-fill-color: #00BCD4 !important;
+    text-decoration: none !important;
+    transition: all 0.2s;
+  }
+  .nav-cta:hover { background: rgba(0,188,212,0.18); border-color: rgba(0,188,212,0.45); }
+  @keyframes navFadeIn {
+    from { opacity: 0; transform: translateY(-12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Buttons ────────────────────────────────────────────────────── */
   .devo-btn {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.75rem 1.75rem;
-    border-radius: 6px;
+    padding: 0.7rem 1.5rem;
+    border-radius: 8px;
     font-weight: 600;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     text-decoration: none !important;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
     cursor: pointer;
     border: none;
   }
   .devo-btn-primary {
-    background: #00BCD4;
-    color: white !important;
+    background: linear-gradient(135deg, #00BCD4, #0097A7);
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
   }
-  .devo-btn-primary:hover { background: #00ACC1; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,188,212,0.4); }
-  .devo-btn-ghost {
-    background: transparent;
-    color: rgba(255,255,255,0.8) !important;
-    border: 1px solid rgba(255,255,255,0.2);
+  .devo-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,188,212,0.4); }
+  .devo-btn-secondary {
+    background: rgba(255,255,255,0.06);
+    color: #e6edf3 !important;
+    -webkit-text-fill-color: #e6edf3 !important;
+    border: 1px solid rgba(255,255,255,0.12);
   }
-  .devo-btn-ghost:hover { border-color: rgba(255,255,255,0.6); color: white !important; transform: translateY(-1px); }
+  .devo-btn-secondary:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.25); transform: translateY(-1px); }
 
-  /* ── Hero ──────────────────────────────────────────────────────── */
+  /* ── Hero ───────────────────────────────────────────────────────── */
   .devo-hero {
-    background:
-      radial-gradient(ellipse 80% 40% at 50% 0%, rgba(0,188,212,0.12), transparent),
-      #0d1117;
+    position: relative;
     min-height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
     text-align: center;
-    padding: 5rem 2rem 4rem;
+    padding: 5.5rem 2rem 3rem;
+    overflow: hidden;
+    background-color: #070d1a;
+    background-image:
+      radial-gradient(ellipse 70% 55% at 50% -5%, rgba(0,188,212,0.18) 0%, transparent 70%),
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: auto, 64px 64px, 64px 64px;
   }
 
-  .hero-inner { max-width: 760px; margin: 0 auto; }
+  .hero-inner { max-width: 700px; margin: 0 auto; position: relative; z-index: 1; }
+
+  .hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(0,188,212,0.08);
+    border: 1px solid rgba(0,188,212,0.2);
+    border-radius: 999px;
+    padding: 0.3rem 1rem;
+    font-size: 0.72rem;
+    color: #00BCD4;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 1.25rem;
+  }
+  .hero-eyebrow-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #00BCD4;
+    box-shadow: 0 0 6px #00BCD4;
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.4; transform: scale(0.7); }
+  }
 
   .hero-brand {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 4.5rem;
+    font-size: 5.5rem;
     font-weight: 800;
-    color: #00BCD4;
-    letter-spacing: -0.03em;
+    letter-spacing: -0.05em;
+    line-height: 0.95;
     margin: 0 0 1rem;
-    line-height: 1;
+    background: linear-gradient(135deg, #ffffff 0%, #b2e8f0 35%, #00BCD4 65%, #0097A7 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 
   .hero-h1 {
-    font-size: 2.4rem;
-    font-weight: 700;
-    color: #ffffff;
-    margin: 0 0 1rem;
-    line-height: 1.25;
-    letter-spacing: -0.01em;
-  }
-
-  .hero-sub {
-    font-size: 1.1rem;
-    color: #8b949e;
-    margin: 0 0 2.5rem;
-    line-height: 1.6;
+    font-size: 1.25rem !important;
+    font-weight: 400 !important;
+    color: #8b949e !important;
+    -webkit-text-fill-color: #8b949e !important;
+    margin: 0 0 1.5rem !important;
+    line-height: 1.7 !important;
+    letter-spacing: 0 !important;
+    max-width: 520px;
+    margin-left: auto !important;
+    margin-right: auto !important;
   }
 
   /* Typewriter */
   .hero-typewriter {
     display: inline-flex;
     align-items: center;
-    gap: 0;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 1.1rem;
-    background: rgba(255,255,255,0.04);
+    font-size: 0.9rem;
+    background: rgba(13,17,23,0.9);
     border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 8px;
-    padding: 0.75rem 1.25rem;
-    margin: 0 0 2.5rem;
-    color: #e6edf3;
+    border-radius: 10px;
+    padding: 0.65rem 1.1rem;
+    margin: 0 0 1.5rem;
+    box-shadow: 0 0 0 1px rgba(0,188,212,0.06), 0 8px 24px rgba(0,0,0,0.3);
   }
-  .tw-prefix { color: #3fb950; margin-right: 0.5rem; user-select: none; }
+  .tw-prefix { color: #3fb950; margin-right: 0.6rem; user-select: none; }
   .tw-text   { color: #79c0ff; min-width: 1px; }
   .tw-cursor {
     display: inline-block;
-    width: 2px;
-    height: 1.1em;
+    width: 2px; height: 1em;
     background: #3fb950;
     margin-left: 2px;
     vertical-align: text-bottom;
     animation: tw-blink 1s step-end infinite;
   }
-  @keyframes tw-blink {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0; }
-  }
+  @keyframes tw-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 
-  .hero-actions { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+  .hero-actions { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; }
 
-  .hero-platforms {
-    margin-top: 2rem;
-    display: flex;
-    gap: 0.5rem;
-    justify-content: center;
-    flex-wrap: wrap;
-  }
+  .hero-platforms { display: flex; gap: 0.4rem; justify-content: center; flex-wrap: wrap; }
   .platform-badge {
-    font-size: 0.72rem;
-    color: #8b949e;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.08);
+    font-size: 0.68rem;
+    color: #6e7681;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
     padding: 0.2rem 0.6rem;
     border-radius: 999px;
     font-family: 'JetBrains Mono', monospace;
   }
 
-  /* ── Install ───────────────────────────────────────────────────── */
+  /* ── Install ────────────────────────────────────────────────────── */
   .devo-install {
-    background: #161b22;
-    padding: 4rem 2rem;
+    background: #0d1117;
+    padding: 5.5rem 2rem;
     text-align: center;
-    border-top: 1px solid rgba(255,255,255,0.06);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    border-top: 1px solid rgba(255,255,255,0.05);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
   }
-
+  .section-label {
+    font-size: 0.68rem;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #00BCD4;
+    margin: 0 0 0.75rem;
+  }
   .devo-install h2 {
-    font-size: 1.6rem;
+    font-size: 2rem;
     font-weight: 700;
-    color: white;
-    margin: 0 0 0.4rem;
+    color: #f0f6fc !important;
+    -webkit-text-fill-color: #f0f6fc !important;
+    margin: 0 0 0.5rem;
   }
-  .devo-install .sub {
-    color: #8b949e;
-    margin: 0 0 2rem;
-    font-size: 0.95rem;
-  }
+  .devo-install .sub { color: #6e7681; margin: 0 0 2.5rem; font-size: 0.9rem; }
 
-  .i-tabs {
-    display: inline-flex;
-    border-radius: 6px;
-    overflow: hidden;
-    border: 1px solid rgba(255,255,255,0.1);
-    margin-bottom: 1.25rem;
-  }
-  .i-tab {
-    padding: 0.45rem 1.25rem;
-    cursor: pointer;
-    font-size: 0.82rem;
-    font-weight: 500;
-    background: transparent;
-    color: #8b949e;
-    border: none;
-    transition: all 0.15s;
-    font-family: inherit;
-  }
-  .i-tab.active { background: #00BCD4; color: white; }
-
-  .i-panel { display: none; }
-  .i-panel.active { display: flex; justify-content: center; }
-
-  .i-cmd {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.75rem;
+  .terminal-window {
+    display: inline-block;
     background: #0d1117;
     border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 8px;
-    padding: 0.9rem 1rem 0.9rem 1.25rem;
-    max-width: 580px;
+    border-radius: 12px;
+    overflow: hidden;
+    max-width: 560px;
     width: 100%;
+    text-align: left;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,188,212,0.04);
   }
-  .i-cmd code {
-    flex: 1;
-    color: #e6edf3 !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 0.88rem !important;
-    background: transparent !important;
-    padding: 0 !important;
-    border-radius: 0 !important;
+  .terminal-bar {
+    background: #161b22;
+    padding: 0.6rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
   }
-  .i-copy {
-    background: none;
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 5px;
-    color: #8b949e;
-    padding: 0.3rem 0.65rem;
+  .t-dot { width: 12px; height: 12px; border-radius: 50%; }
+  .t-dot.red    { background: #ff5f56; }
+  .t-dot.yellow { background: #ffbd2e; }
+  .t-dot.green  { background: #27c93f; }
+  .terminal-tabs {
+    padding: 0 1rem;
+    display: flex;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    background: #0d1117;
+  }
+  .t-tab {
+    padding: 0.55rem 1rem;
     cursor: pointer;
-    font-size: 0.75rem;
+    font-size: 0.76rem;
+    font-weight: 500;
+    color: #6e7681;
+    border: none;
+    background: transparent;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all 0.15s;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .t-tab.active { color: #00BCD4; border-bottom-color: #00BCD4; }
+  .terminal-body { padding: 1.25rem; }
+  .t-panel { display: none; }
+  .t-panel.active { display: flex; align-items: center; gap: 0.75rem; }
+  .t-prompt { color: #3fb950; font-family: 'JetBrains Mono', monospace; font-size: 0.84rem; flex-shrink: 0; user-select: none; }
+  .t-cmd { flex: 1; color: #e6edf3; font-family: 'JetBrains Mono', monospace; font-size: 0.84rem; word-break: break-all; }
+  .t-copy {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 5px;
+    color: #6e7681;
+    padding: 0.25rem 0.6rem;
+    cursor: pointer;
+    font-size: 0.7rem;
     font-family: inherit;
     transition: all 0.15s;
     white-space: nowrap;
     flex-shrink: 0;
   }
-  .i-copy:hover  { border-color: #00BCD4; color: #00BCD4; }
-  .i-copy.copied { border-color: #3fb950; color: #3fb950; }
+  .t-copy:hover  { border-color: #00BCD4; color: #00BCD4; }
+  .t-copy.copied { border-color: #3fb950; color: #3fb950; }
 
-  /* ── Features ──────────────────────────────────────────────────── */
+  /* ── Features ───────────────────────────────────────────────────── */
   .devo-features {
-    padding: 5rem 2rem;
-    background: var(--md-default-bg-color);
+    padding: 6rem 2rem;
+    background: #070d1a;
+    border-top: 1px solid rgba(255,255,255,0.05);
   }
   .devo-features h2 {
-    font-size: 1.9rem;
+    font-size: 2.2rem;
     font-weight: 700;
     text-align: center;
-    margin: 0 0 0.5rem;
-    color: var(--md-default-fg-color);
+    margin: 0 0 0.6rem;
+    color: #f0f6fc !important;
+    -webkit-text-fill-color: #f0f6fc !important;
   }
-  .devo-features .sub {
-    text-align: center;
-    color: var(--md-default-fg-color--light);
-    margin: 0 0 3rem;
-    font-size: 1rem;
-  }
+  .devo-features .sub { text-align: center; color: #6e7681; margin: 0 0 3.5rem; font-size: 0.95rem; }
 
   .f-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 1.25rem;
-    max-width: 1040px;
+    max-width: 1020px;
     margin: 0 auto;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px;
+    overflow: hidden;
   }
   .f-card {
-    background: var(--md-default-bg-color);
-    border-radius: 10px;
-    padding: 1.5rem;
-    border: 1px solid var(--md-default-bg-color--lighter);
-    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    background: #0a101f;
+    padding: 2rem 1.75rem;
+    border-right: 1px solid rgba(255,255,255,0.07);
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    position: relative;
+    transition: background 0.25s;
   }
-  .f-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 28px rgba(0,188,212,0.1);
-    border-color: rgba(0,188,212,0.35);
+  .f-card:nth-child(3n) { border-right: none; }
+  .f-card:nth-child(4), .f-card:nth-child(5), .f-card:nth-child(6) { border-bottom: none; }
+  .f-card:hover { background: #0d1525; }
+  .f-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 0;
+    background: linear-gradient(135deg, rgba(0,188,212,0.04), transparent 60%);
+    opacity: 0;
+    transition: opacity 0.25s;
   }
-  [data-md-color-scheme="slate"] .f-card {
-    background: #1e1e2e;
-    border-color: #313244;
-  }
-  .f-icon { font-size: 1.6rem; margin-bottom: 0.75rem; }
-  .f-card h3 { font-size: 0.95rem; font-weight: 600; margin: 0 0 0.4rem; color: var(--md-default-fg-color); }
-  .f-card p  { font-size: 0.85rem; color: var(--md-default-fg-color--light); margin: 0; line-height: 1.6; }
+  .f-card:hover::after { opacity: 1; }
 
-  /* ── Quick Start ───────────────────────────────────────────────── */
+  .f-icon-wrap {
+    width: 38px; height: 38px;
+    border-radius: 8px;
+    background: rgba(0,188,212,0.08);
+    border: 1px solid rgba(0,188,212,0.14);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1.1rem;
+  }
+  .f-icon-wrap svg {
+    width: 18px; height: 18px;
+    stroke: #00BCD4;
+    fill: none;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .f-card h3 { font-size: 0.9rem; font-weight: 600; margin: 0 0 0.45rem; color: #e6edf3 !important; -webkit-text-fill-color: #e6edf3 !important; }
+  .f-card p  { font-size: 0.82rem; color: #6e7681; margin: 0; line-height: 1.65; }
+
+  /* ── Quick Start ────────────────────────────────────────────────── */
   .devo-qs {
     background: #0d1117;
-    padding: 5rem 2rem;
+    padding: 6rem 2rem;
     text-align: center;
+    border-top: 1px solid rgba(255,255,255,0.05);
   }
-  .devo-qs h2 { font-size: 1.9rem; font-weight: 700; color: white; margin: 0 0 0.5rem; }
-  .devo-qs .sub { color: #8b949e; margin: 0 0 3rem; font-size: 1rem; }
+  .devo-qs h2 { font-size: 2.2rem; font-weight: 700; color: #f0f6fc !important; -webkit-text-fill-color: #f0f6fc !important; margin: 0 0 0.6rem; }
+  .devo-qs .sub { color: #6e7681; margin: 0 0 3.5rem; font-size: 0.95rem; }
 
   .qs-steps {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 2rem;
-    max-width: 860px;
+    max-width: 780px;
     margin: 0 auto 3rem;
     position: relative;
   }
   .qs-steps::before {
     content: '';
     position: absolute;
-    top: 24px;
+    top: 19px;
     left: calc(16.5% + 16px);
     right: calc(16.5% + 16px);
     height: 1px;
-    background: linear-gradient(90deg, #00BCD4, #00BCD4);
-    opacity: 0.2;
+    background: linear-gradient(90deg, rgba(0,188,212,0.5), rgba(0,188,212,0.1));
+    opacity: 0.4;
   }
   .qs-step { text-align: center; }
   .qs-num {
-    width: 48px; height: 48px;
+    width: 38px; height: 38px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #00BCD4, #0097A7);
-    color: white;
+    background: rgba(0,188,212,0.08);
+    border: 1px solid rgba(0,188,212,0.3);
+    color: #00BCD4;
     font-weight: 700;
-    font-size: 1.2rem;
+    font-size: 0.9rem;
     display: flex;
     align-items: center;
     justify-content: center;
     margin: 0 auto 1rem;
-    box-shadow: 0 0 0 4px rgba(0,188,212,0.15);
+    font-family: 'JetBrains Mono', monospace;
   }
-  .qs-step h3 { font-size: 1rem; font-weight: 600; color: white; margin: 0 0 0.4rem; }
-  .qs-step p  { font-size: 0.875rem; color: #8b949e; margin: 0; line-height: 1.55; }
+  .qs-step h3 { font-size: 0.92rem; font-weight: 600; color: #e6edf3 !important; -webkit-text-fill-color: #e6edf3 !important; margin: 0 0 0.4rem; }
+  .qs-step p  { font-size: 0.82rem; color: #6e7681; margin: 0; line-height: 1.6; }
   .qs-step p code {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.8rem;
-    background: rgba(255,255,255,0.07);
-    padding: 0.1rem 0.35rem;
+    font-size: 0.77rem;
+    background: rgba(0,188,212,0.08);
+    border: 1px solid rgba(0,188,212,0.15);
+    padding: 0.1rem 0.4rem;
     border-radius: 4px;
     color: #79c0ff;
   }
 
-  /* ── Responsive ────────────────────────────────────────────────── */
+  /* ── Responsive ─────────────────────────────────────────────────── */
   @media (max-width: 768px) {
-    .hero-brand { font-size: 3rem; }
-    .hero-h1    { font-size: 1.75rem; }
-    .f-grid     { grid-template-columns: 1fr; }
+    .hero-brand { font-size: 3.5rem; }
+    .f-grid     { grid-template-columns: 1fr; border-radius: 10px; }
+    .f-card:nth-child(3n)   { border-right: none; }
+    .f-card:nth-child(4), .f-card:nth-child(5) { border-bottom: 1px solid rgba(255,255,255,0.07); }
+    .f-card:nth-child(6)    { border-bottom: none; }
+    .f-card { border-right: none; }
     .qs-steps   { grid-template-columns: 1fr; gap: 1.5rem; }
     .qs-steps::before { display: none; }
   }
   @media (max-width: 1024px) and (min-width: 769px) {
     .f-grid { grid-template-columns: repeat(2, 1fr); }
+    .f-card:nth-child(2n)   { border-right: none; }
+    .f-card:nth-child(3n)   { border-right: 1px solid rgba(255,255,255,0.07); }
+    .f-card:nth-child(5), .f-card:nth-child(6) { border-bottom: none; }
+    .f-card:nth-child(3)    { border-bottom: 1px solid rgba(255,255,255,0.07); }
+    .f-card:nth-child(4)    { border-bottom: 1px solid rgba(255,255,255,0.07); }
+    .hero-brand { font-size: 4.5rem; }
   }
 </style>
 
 <div class="devo-home">
 
+  <!-- ── NAVBAR ────────────────────────────────────────────────── -->
+  <nav id="devo-navbar">
+    <div class="nav-inner">
+      <a href="." class="nav-logo">
+        <span class="nav-logo-brand">devo</span><span class="nav-logo-domain">.heyedu.dev</span>
+      </a>
+      <div class="nav-links">
+        <a href="getting-started/quickstart/" class="nav-link">Docs</a>
+        <a href="commands/" class="nav-link">Commands</a>
+        <a href="https://github.com/edu526/devo-cli" class="nav-link" target="_blank" rel="noopener">GitHub</a>
+        <a href="getting-started/quickstart/" class="nav-cta">Get Started →</a>
+      </div>
+    </div>
+  </nav>
+
   <!-- ── HERO ──────────────────────────────────────────────────── -->
   <section class="devo-hero">
     <div class="hero-inner">
+      <div class="hero-eyebrow">
+        <span class="hero-eyebrow-dot"></span>
+        Developer CLI
+      </div>
+
       <p class="hero-brand">devo</p>
-      <h1 class="hero-h1">AI-powered developer workflows</h1>
-      <p class="hero-sub">Git automation and AWS management from your terminal.<br>Commit, review, login and deploy — all without leaving the CLI.</p>
+      <h1 class="hero-h1">AI-powered developer workflows.<br>Git automation and AWS management<br>from your terminal.</h1>
 
       <div class="hero-typewriter">
         <span class="tw-prefix">$</span>
@@ -335,7 +512,10 @@
 
       <div class="hero-actions">
         <a href="getting-started/quickstart/" class="devo-btn devo-btn-primary">Get Started →</a>
-        <a href="https://github.com/edu526/devo-cli" class="devo-btn devo-btn-ghost">GitHub</a>
+        <a href="https://github.com/edu526/devo-cli" class="devo-btn devo-btn-secondary">
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24" style="opacity:0.8"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+          GitHub
+        </a>
       </div>
 
       <div class="hero-platforms">
@@ -350,68 +530,96 @@
 
   <!-- ── INSTALL ────────────────────────────────────────────────── -->
   <section class="devo-install">
+    <p class="section-label">Installation</p>
     <h2>Install in seconds</h2>
     <p class="sub">One command, any platform</p>
 
-    <div class="i-tabs">
-      <button class="i-tab active" id="tab-unix-btn" onclick="iTab('unix')">Linux / macOS</button>
-      <button class="i-tab" id="tab-win-btn" onclick="iTab('win')">Windows (PowerShell)</button>
-    </div>
-
-    <div id="tab-unix" class="i-panel active">
-      <div class="i-cmd">
-        <code>curl -fsSL https://devo.heyedu.dev/install.sh | bash</code>
-        <button class="i-copy" onclick="iCopy(this,'curl -fsSL https://devo.heyedu.dev/install.sh | bash')">copy</button>
+    <div class="terminal-window">
+      <div class="terminal-bar">
+        <span class="t-dot red"></span>
+        <span class="t-dot yellow"></span>
+        <span class="t-dot green"></span>
       </div>
-    </div>
-    <div id="tab-win" class="i-panel">
-      <div class="i-cmd">
-        <code>irm https://devo.heyedu.dev/install.ps1 | iex</code>
-        <button class="i-copy" onclick="iCopy(this,'irm https://devo.heyedu.dev/install.ps1 | iex')">copy</button>
+      <div class="terminal-tabs">
+        <button class="t-tab active" id="tab-unix-btn" onclick="iTab('unix')">Linux / macOS</button>
+        <button class="t-tab" id="tab-win-btn" onclick="iTab('win')">Windows (PowerShell)</button>
+      </div>
+      <div class="terminal-body">
+        <div id="tab-unix" class="t-panel active">
+          <span class="t-prompt">$</span>
+          <span class="t-cmd">curl -fsSL https://devo.heyedu.dev/install.sh | bash</span>
+          <button class="t-copy" onclick="iCopy(this,'curl -fsSL https://devo.heyedu.dev/install.sh | bash')">copy</button>
+        </div>
+        <div id="tab-win" class="t-panel">
+          <span class="t-prompt">></span>
+          <span class="t-cmd">irm https://devo.heyedu.dev/install.ps1 | iex</span>
+          <button class="t-copy" onclick="iCopy(this,'irm https://devo.heyedu.dev/install.ps1 | iex')">copy</button>
+        </div>
       </div>
     </div>
   </section>
 
   <!-- ── FEATURES ───────────────────────────────────────────────── -->
   <section class="devo-features">
+    <p class="section-label">Features</p>
     <h2>Everything you need</h2>
     <p class="sub">Built for teams that move fast</p>
     <div class="f-grid">
+
       <div class="f-card">
-        <div class="f-icon">🤖</div>
+        <div class="f-icon-wrap">
+          <svg viewBox="0 0 24 24"><path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
+        </div>
         <h3>AI Commit Messages</h3>
         <p>Generate conventional commit messages from staged changes using AWS Bedrock. No context switching.</p>
       </div>
+
       <div class="f-card">
-        <div class="f-icon">🔍</div>
+        <div class="f-icon-wrap">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35M11 8v6M8 11h6"/></svg>
+        </div>
         <h3>Code Review</h3>
         <p>Automated security analysis and best-practice checks on your branch before it hits the PR.</p>
       </div>
+
       <div class="f-card">
-        <div class="f-icon">🔐</div>
+        <div class="f-icon-wrap">
+          <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
         <h3>AWS SSO Login</h3>
         <p>Authenticate all your AWS profiles at once and track credential expiry with a single command.</p>
       </div>
+
       <div class="f-card">
-        <div class="f-icon">🗄️</div>
+        <div class="f-icon-wrap">
+          <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+        </div>
         <h3>DynamoDB Export</h3>
         <p>Export table data to CSV, JSON, JSONL or TSV with filtering and pagination — no console needed.</p>
       </div>
+
       <div class="f-card">
-        <div class="f-icon">🔗</div>
+        <div class="f-icon-wrap">
+          <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        </div>
         <h3>SSM Port Forwarding</h3>
         <p>Connect to private RDS, ECS tasks and internal services without a VPN or bastion host.</p>
       </div>
+
       <div class="f-card">
-        <div class="f-icon">📦</div>
+        <div class="f-icon-wrap">
+          <svg viewBox="0 0 24 24"><path d="M5 3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H5z"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>
+        </div>
         <h3>Standalone Binaries</h3>
-        <p>Single binary for Linux, macOS and Windows. Self-updating via <code style="font-size:0.78rem;background:var(--md-code-bg-color);padding:0.1rem 0.35rem;border-radius:4px;">devo upgrade</code>.</p>
+        <p>Single binary for Linux, macOS and Windows. Self-updating via <code style="font-family:'JetBrains Mono',monospace;font-size:0.76rem;background:rgba(0,188,212,0.08);border:1px solid rgba(0,188,212,0.15);padding:0.1rem 0.35rem;border-radius:4px;color:#79c0ff;">devo upgrade</code>.</p>
       </div>
+
     </div>
   </section>
 
   <!-- ── QUICK START ────────────────────────────────────────────── -->
   <section class="devo-qs">
+    <p class="section-label">Quick Start</p>
     <h2>Up and running in 3 steps</h2>
     <p class="sub">From zero to first AI commit message in minutes</p>
     <div class="qs-steps">
@@ -441,16 +649,11 @@
   var phrases = ['devo commit', 'devo aws-login', 'devo code-reviewer', 'devo upgrade --check', 'devo dynamodb export'];
   var idx = 0, pos = 0, deleting = false;
   var el = document.getElementById('tw-text');
-
   function type() {
     var word = phrases[idx % phrases.length];
     if (!deleting) {
       el.textContent = word.slice(0, ++pos);
-      if (pos === word.length) {
-        deleting = true;
-        setTimeout(type, 2000);
-        return;
-      }
+      if (pos === word.length) { deleting = true; setTimeout(type, 2000); return; }
       setTimeout(type, 80);
     } else {
       el.textContent = word.slice(0, --pos);
@@ -462,18 +665,14 @@
 
   /* ── Install tabs ───────────────────────────────────────────── */
   function iTab(id) {
-    document.querySelectorAll('.i-tab').forEach(function(t) { t.classList.remove('active'); });
-    document.querySelectorAll('.i-panel').forEach(function(p) { p.classList.remove('active'); });
+    document.querySelectorAll('.t-tab').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelectorAll('.t-panel').forEach(function(p) { p.classList.remove('active'); });
     document.getElementById('tab-' + id + '-btn').classList.add('active');
     document.getElementById('tab-' + id).classList.add('active');
   }
+  if (navigator.platform.includes('Win') || navigator.userAgent.includes('Windows')) { iTab('win'); }
 
-  /* OS detection — default to Windows tab if on Windows */
-  if (navigator.platform.includes('Win') || navigator.userAgent.includes('Windows')) {
-    iTab('win');
-  }
-
-  /* ── Copy to clipboard ──────────────────────────────────────── */
+  /* ── Copy ───────────────────────────────────────────────────── */
   function iCopy(btn, text) {
     navigator.clipboard.writeText(text).then(function() {
       btn.textContent = 'copied!';
@@ -481,5 +680,15 @@
       setTimeout(function() { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 2000);
     });
   }
+
+  /* ── Navbar scroll ──────────────────────────────────────────── */
+  var navbar = document.getElementById('devo-navbar');
+  window.addEventListener('scroll', function() {
+    if (window.scrollY > 30) {
+      navbar.classList.add('scrolled');
+    } else {
+      navbar.classList.remove('scrolled');
+    }
+  }, { passive: true });
 </script>
 {% endblock %}
