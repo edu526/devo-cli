@@ -231,7 +231,7 @@ Error: Access denied to Bedrock model
 
 ## Features
 
-- **AI-Powered**: Uses Claude to understand code changes
+- **Smart Analysis**: Understands code changes from your diff
 - **Conventional Commits**: Follows industry standard format
 - **Ticket Extraction**: Automatically extracts ticket numbers from branch names
 - **Multi-line Support**: Generates detailed commit bodies when needed

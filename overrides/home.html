@@ -1,5 +1,19 @@
 {% extends "main.html" %}
 
+{% block htmltitle %}<title>Devo CLI — Developer productivity from the terminal</title>{% endblock %}
+
+{% block extrahead %}
+  <meta name="description" content="Developer productivity CLI — Git, AWS and cloud tools from your terminal. Auto commit messages, code review, AWS SSO login, DynamoDB export and more.">
+  <meta property="og:type"        content="website">
+  <meta property="og:url"         content="https://devo.heyedu.dev/">
+  <meta property="og:title"       content="Devo CLI — Developer productivity from the terminal">
+  <meta property="og:description" content="Automate your developer workflow. Git, AWS and cloud tools from your terminal.">
+  <meta property="og:image"       content="https://devo.heyedu.dev/assets/og-image.png">
+  <meta name="twitter:card"       content="summary_large_image">
+  <meta name="twitter:title"      content="Devo CLI — Developer productivity from the terminal">
+  <meta name="twitter:description" content="Automate your developer workflow. Git, AWS and cloud tools from your terminal.">
+  <meta name="twitter:image"      content="https://devo.heyedu.dev/assets/og-image.png">
+{% endblock %}
 {% block header %}{% endblock %}
 {% block tabs %}{% endblock %}
 {% block site_nav %}{% endblock %}
@@ -7,6 +21,7 @@
 
 {% block content %}
 <style>
+  html { scroll-behavior: smooth; }
   /* ── Reset ──────────────────────────────────────────────────────── */
   .md-main__inner    { max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
   .md-content        { max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
@@ -27,15 +42,18 @@
     position: fixed;
     top: 0; left: 0; right: 0;
     z-index: 100;
+    background: rgba(7, 13, 26, 0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
     transition: background 0.4s ease, border-color 0.4s ease, backdrop-filter 0.4s ease;
     animation: navFadeIn 0.6s ease forwards;
-    border-bottom: 1px solid transparent;
   }
   #devo-navbar.scrolled {
-    background: rgba(7, 13, 26, 0.88);
+    background: rgba(7, 13, 26, 0.92);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border-bottom-color: rgba(255,255,255,0.05);
+    border-bottom-color: rgba(255,255,255,0.07);
   }
   .nav-inner {
     max-width: 1100px;
@@ -45,6 +63,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    position: relative;
   }
   .nav-logo {
     font-family: 'JetBrains Mono', monospace;
@@ -67,6 +86,17 @@
     -webkit-text-fill-color: #6b7280;
     font-weight: 400;
     font-size: 0.95rem;
+  }
+  .nav-sections {
+    display: flex;
+    align-items: center;
+    gap: 1.75rem;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .nav-section-link {
+    font-size: 0.82rem !important;
   }
   .nav-links {
     display: flex;
@@ -134,12 +164,12 @@
   /* ── Hero ───────────────────────────────────────────────────────── */
   .devo-hero {
     position: relative;
-    min-height: 100vh;
+    min-height: 82vh;
     display: flex;
     align-items: center;
     justify-content: center;
     text-align: center;
-    padding: 5.5rem 2rem 3rem;
+    padding: 4rem 2rem 2rem;
     overflow: hidden;
     background-color: #070d1a;
     background-image:
@@ -147,6 +177,7 @@
       linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
       linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
     background-size: auto, 64px 64px, 64px 64px;
+    background-position: 50% 0%, 0 32px, 0 32px;
   }
 
   .hero-inner { max-width: 700px; margin: 0 auto; position: relative; z-index: 1; }
@@ -204,30 +235,78 @@
     margin-right: auto !important;
   }
 
-  /* Typewriter */
-  .hero-typewriter {
-    display: inline-flex;
-    align-items: center;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.9rem;
+  /* Hero Terminal */
+  .hero-terminal {
     background: rgba(13,17,23,0.9);
     border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 10px;
-    padding: 0.65rem 1.1rem;
-    margin: 0 0 1.5rem;
-    box-shadow: 0 0 0 1px rgba(0,188,212,0.06), 0 8px 24px rgba(0,0,0,0.3);
+    border-radius: 12px;
+    overflow: hidden;
+    max-width: 520px;
+    width: 100%;
+    margin: 0 auto 1.5rem;
+    box-shadow: 0 0 0 1px rgba(0,188,212,0.06), 0 16px 48px rgba(0,0,0,0.4);
+    text-align: left;
   }
-  .tw-prefix { color: #3fb950; margin-right: 0.6rem; user-select: none; }
-  .tw-text   { color: #79c0ff; min-width: 1px; }
+  .ht-bar {
+    background: #161b22;
+    padding: 0.55rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .ht-title {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: #4b5563;
+    letter-spacing: 0.04em;
+  }
+  .ht-body { padding: 1rem 1.25rem 1.1rem; min-height: 82px; }
+  .ht-cmd-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.84rem;
+  }
+  .ht-ps  { color: #3fb950; user-select: none; flex-shrink: 0; }
+  #tw-text { color: #79c0ff; }
   .tw-cursor {
     display: inline-block;
-    width: 2px; height: 1em;
+    width: 2px; height: 0.9em;
     background: #3fb950;
-    margin-left: 2px;
+    margin-left: 1px;
     vertical-align: text-bottom;
     animation: tw-blink 1s step-end infinite;
   }
   @keyframes tw-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+  .ht-output { margin-top: 0.5rem; min-height: 2.4rem; }
+  .ht-out-line {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.76rem;
+    line-height: 1.75;
+    color: #6e7681;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+  }
+  .ht-out-line.show { opacity: 1; }
+  .ht-out-line.ok   { color: #3fb950; }
+  .ht-out-line.warn { color: #e3b341; }
+
+  /* Stats bar */
+  .hero-stats {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    margin-top: 1.1rem;
+    flex-wrap: wrap;
+  }
+  .stat-item { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.74rem; }
+  .stat-val  { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #c9d1d9; }
+  .stat-lbl  { color: #6e7681; }
+  .stat-sep  { color: rgba(255,255,255,0.12); }
 
   .hero-actions { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; }
 
@@ -245,7 +324,7 @@
   /* ── Install ────────────────────────────────────────────────────── */
   .devo-install {
     background: #0d1117;
-    padding: 5.5rem 2rem;
+    padding: 2.5rem 2rem;
     text-align: center;
     border-top: 1px solid rgba(255,255,255,0.05);
     border-bottom: 1px solid rgba(255,255,255,0.05);
@@ -256,6 +335,7 @@
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: #00BCD4;
+    text-align: center;
     margin: 0 0 0.75rem;
   }
   .devo-install h2 {
@@ -266,15 +346,28 @@
     margin: 0 0 0.5rem;
   }
   .devo-install .sub { color: #6e7681; margin: 0 0 2.5rem; font-size: 0.9rem; }
+  .install-guide-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 1.25rem;
+    font-size: 0.8rem;
+    color: #6b7280;
+    text-decoration: none !important;
+    -webkit-text-fill-color: #6b7280;
+    transition: color 0.2s;
+  }
+  .install-guide-link:hover { color: #00BCD4; -webkit-text-fill-color: #00BCD4; }
 
   .terminal-window {
-    display: inline-block;
+    display: block;
     background: #0d1117;
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 12px;
     overflow: hidden;
-    max-width: 560px;
+    max-width: 700px;
     width: 100%;
+    margin: 0 auto;
     text-align: left;
     box-shadow: 0 24px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,188,212,0.04);
   }
@@ -312,9 +405,9 @@
   .t-tab.active { color: #00BCD4; border-bottom-color: #00BCD4; }
   .terminal-body { padding: 1.25rem; }
   .t-panel { display: none; }
-  .t-panel.active { display: flex; align-items: center; gap: 0.75rem; }
+  .t-panel.active { display: flex; align-items: center; gap: 0.75rem; overflow: hidden; }
   .t-prompt { color: #3fb950; font-family: 'JetBrains Mono', monospace; font-size: 0.84rem; flex-shrink: 0; user-select: none; }
-  .t-cmd { flex: 1; color: #e6edf3; font-family: 'JetBrains Mono', monospace; font-size: 0.84rem; word-break: break-all; }
+  .t-cmd { flex: 1; color: #e6edf3; font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; white-space: nowrap; overflow: hidden; min-width: 0; }
   .t-copy {
     background: none;
     border: 1px solid rgba(255,255,255,0.1);
@@ -333,7 +426,7 @@
 
   /* ── Features ───────────────────────────────────────────────────── */
   .devo-features {
-    padding: 6rem 2rem;
+    padding: 3rem 2rem;
     background: #070d1a;
     border-top: 1px solid rgba(255,255,255,0.05);
   }
@@ -345,7 +438,7 @@
     color: #f0f6fc !important;
     -webkit-text-fill-color: #f0f6fc !important;
   }
-  .devo-features .sub { text-align: center; color: #6e7681; margin: 0 0 3.5rem; font-size: 0.95rem; }
+  .devo-features .sub { text-align: center; color: #6e7681; margin: 0 0 2.5rem; font-size: 0.95rem; }
 
   .f-grid {
     display: grid;
@@ -366,7 +459,7 @@
   }
   .f-card:nth-child(3n) { border-right: none; }
   .f-card:nth-child(4), .f-card:nth-child(5), .f-card:nth-child(6) { border-bottom: none; }
-  .f-card:hover { background: #0d1525; }
+  .f-card:hover { background: #0d1525; box-shadow: inset 0 1px 0 rgba(0,188,212,0.3); }
   .f-card::after {
     content: '';
     position: absolute;
@@ -402,12 +495,12 @@
   /* ── Quick Start ────────────────────────────────────────────────── */
   .devo-qs {
     background: #0d1117;
-    padding: 6rem 2rem;
+    padding: 3rem 2rem;
     text-align: center;
     border-top: 1px solid rgba(255,255,255,0.05);
   }
   .devo-qs h2 { font-size: 2.2rem; font-weight: 700; color: #f0f6fc !important; -webkit-text-fill-color: #f0f6fc !important; margin: 0 0 0.6rem; }
-  .devo-qs .sub { color: #6e7681; margin: 0 0 3.5rem; font-size: 0.95rem; }
+  .devo-qs .sub { color: #6e7681; margin: 0 0 2.5rem; font-size: 0.95rem; }
 
   .qs-steps {
     display: grid;
@@ -454,16 +547,91 @@
     color: #79c0ff;
   }
 
+  /* ── Footer ─────────────────────────────────────────────────────── */
+  .devo-footer {
+    background: #070d1a;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    padding: 1.75rem 2rem;
+  }
+  .footer-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .footer-links {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .footer-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: #6b7280;
+    font-size: 0.8rem;
+    text-decoration: none !important;
+    -webkit-text-fill-color: #6b7280;
+    transition: color 0.2s;
+  }
+  .footer-link:hover { color: #e6edf3; -webkit-text-fill-color: #e6edf3; }
+  .footer-link svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+  .footer-brand { text-align: right; }
+  .footer-brand-logo {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-decoration: none !important;
+    display: inline-block;
+    margin-bottom: 0.2rem;
+  }
+  .footer-brand-logo .fb-name {
+    background: linear-gradient(135deg, #ffffff 10%, #00BCD4 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .footer-brand-logo .fb-domain { color: #6b7280; -webkit-text-fill-color: #6b7280; font-weight: 400; }
+  .footer-copy { font-size: 0.72rem; color: #4b5563; margin: 0; }
+  @media (max-width: 640px) {
+    .footer-inner { flex-direction: column; align-items: flex-start; }
+    .footer-brand { text-align: left; }
+  }
+
   /* ── Responsive ─────────────────────────────────────────────────── */
   @media (max-width: 768px) {
+    .nav-sections { display: none; }
     .hero-brand { font-size: 3.5rem; }
+  }
+  @media (max-width: 640px) {
+    .nav-inner { padding: 0 1rem; }
+    .nav-links { gap: 0.75rem; }
+    .nav-links .nav-link { display: none; }
+  }
+  @media (max-width: 520px) {
+    .devo-install { padding: 2rem 1rem; }
+    .t-tab { white-space: nowrap; font-size: 0.7rem; padding: 0.5rem 0.75rem; }
+    .t-tab-sub { display: none; }
+    .terminal-body { padding: 0.9rem 1rem; }
+    .t-cmd { font-size: 0.75rem; }
     .f-grid     { grid-template-columns: 1fr; border-radius: 10px; }
-    .f-card:nth-child(3n)   { border-right: none; }
-    .f-card:nth-child(4), .f-card:nth-child(5) { border-bottom: 1px solid rgba(255,255,255,0.07); }
-    .f-card:nth-child(6)    { border-bottom: none; }
-    .f-card { border-right: none; }
-    .qs-steps   { grid-template-columns: 1fr; gap: 1.5rem; }
+    .f-card     { padding: 1.1rem 1.1rem; border-right: none; }
+    .f-card:nth-child(n)    { border-bottom: 1px solid rgba(255,255,255,0.07); }
+    .f-card:last-child      { border-bottom: none; }
+    .qs-steps   { grid-template-columns: 1fr; gap: 1rem; }
     .qs-steps::before { display: none; }
+    .qs-step p code { white-space: nowrap; font-size: 0.72rem; }
+  }
+  @media (min-width: 521px) and (max-width: 768px) {
+    .f-grid     { grid-template-columns: repeat(2, 1fr); border-radius: 10px; }
+    .f-card     { padding: 1.25rem 1rem; border-right: none; }
+    .f-card:nth-child(odd)  { border-right: 1px solid rgba(255,255,255,0.07); }
+    .f-card:nth-child(5)    { border-bottom: 1px solid rgba(255,255,255,0.07); }
+    .f-card:nth-child(6)    { border-bottom: none; }
   }
   @media (max-width: 1024px) and (min-width: 769px) {
     .f-grid { grid-template-columns: repeat(2, 1fr); }
@@ -484,9 +652,13 @@
       <a href="." class="nav-logo">
         <span class="nav-logo-brand">devo</span><span class="nav-logo-domain">.heyedu.dev</span>
       </a>
+      <div class="nav-sections">
+        <a href="#install" class="nav-link nav-section-link">Install</a>
+        <a href="#features" class="nav-link nav-section-link">Features</a>
+        <a href="#quick-start" class="nav-link nav-section-link">Quick Start</a>
+      </div>
       <div class="nav-links">
-        <a href="getting-started/quickstart/" class="nav-link">Docs</a>
-        <a href="commands/" class="nav-link">Commands</a>
+        <a href="getting-started/installation/" class="nav-link">Docs</a>
         <a href="https://github.com/edu526/devo-cli" class="nav-link" target="_blank" rel="noopener">GitHub</a>
         <a href="getting-started/quickstart/" class="nav-cta">Get Started →</a>
       </div>
@@ -494,7 +666,7 @@
   </nav>
 
   <!-- ── HERO ──────────────────────────────────────────────────── -->
-  <section class="devo-hero">
+  <section class="devo-hero" id="hero">
     <div class="hero-inner">
       <div class="hero-eyebrow">
         <span class="hero-eyebrow-dot"></span>
@@ -502,12 +674,22 @@
       </div>
 
       <p class="hero-brand">devo</p>
-      <h1 class="hero-h1">AI-powered developer workflows.<br>Git automation and AWS management<br>from your terminal.</h1>
+      <h1 class="hero-h1">Automate your developer workflow —<br>Git, AWS and cloud tools from your terminal.</h1>
 
-      <div class="hero-typewriter">
-        <span class="tw-prefix">$</span>
-        <span class="tw-text" id="tw-text"></span>
-        <span class="tw-cursor"></span>
+      <div class="hero-terminal">
+        <div class="ht-bar">
+          <span class="t-dot red"></span>
+          <span class="t-dot yellow"></span>
+          <span class="t-dot green"></span>
+          <span class="ht-title">bash</span>
+        </div>
+        <div class="ht-body">
+          <div class="ht-cmd-row">
+            <span class="ht-ps">$</span>
+            <span id="tw-text"></span><span class="tw-cursor"></span>
+          </div>
+          <div class="ht-output" id="tw-output"></div>
+        </div>
       </div>
 
       <div class="hero-actions">
@@ -525,11 +707,28 @@
         <span class="platform-badge">no Python required</span>
         <span class="platform-badge">self-updating</span>
       </div>
+
+      <div class="hero-stats">
+        <span class="stat-item">
+          <span class="stat-val" id="stat-stars">—</span>
+          <span class="stat-lbl">stars</span>
+        </span>
+        <span class="stat-sep">·</span>
+        <span class="stat-item">
+          <span class="stat-val" id="stat-dl">—</span>
+          <span class="stat-lbl">downloads</span>
+        </span>
+        <span class="stat-sep">·</span>
+        <span class="stat-item">
+          <span class="stat-val" id="stat-ver">—</span>
+          <span class="stat-lbl">latest</span>
+        </span>
+      </div>
     </div>
   </section>
 
   <!-- ── INSTALL ────────────────────────────────────────────────── -->
-  <section class="devo-install">
+  <section class="devo-install" id="install">
     <p class="section-label">Installation</p>
     <h2>Install in seconds</h2>
     <p class="sub">One command, any platform</p>
@@ -542,7 +741,7 @@
       </div>
       <div class="terminal-tabs">
         <button class="t-tab active" id="tab-unix-btn" onclick="iTab('unix')">Linux / macOS</button>
-        <button class="t-tab" id="tab-win-btn" onclick="iTab('win')">Windows (PowerShell)</button>
+        <button class="t-tab" id="tab-win-btn" onclick="iTab('win')">Windows<span class="t-tab-sub"> (PowerShell)</span></button>
       </div>
       <div class="terminal-body">
         <div id="tab-unix" class="t-panel active">
@@ -557,10 +756,11 @@
         </div>
       </div>
     </div>
+    <a href="getting-started/installation/" class="install-guide-link">Full installation guide →</a>
   </section>
 
   <!-- ── FEATURES ───────────────────────────────────────────────── -->
-  <section class="devo-features">
+  <section class="devo-features" id="features">
     <p class="section-label">Features</p>
     <h2>Everything you need</h2>
     <p class="sub">Built for teams that move fast</p>
@@ -570,8 +770,8 @@
         <div class="f-icon-wrap">
           <svg viewBox="0 0 24 24"><path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
         </div>
-        <h3>AI Commit Messages</h3>
-        <p>Generate conventional commit messages from staged changes using AWS Bedrock. No context switching.</p>
+        <h3>Auto Commit Messages</h3>
+        <p>Generate conventional commit messages from your staged changes automatically. No context switching.</p>
       </div>
 
       <div class="f-card">
@@ -611,17 +811,17 @@
           <svg viewBox="0 0 24 24"><path d="M5 3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H5z"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>
         </div>
         <h3>Standalone Binaries</h3>
-        <p>Single binary for Linux, macOS and Windows. Self-updating via <code style="font-family:'JetBrains Mono',monospace;font-size:0.76rem;background:rgba(0,188,212,0.08);border:1px solid rgba(0,188,212,0.15);padding:0.1rem 0.35rem;border-radius:4px;color:#79c0ff;">devo upgrade</code>.</p>
+        <p>Single binary for Linux, macOS and Windows. Self-updating via <code style="font-family:'JetBrains Mono',monospace;font-size:0.76rem;background:rgba(0,188,212,0.08);border:1px solid rgba(0,188,212,0.15);padding:0.1rem 0.35rem;border-radius:4px;color:#79c0ff;white-space:nowrap;">devo upgrade</code>.</p>
       </div>
 
     </div>
   </section>
 
   <!-- ── QUICK START ────────────────────────────────────────────── -->
-  <section class="devo-qs">
+  <section class="devo-qs" id="quick-start">
     <p class="section-label">Quick Start</p>
     <h2>Up and running in 3 steps</h2>
-    <p class="sub">From zero to first AI commit message in minutes</p>
+    <p class="sub">From zero to your first automated commit in minutes</p>
     <div class="qs-steps">
       <div class="qs-step">
         <div class="qs-num">1</div>
@@ -642,26 +842,106 @@
     <a href="getting-started/quickstart/" class="devo-btn devo-btn-primary">Read the Quick Start Guide →</a>
   </section>
 
+  <!-- ── FOOTER ────────────────────────────────────────────────── -->
+  <footer class="devo-footer">
+    <div class="footer-inner">
+      <div class="footer-links">
+        <a href="https://github.com/edu526/devo-cli" class="footer-link" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+          GitHub
+        </a>
+        <a href="getting-started/installation/" class="footer-link">
+          <svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          Docs
+        </a>
+        <a href="commands/" class="footer-link">
+          <svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          Commands
+        </a>
+        <a href="https://heyedu.dev" class="footer-link" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          heyedu.dev
+        </a>
+      </div>
+      <div class="footer-brand">
+        <a href="." class="footer-brand-logo">
+          <span class="fb-name">devo</span><span class="fb-domain">.heyedu.dev</span>
+        </a>
+        <p class="footer-copy">© 2026 Eduardo De la Cruz · MIT License</p>
+      </div>
+    </div>
+  </footer>
+
 </div>
 
 <script>
   /* ── Typewriter ─────────────────────────────────────────────── */
   var phrases = ['devo commit', 'devo aws-login', 'devo code-reviewer', 'devo upgrade --check', 'devo dynamodb export'];
-  var idx = 0, pos = 0, deleting = false;
+  var outputs = [
+    [{ t: 'Analyzing staged changes…', cls: '' }, { t: '✓ feat(auth): add SSO profile management', cls: 'ok' }],
+    [{ t: 'Checking profile: default…', cls: '' }, { t: '✓ Credentials refreshed (8h remaining)', cls: 'ok' }],
+    [{ t: 'Reviewing changes vs main…', cls: '' }, { t: '⚠ 1 medium issue · No security issues', cls: 'warn' }],
+    [{ t: '✓ Already on latest version', cls: 'ok' }],
+    [{ t: 'Scanning my-table…', cls: '' }, { t: '✓ 1,234 rows exported to data.csv', cls: 'ok' }]
+  ];
+  var idx = 0, pos = 0, deleting = false, showingOutput = false;
   var el = document.getElementById('tw-text');
+  var outEl = document.getElementById('tw-output');
+
+  function clearOutput() {
+    if (outEl) outEl.innerHTML = '';
+  }
+  function showOutput(lines) {
+    if (!outEl) return;
+    outEl.innerHTML = '';
+    lines.forEach(function(l, i) {
+      var d = document.createElement('div');
+      d.className = 'ht-out-line' + (l.cls ? ' ' + l.cls : '');
+      d.textContent = l.t;
+      outEl.appendChild(d);
+      setTimeout(function() { d.classList.add('show'); }, i * 220);
+    });
+  }
+
   function type() {
     var word = phrases[idx % phrases.length];
-    if (!deleting) {
-      el.textContent = word.slice(0, ++pos);
-      if (pos === word.length) { deleting = true; setTimeout(type, 2000); return; }
-      setTimeout(type, 80);
-    } else {
+    if (deleting) {
       el.textContent = word.slice(0, --pos);
-      if (pos === 0) { deleting = false; idx++; }
-      setTimeout(type, 40);
+      if (pos === 0) { deleting = false; idx++; clearOutput(); }
+      setTimeout(type, 35);
+    } else {
+      el.textContent = word.slice(0, ++pos);
+      if (pos === word.length) {
+        showOutput(outputs[idx % outputs.length]);
+        deleting = true;
+        setTimeout(type, 2800);
+        return;
+      }
+      setTimeout(type, 75);
     }
   }
   setTimeout(type, 600);
+
+  /* ── GitHub Stats ───────────────────────────────────────────── */
+  function fmtNum(n) { return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n); }
+  fetch('https://api.github.com/repos/edu526/devo-cli')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var s = d.stargazers_count;
+      if (s !== undefined) { var e = document.getElementById('stat-stars'); if (e) e.textContent = fmtNum(s); }
+    }).catch(function() {});
+  fetch('https://api.github.com/repos/edu526/devo-cli/releases')
+    .then(function(r) { return r.json(); })
+    .then(function(releases) {
+      if (!Array.isArray(releases) || !releases.length) return;
+      var total = releases.reduce(function(sum, rel) {
+        return sum + (rel.assets || []).reduce(function(s, a) { return s + (a.download_count || 0); }, 0);
+      }, 0);
+      var dlEl = document.getElementById('stat-dl');
+      if (dlEl) dlEl.textContent = fmtNum(total || 0);
+      var verEl = document.getElementById('stat-ver');
+      if (verEl && releases[0].tag_name) verEl.textContent = releases[0].tag_name;
+    }).catch(function() {});
 
   /* ── Install tabs ───────────────────────────────────────────── */
   function iTab(id) {
