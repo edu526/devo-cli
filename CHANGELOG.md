@@ -2,6 +2,36 @@
 
 <!-- version list -->
 
+## v3.7.0 (2026-03-18)
+
+### Bug Fixes
+
+- **install**: Improve output encoding handling and download progress reporting
+  ([`2edde89`](https://github.com/edu526/devo-cli/commit/2edde8916cce6b6906cd3a71c45e942e6399a669))
+
+- **install**: Improve output encoding, progress reporting, and Windows reliability
+  ([`c9a75dd`](https://github.com/edu526/devo-cli/commit/c9a75dd43219ac89d03e845fe55a3f1f6ade80f1))
+
+### Documentation
+
+- Align documentation branding with CLI identity
+  ([`5e8e278`](https://github.com/edu526/devo-cli/commit/5e8e2782c3c458c8c2d241aa4392f08a0a384bbb))
+
+- Consolidate agent instructions into AGENTS.md with multi-AI support
+  ([`6905792`](https://github.com/edu526/devo-cli/commit/69057923adf629edd6f37af7d39daacba97c7379))
+
+### Features
+
+- **telemetry**: Add PostHog anonymous usage tracking
+  ([`b889b8c`](https://github.com/edu526/devo-cli/commit/b889b8c61a691dd1cf553a84e3dda282659707fc))
+
+- **ui**: Add CLI branding, theme system, and spinners
+  ([`ccaf483`](https://github.com/edu526/devo-cli/commit/ccaf483fcce83602aeb38c0edc6f56270a43b1c3))
+
+- **upgrade**: Apply Rich branding and fix autocomplete tip
+  ([`020d8c1`](https://github.com/edu526/devo-cli/commit/020d8c14fef29ed0204cc81902c7eafb68a8d32a))
+
+
 ## v3.6.0 (2026-03-17)
 
 ### Bug Fixes
