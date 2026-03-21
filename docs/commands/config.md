@@ -322,5 +322,5 @@ devo config reset
 ## See Also
 
 - [Configuration Guide](../getting-started/configuration.md) - Detailed configuration documentation
-- [Environment Variables](../reference/environment.md) - Environment variable reference
+- [Configuration Reference](../reference/configuration.md#environment-variables) - Environment variable reference
 - [Troubleshooting](../reference/troubleshooting.md) - Common issues

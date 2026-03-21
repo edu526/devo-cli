@@ -1,5 +1,10 @@
 # Development Setup
 
+## Requirements
+
+- Python 3.12+
+- Git
+
 ## Setup
 
 ```bash

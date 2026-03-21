@@ -345,6 +345,6 @@ For AWS profile selection and credentials:
 ## See Also
 
 - [Configuration Reference](../reference/configuration.md) - Complete configuration options
-- [Environment Variables](../reference/environment.md) - Environment variable reference
+- [Configuration Reference](../reference/configuration.md#environment-variables) - Environment variable reference
 - [AWS Setup Guide](../guides/aws-setup.md) - AWS credentials setup
 - [Development Guide](../development/setup.md) - Development environment setup
