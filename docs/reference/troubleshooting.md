@@ -399,7 +399,7 @@ devo code-reviewer
    ```bash
    git clone https://github.com/edu526/devo-cli.git
    cd devo-cli
-   ./setup-dev.sh
+   make venv && source venv/bin/activate && make install
    make build-binary
    ```
 
@@ -484,5 +484,5 @@ If you can't resolve your issue:
 ## See Also
 
 - [Configuration Reference](configuration.md)
-- [Environment Variables](environment.md)
+- [Configuration Reference](configuration.md#environment-variables)
 - [AWS Setup Guide](../guides/aws-setup.md)

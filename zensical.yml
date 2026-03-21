@@ -94,7 +94,6 @@ nav:
       - Semantic Release: cicd/semantic-release.md
   - Reference:
       - Configuration Options: reference/configuration.md
-      - Environment Variables: reference/environment.md
       - Troubleshooting: reference/troubleshooting.md
 
 markdown_extensions:

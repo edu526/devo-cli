@@ -1,12 +1,10 @@
 # Configuration Reference
 
-Complete reference for all Devo CLI configuration options.
+Complete reference for all Devo CLI configuration options and environment variables.
 
-## Configuration File Location
+## Configuration File
 
-`~/.devo/config.json`
-
-## Configuration Structure
+Location: `~/.devo/config.json`
 
 ```json
 {
@@ -43,201 +41,48 @@ Complete reference for all Devo CLI configuration options.
 }
 ```
 
-## AWS Configuration
+### AWS
 
-### aws.region
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `aws.region` | string | `us-east-1` | AWS region for all operations |
+| `aws.account_id` | string | `123456789012` | 12-digit AWS account ID |
+| `aws.sso_url` | string | `https://my-org.awsapps.com/start` | AWS SSO start URL |
+| `aws.required_role` | string | `Developer` | Required IAM role name |
 
-- **Type:** string
-- **Default:** `us-east-1`
-- **Description:** AWS region for all AWS operations
-- **Valid Values:** Any valid AWS region (e.g., `us-east-1`, `us-west-2`, `eu-west-1`)
-- **Example:**
+### Bedrock
 
-  ```bash
-  devo config set aws.region us-west-2
-  ```
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `bedrock.model_id` | string | `us.anthropic.claude-3-7-sonnet-20250219-v1:0` | Primary model for AI features |
+| `bedrock.fallback_model_id` | string | `us.anthropic.claude-3-7-sonnet-20250219-v1:0` | Fallback model if primary fails |
 
-### aws.account_id
+Valid model IDs: `us.anthropic.claude-3-7-sonnet-20250219-v1:0`, `us.anthropic.claude-sonnet-4-20250514-v1:0`
 
-- **Type:** string
-- **Default:** `123456789012`
-- **Description:** AWS account ID for authentication
-- **Format:** 12-digit number
-- **Example:**
+### GitHub
 
-  ```bash
-  devo config set aws.account_id 123456789012
-  ```
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `github.repo_owner` | string | `edu526` | Repository owner or organization |
+| `github.repo_name` | string | `devo-cli` | Repository name |
 
-### aws.sso_url
+### CodeArtifact
 
-- **Type:** string
-- **Default:** `https://my-org.awsapps.com/start`
-- **Description:** AWS SSO start URL for authentication
-- **Format:** HTTPS URL
-- **Example:**
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `codeartifact.region` | string | Same as `aws.region` | AWS region for CodeArtifact |
+| `codeartifact.account_id` | string | Same as `aws.account_id` | AWS account ID |
+| `codeartifact.sso_url` | string | Same as `aws.sso_url` | SSO URL |
+| `codeartifact.required_role` | string | `Developer` | Required IAM role |
+| `codeartifact.domains` | array | `[]` | List of domain configs (`domain`, `repository`, `namespace`) |
 
-  ```bash
-  devo config set aws.sso_url https://your-org.awsapps.com/start
-  ```
+### Version Check
 
-### aws.required_role
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `version_check.enabled` | boolean | `true` | Enable automatic version checks on startup |
 
-- **Type:** string
-- **Default:** `Developer`
-- **Description:** Required IAM role name for operations
-- **Example:**
-
-  ```bash
-  devo config set aws.required_role Developer
-  ```
-
-## Bedrock Configuration
-
-### bedrock.model_id
-
-- **Type:** string
-- **Default:** `us.anthropic.claude-3-7-sonnet-20250219-v1:0`
-- **Description:** Primary AWS Bedrock model ID for AI features
-- **Valid Values:**
-  - `us.anthropic.claude-3-7-sonnet-20250219-v1:0` (Claude 3.7 Sonnet)
-  - `us.anthropic.claude-sonnet-4-20250514-v1:0` (Claude Sonnet 4)
-- **Example:**
-
-  ```bash
-  devo config set bedrock.model_id us.anthropic.claude-sonnet-4-20250514-v1:0
-  ```
-
-### bedrock.fallback_model_id
-
-- **Type:** string
-- **Default:** `us.anthropic.claude-3-7-sonnet-20250219-v1:0`
-- **Description:** Fallback model ID if primary model fails
-- **Example:**
-
-  ```bash
-  devo config set bedrock.fallback_model_id us.anthropic.claude-3-7-sonnet-20250219-v1:0
-  ```
-
-## GitHub Configuration
-
-### github.repo_owner
-
-- **Type:** string
-- **Default:** `edu526`
-- **Description:** GitHub repository owner or organization name
-- **Example:**
-
-  ```bash
-  devo config set github.repo_owner myorg
-  ```
-
-### github.repo_name
-
-- **Type:** string
-- **Default:** `devo-cli`
-- **Description:** GitHub repository name
-- **Example:**
-
-  ```bash
-  devo config set github.repo_name my-cli
-  ```
-
-## CodeArtifact Configuration
-
-### codeartifact.region
-
-- **Type:** string
-- **Default:** Same as `aws.region`
-- **Description:** AWS region for CodeArtifact operations
-- **Example:**
-
-  ```bash
-  devo config set codeartifact.region us-east-1
-  ```
-
-### codeartifact.account_id
-
-- **Type:** string
-- **Default:** Same as `aws.account_id`
-- **Description:** AWS account ID for CodeArtifact
-- **Example:**
-
-  ```bash
-  devo config set codeartifact.account_id 123456789012
-  ```
-
-### codeartifact.sso_url
-
-- **Type:** string
-- **Default:** Same as `aws.sso_url`
-- **Description:** AWS SSO URL for CodeArtifact authentication
-- **Example:**
-
-  ```bash
-  devo config set codeartifact.sso_url https://your-org.awsapps.com/start
-  ```
-
-### codeartifact.required_role
-
-- **Type:** string
-- **Default:** `Developer`
-- **Description:** Required IAM role for CodeArtifact operations
-- **Example:**
-
-  ```bash
-  devo config set codeartifact.required_role Developer
-  ```
-
-### codeartifact.domains
-
-- **Type:** array of objects
-- **Default:** `[]`
-- **Description:** List of CodeArtifact domain configurations
-- **Object Structure:**
-  - `domain` (string): Domain name
-  - `repository` (string): Repository name
-  - `namespace` (string): NPM namespace
-- **Example:**
-
-  ```json
-  {
-    "codeartifact": {
-      "domains": [
-        {
-          "domain": "my-domain",
-          "repository": "npm",
-          "namespace": "@myorg"
-        }
-      ]
-    }
-  }
-  ```
-
-## Version Check Configuration
-
-### version_check.enabled
-
-- **Type:** boolean
-- **Default:** `true`
-- **Description:** Enable automatic version checks on command execution
-- **Valid Values:** `true`, `false`
-- **Example:**
-
-  ```bash
-  devo config set version_check.enabled false
-  ```
-
-## Configuration Priority
-
-Configuration values are resolved in this order (later overrides earlier):
-
-1. Default values (hardcoded in code)
-2. Configuration file (`~/.devo/config.json`)
-3. Environment variables
-4. Command-line arguments
-
-## Default Configuration
+### Default Configuration
 
 ```json
 {
@@ -268,8 +113,90 @@ Configuration values are resolved in this order (later overrides earlier):
 }
 ```
 
+## Environment Variables
+
+Environment variables override configuration file values without modifying `~/.devo/config.json`.
+
+### AWS
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AWS_PROFILE` | `default` | AWS CLI profile (standard AWS SDK variable) |
+| `AWS_REGION` | `us-east-1` | AWS region for all SDK operations |
+
+### Bedrock
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BEDROCK_MODEL_ID` | `us.anthropic.claude-3-7-sonnet-20250219-v1:0` | Bedrock model for AI features |
+| `BEDROCK_REGION` | `us-east-1` | Region for Bedrock API calls (overrides `AWS_REGION` for Bedrock only) |
+
+### CodeArtifact
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CODEARTIFACT_REGION` | Same as `AWS_REGION` | Region for CodeArtifact operations |
+| `CODEARTIFACT_ACCOUNT_ID` | From config | AWS account ID for CodeArtifact |
+| `CODEARTIFACT_SSO_URL` | From config | SSO URL for CodeArtifact |
+| `CODEARTIFACT_REQUIRED_ROLE` | `Developer` | Required IAM role |
+
+### GitHub
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GITHUB_REPO_OWNER` | `edu526` | Repository owner or organization |
+| `GITHUB_REPO_NAME` | `devo-cli` | Repository name |
+
+### Other
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DEVO_SKIP_VERSION_CHECK` | `0` | Set to `1` to disable automatic version checks |
+
+### Usage Patterns
+
+**Single command override:**
+
+```bash
+AWS_REGION=eu-west-1 devo commit
+BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-20250514-v1:0 devo code-reviewer
+```
+
+**Session override:**
+
+```bash
+export AWS_PROFILE=production
+export AWS_REGION=us-west-2
+devo commit
+```
+
+**Using a `.env` file:**
+
+```bash
+# .env
+AWS_REGION=us-west-2
+AWS_PROFILE=production
+DEVO_SKIP_VERSION_CHECK=1
+```
+
+```bash
+set -a && source .env && set +a
+```
+
+!!! warning
+    Never commit `.env` files. Add to `.gitignore` and use `chmod 600 .env`.
+
+## Configuration Priority
+
+Values are resolved in this order (later overrides earlier):
+
+1. Default values (hardcoded)
+2. Configuration file (`~/.devo/config.json`)
+3. Environment variables
+4. Command-line arguments
+
 ## See Also
 
-- [Configuration Guide](../getting-started/configuration.md) - Configuration usage guide
-- [Environment Variables](environment.md) - Environment variable reference
-- [config command](../commands/config.md) - Configuration management command
+- [Configuration Guide](../getting-started/configuration.md) — commands, migration, troubleshooting
+- [config command](../commands/config.md) — manage configuration via CLI
+- [AWS Setup](../guides/aws-setup.md) — configure AWS credentials

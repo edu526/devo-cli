@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 160" width="800" height="160">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d1117;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#111820;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="cyan-glow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00BCD4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0097A7;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="160" fill="url(#bg)" rx="12"/>
+
+  <!-- Subtle border -->
+  <rect width="800" height="160" fill="none" stroke="#1e2d3d" stroke-width="1" rx="12"/>
+
+  <!-- Cyan accent bar -->
+  <rect x="0" y="0" width="4" height="160" fill="url(#cyan-glow)" rx="2"/>
+
+  <!-- Terminal icon — centered with "devo" text -->
+  <g transform="translate(28, 56)">
+    <rect width="44" height="40" rx="5" fill="none" stroke="#00BCD4" stroke-width="1.5" opacity="0.8"/>
+    <polyline points="9,13 18,20 9,27" fill="none" stroke="#00BCD4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
+    <line x1="22" y1="27" x2="35" y2="27" stroke="#00BCD4" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+  </g>
+
+  <!-- devo wordmark — closer to icon -->
+  <text x="78" y="96" font-family="'JetBrains Mono', 'Fira Code', 'Courier New', monospace" font-size="54" font-weight="700" fill="url(#cyan-glow)" filter="url(#glow)" letter-spacing="-1">devo</text>
+
+  <!-- Divider -->
+  <line x1="78" y1="110" x2="450" y2="110" stroke="#1e2d3d" stroke-width="1"/>
+
+  <!-- Tagline -->
+  <text x="79" y="128" font-family="'JetBrains Mono', 'Fira Code', 'Courier New', monospace" font-size="12.5" fill="#8b949e" letter-spacing="0.3">Git, AWS and cloud tools from your terminal</text>
+
+  <!-- Command pills — right side, more padding from edge -->
+  <g transform="translate(490, 42)">
+    <rect width="148" height="24" rx="5" fill="#0d2530" stroke="#00BCD4" stroke-width="0.8" opacity="0.95"/>
+    <text x="12" y="16" font-family="'JetBrains Mono', 'Fira Code', monospace" font-size="10.5" fill="#00BCD4">$ devo ssm connect</text>
+  </g>
+
+  <g transform="translate(490, 76)">
+    <rect width="132" height="24" rx="5" fill="#0d2530" stroke="#00BCD4" stroke-width="0.8" opacity="0.75"/>
+    <text x="12" y="16" font-family="'JetBrains Mono', 'Fira Code', monospace" font-size="10.5" fill="#00BCD4" opacity="0.9">$ devo aws-login</text>
+  </g>
+
+  <g transform="translate(490, 110)">
+    <rect width="168" height="24" rx="5" fill="#0d2530" stroke="#00BCD4" stroke-width="0.8" opacity="0.55"/>
+    <text x="12" y="16" font-family="'JetBrains Mono', 'Fira Code', monospace" font-size="10.5" fill="#00BCD4" opacity="0.7">$ devo dynamodb export</text>
+  </g>
+</svg>
