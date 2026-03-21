@@ -1,5 +1,7 @@
 # Commit Message Workflow
 
+> For the full command reference, see [devo commit](../commands/commit.md).
+
 Learn how to generate conventional commit messages using AI.
 
 ## Quick Start
@@ -39,11 +41,7 @@ git add .
 devo commit
 ```
 
-The AI analyzes your staged changes and generates a commit message following the format:
-
-```
-<type>(<scope>): <summary>
-```
+The AI analyzes your staged changes and generates a commit message. See [devo commit](../commands/commit.md) for the full format specification and list of commit types.
 
 ### 4. Review and Commit
 
@@ -52,50 +50,6 @@ The tool shows the generated message. You can:
 - Accept it and commit
 - Edit it before committing
 - Cancel and modify your changes
-
-## Commit Message Format
-
-### Structure
-
-```
-<type>(<scope>): <summary>
-
-[optional body]
-
-[optional footer]
-```
-
-### Commit Types
-
-| Type | When to Use |
-|------|-------------|
-| `feat` | New feature or functionality |
-| `fix` | Bug fix |
-| `chore` | Maintenance tasks (dependencies, config) |
-| `docs` | Documentation changes |
-| `refactor` | Code refactoring without behavior change |
-| `test` | Adding or modifying tests |
-| `style` | Code style changes (formatting, whitespace) |
-| `perf` | Performance improvements |
-
-### Examples
-
-```bash
-# New feature
-feat(auth): add JWT token validation
-
-# Bug fix
-fix(api): handle null response from database
-
-# Chore
-chore(deps): upgrade boto3 to 1.28.0
-
-# Documentation
-docs(readme): update installation instructions
-
-# Refactor
-refactor(utils): simplify error handling logic
-```
 
 ## Ticket Number Extraction
 
@@ -175,30 +129,7 @@ git push origin feature/XYZ-123-add-authentication
 4. **Keep changes focused**: Smaller commits get better messages
 5. **Edit if needed**: The generated message is a starting point
 
-## Configuration
-
-### Set Bedrock Model
-
-```bash
-export BEDROCK_MODEL_ID=us.anthropic.claude-3-7-sonnet-20250219-v1:0
-```
-
-### AWS Profile
-
-```bash
-devo --profile production commit
-```
-
 ## Troubleshooting
-
-### No Staged Changes
-
-Make sure you have staged changes:
-
-```bash
-git status
-git add <files>
-```
 
 ### Generic Commit Message
 
@@ -208,14 +139,7 @@ For better messages:
 - Stage related changes together
 - Make focused, single-purpose commits
 
-### Access Denied
-
-Verify AWS credentials and Bedrock permissions:
-
-```bash
-aws sts get-caller-identity
-aws bedrock list-foundation-models --region us-east-1
-```
+For errors related to missing staged changes or AWS credentials, see the [devo commit reference](../commands/commit.md).
 
 ## Next Steps
 

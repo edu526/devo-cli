@@ -156,6 +156,16 @@ devo dynamodb export TABLE_NAME [OPTIONS]
 | `--dry-run` | | Show what would be exported without exporting |
 | `--yes` | `-y` | Skip confirmation prompts |
 
+### list-templates
+
+List all saved export templates.
+
+```bash
+devo dynamodb list-templates
+```
+
+Shows all templates saved with `--save-template`.
+
 ## Examples
 
 ### Basic Export
@@ -173,127 +183,6 @@ devo dynamodb export my-table -o data/users.csv
 # Export with limit
 devo dynamodb export my-table -l 1000
 ```
-
-### Export with Filtering
-
-```bash
-# Simple filter (auto-detects indexes)
-devo dynamodb export my-table --filter "userId = user123"
-
-# Filter with status
-devo dynamodb export my-table --filter "status = 'active'"
-
-# Multiple conditions
-devo dynamodb export my-table --filter "status = 'active' AND createdAt > '2024-01-01'"
-
-# Export specific attributes
-devo dynamodb export my-table -a "id,name,email" --filter "status = 'active'"
-```
-
-### Advanced Filtering
-
-```bash
-# Manual filter values (when auto-detection doesn't work)
-devo dynamodb export my-table \
-  --filter "userId = :uid AND #status = :st" \
-  --filter-values '{":uid": {"S": "user123"}, ":st": {"S": "active"}}' \
-  --filter-names '{"#status": "status"}'
-
-# Force specific index
-devo dynamodb export my-table \
-  --filter "userId = user123" \
-  --index "userId-index"
-
-# Manual key condition (rarely needed)
-devo dynamodb export my-table \
-  --key-condition "userId = :uid" \
-  --filter-values '{":uid": {"S": "user123"}}'
-```
-
-### Export Modes
-
-```bash
-# Strings mode (default) - serialize complex types as JSON
-devo dynamodb export my-table -m strings
-
-# Flatten mode - flatten nested objects
-devo dynamodb export my-table -m flatten
-# address.city, address.state, etc.
-
-# Normalize mode - expand lists to multiple rows
-devo dynamodb export my-table -m normalize
-# One row per list item
-```
-
-### CSV Formatting
-
-```bash
-# Custom delimiter
-devo dynamodb export my-table --delimiter ";"
-
-# Custom null value
-devo dynamodb export my-table --null-value "N/A"
-
-# Boolean as 1/0
-devo dynamodb export my-table --bool-format numeric
-
-# Include metadata header
-devo dynamodb export my-table --metadata
-```
-
-### Compression
-
-```bash
-# Gzip compression
-devo dynamodb export my-table --compress gzip
-
-# ZIP compression
-devo dynamodb export my-table --compress zip -o data.csv
-# Creates data.csv.zip
-```
-
-### Parallel Scan
-
-```bash
-# Use parallel scan (faster for large tables)
-devo dynamodb export my-table --parallel-scan
-
-# Custom segment count
-devo dynamodb export my-table --parallel-scan --segments 8
-```
-
-### Templates
-
-```bash
-# Save export configuration as template
-devo dynamodb export my-table \
-  --filter "status = 'active'" \
-  -a "id,name,email" \
-  --save-template active-users
-
-# Use saved template
-devo dynamodb export my-table --use-template active-users
-
-# List templates
-devo dynamodb list-templates
-```
-
-### Dry Run
-
-```bash
-# Preview what would be exported
-devo dynamodb export my-table --filter "userId = user123" --dry-run
-```
-
-### list-templates
-
-List all saved export templates.
-
-```bash
-devo dynamodb list-templates
-```
-
-Shows all templates saved with `--save-template`.
 
 ## Query Optimization
 
@@ -382,7 +271,7 @@ devo dynamodb export my-table \
 
 ## See Also
 
-- [DynamoDB Export Guide](../guides/dynamodb-export.md) - Detailed export guide
+- [DynamoDB Export Guide](../guides/dynamodb-export.md)
 - [AWS Setup](../guides/aws-setup.md) - Configure AWS credentials
 - [devo config](config.md) - Manage templates
 

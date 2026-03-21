@@ -13,14 +13,8 @@ Devo CLI can be distributed as standalone binaries that don't require Python ins
 - Development dependencies installed
 
 ```bash
-# Setup development environment
-./setup-dev.sh
-
-# Or manually
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-pip install -e .
+# Setup development environment (see Development Setup for details)
+make venv && source venv/bin/activate && make install
 ```
 
 ## Quick Build
