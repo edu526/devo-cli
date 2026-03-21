@@ -61,15 +61,19 @@ devo ssm database connect [NAME] [OPTIONS]
 ```bash
 # Connect with menu selection
 devo ssm database connect
+# → Opens interactive menu; starts SSM tunnel and keeps it running in the foreground
 
 # Connect to specific database
 devo ssm database connect mydb
+# → Starts SSM port-forward tunnel; connect your DB client to mydb:<port>
 
 # Connect without hostname forwarding
 devo ssm database connect mydb --no-hosts
+# → Tunnel available at localhost:<port> instead of the configured hostname
 
 # Using shortcut
 devo ssm connect mydb
+# → Same as devo ssm database connect mydb
 ```
 
 #### database list
@@ -153,9 +157,11 @@ devo ssm instance shell NAME
 ```bash
 # Connect to specific instance
 devo ssm instance shell bastion-dev
+# → Opens an interactive SSM shell session on the EC2 instance
 
 # Using shortcut
 devo ssm shell bastion-dev
+# → Same as devo ssm instance shell bastion-dev
 ```
 
 #### instance list
@@ -233,6 +239,7 @@ Automatically assigns unique loopback IPs, updates /etc/hosts, and saves configu
 
 ```bash
 devo ssm hosts setup
+# → Writes loopback IP entries (e.g. 127.0.0.2 mydb.cluster-xyz...) to /etc/hosts for all configured databases
 ```
 
 #### hosts list

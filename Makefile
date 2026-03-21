@@ -1,34 +1,23 @@
-.PHONY: help install uninstall clean test lint format build publish refresh venv completion binary binary-all build-windows run docs
+.PHONY: help install clean test lint format build-binary build-windows venv docs
 
 # Default target
 help:
 	@echo "Devo CLI - Development Commands"
 	@echo ""
-	@echo "Setup & Installation:"
+	@echo "Setup:"
 	@echo "  make venv          - Create virtual environment"
 	@echo "  make install       - Install package with all dependencies (dev + docs)"
-	@echo "  make uninstall     - Uninstall the package"
-	@echo "  make refresh       - Refresh shell cache (use after install)"
-	@echo "  make completion    - Setup shell autocompletion"
 	@echo ""
 	@echo "Development:"
 	@echo "  make test          - Run tests"
 	@echo "  make lint          - Run linting (flake8)"
-	@echo "  make format        - Format code (isort)"
+	@echo "  make format        - Format code (isort + black)"
 	@echo "  make clean         - Clean build artifacts"
 	@echo ""
-	@echo "Build & Release:"
-	@echo "  make docs          - Serve documentation locally (mkdocs)"
-	@echo "  make build         - Build distribution packages"
-	@echo "  make binary        - Build standalone binary for current platform"
-	@echo "  make binary-all    - Build binary with platform-specific naming"
-	@echo "  make build-windows - Build Windows binary and create ZIP package"
-	@echo "  make release       - Create git tag and trigger CI/CD"
-	@echo ""
-	@echo "Usage:"
-	@echo "  make install       - First time setup"
-	@echo "  make completion    - Enable tab completion"
-	@echo "  make refresh       - After code changes"
+	@echo "Build:"
+	@echo "  make docs          - Serve documentation locally"
+	@echo "  make build-binary  - Build standalone binary for current platform"
+	@echo "  make build-windows - Build Windows binary (run on Windows only)"
 
 # Serve documentation locally
 docs:
@@ -79,22 +68,6 @@ install:
 	@echo "Installing package with all dependencies (dev + docs)..."
 	pip install -e ".[dev,docs]"
 	@echo "✓ Package and all dependencies installed"
-	@echo ""
-	@echo "Run 'make refresh' to update shell cache"
-
-# Uninstall package
-uninstall:
-	@echo "Uninstalling package..."
-	python -m pip uninstall devo-cli -y
-	@echo "✓ Package uninstalled"
-
-# Refresh shell command cache
-refresh:
-	@echo "Refreshing shell cache..."
-	@hash -r 2>/dev/null || rehash 2>/dev/null || true
-	@echo "✓ Shell cache refreshed"
-	@echo ""
-	@echo "Test with: devo --help"
 
 # Run tests
 test:
@@ -122,7 +95,7 @@ lint:
 
 # Format code
 format:
-	@echo "Formatting code with black and isort..."
+	@echo "Formatting code with isort and black..."
 	@if [ -f "venv/bin/black" ]; then \
 		venv/bin/isort cli_tool/ tests/ && \
 		venv/bin/black cli_tool/ tests/; \
@@ -147,106 +120,7 @@ clean:
 	find . -type f -name "*.pyc" -delete
 	@echo "✓ Build artifacts cleaned"
 
-# Build distribution packages
-build: clean
-	@echo "Building distribution packages..."
-	python -m build
-	@echo "✓ Build complete"
-	@echo ""
-	@echo "Packages created in dist/"
-
-# Build standalone binary
-binary:
-	@echo "Building standalone binary..."
-	@chmod +x build-binaries.sh
-	./build-binaries.sh
-	@echo "✓ Binary build complete"
-
-# Build binary with platform-specific naming
-binary-all:
-	@echo "Building platform-specific binary..."
-	@chmod +x build-all-platforms.sh
-	./build-all-platforms.sh
-	@echo "✓ Platform-specific binary build complete"
-
-# Build Windows binary with PyInstaller (onedir mode)
-# Build Windows binary with PyInstaller (onedir mode)
-build-windows:
-	@echo "Building Windows binary with PyInstaller..."
-	@echo "Note: Run this on Windows or use scripts/build-windows.bat"
-	@uname_out=$$(uname -s 2>/dev/null || echo unknown); \
-	case "$$uname_out" in \
-		MINGW*|MSYS*|CYGWIN*) \
-			cmd /c scripts\\build-windows.bat && \
-			powershell -ExecutionPolicy Bypass -File scripts\\package-windows.ps1; \
-			;; \
-		*) \
-			echo "Error: This target is for Windows only (detected $$uname_out)"; \
-			echo "On Windows, run:"; \
-			echo "  1. scripts\\build-windows.bat"; \
-			echo "  2. scripts\\package-windows.ps1"; \
-			echo "Or use: make build-binary for cross-platform build"; \
-			exit 1; \
-			;; \
-	esac
-release:
-	@echo "Creating release..."
-	@echo ""
-	@read -p "Enter version (e.g., v1.2.3): " version; \
-	if [ -z "$$version" ]; then \
-		echo "Error: Version is required"; \
-		exit 1; \
-	fi; \
-	echo "Creating tag $$version..."; \
-	git tag $$version; \
-	git push origin $$version; \
-	echo "✓ Tag $$version created and pushed"; \
-	echo ""; \
-	echo "CI/CD pipeline will build and publish automatically"
-
-# Quick development workflow
-dev: install refresh
-	@echo "✓ Development environment ready"
-	@echo ""
-	@echo "Try: devo --help"
-
-# Setup shell completion
-completion:
-	@echo "Setting up shell completion..."
-	@echo ""
-	@SHELL_NAME=$$(basename $$SHELL); \
-	if [ "$$SHELL_NAME" = "zsh" ]; then \
-		if ! grep -q "_DEVO_COMPLETE=zsh_source devo" ~/.zshrc 2>/dev/null; then \
-			echo 'eval "$$(_DEVO_COMPLETE=zsh_source devo)"' >> ~/.zshrc; \
-			echo "✓ Added completion to ~/.zshrc"; \
-		else \
-			echo "✓ Completion already configured in ~/.zshrc"; \
-		fi; \
-		echo ""; \
-		echo "Run this to enable completion in current session:"; \
-		echo '  eval "$$(_DEVO_COMPLETE=zsh_source devo)"'; \
-		echo ""; \
-		echo "Or restart your terminal"; \
-	elif [ "$$SHELL_NAME" = "bash" ]; then \
-		if ! grep -q "_DEVO_COMPLETE=bash_source devo" ~/.bashrc 2>/dev/null; then \
-			echo 'eval "$$(_DEVO_COMPLETE=bash_source devo)"' >> ~/.bashrc; \
-			echo "✓ Added completion to ~/.bashrc"; \
-		else \
-			echo "✓ Completion already configured in ~/.bashrc"; \
-		fi; \
-		echo ""; \
-		echo "Run this to enable completion in current session:"; \
-		echo '  eval "$$(_DEVO_COMPLETE=bash_source devo)"'; \
-		echo ""; \
-		echo "Or restart your terminal"; \
-	else \
-		echo "⚠️  Shell $$SHELL_NAME not supported"; \
-		echo "Supported shells: bash, zsh"; \
-		echo ""; \
-		echo "Run 'devo completion' for manual instructions"; \
-	fi
-
-# Build standalone binary
+# Build standalone binary for current platform
 build-binary:
 	@echo "Building standalone binary..."
 	@if [ ! -f "venv/bin/activate" ]; then \
@@ -258,9 +132,20 @@ build-binary:
 	@echo ""
 	@echo "Test with: ./dist/devo --version"
 
-# Build binary with platform-specific naming
-build-all: build-binary
-	@echo "Creating platform-specific release..."
-	@bash scripts/build.sh --release
-	@echo "✓ Release ready"
-
+# Build Windows binary with PyInstaller (run on Windows only)
+build-windows:
+	@echo "Building Windows binary with PyInstaller..."
+	@uname_out=$$(uname -s 2>/dev/null || echo unknown); \
+	case "$$uname_out" in \
+		MINGW*|MSYS*|CYGWIN*) \
+			cmd /c scripts\\build-windows.bat && \
+			powershell -ExecutionPolicy Bypass -File scripts\\package-windows.ps1; \
+			;; \
+		*) \
+			echo "Error: This target is for Windows only (detected $$uname_out)"; \
+			echo "On Windows, run:"; \
+			echo "  1. scripts\\build-windows.bat"; \
+			echo "  2. scripts\\package-windows.ps1"; \
+			exit 1; \
+			;; \
+	esac

@@ -21,6 +21,8 @@ devo commit [OPTIONS]
 
 **Use when:** You have staged changes and want a properly formatted commit message.
 
+(see also: [Commit Workflow](../guides/commit-workflow.md))
+
 ### [devo code-reviewer](code-reviewer.md)
 
 Perform AI-driven code review with security and quality analysis.
@@ -38,6 +40,8 @@ devo code-reviewer [OPTIONS]
 - `-f, --full-prompt` - Use full detailed prompt (default: optimized short prompt)
 
 **Use when:** You want to review code changes before committing or merging.
+
+(see also: [Code Review Workflow](../guides/code-review-workflow.md))
 
 ### [devo config](config.md)
 
@@ -124,6 +128,8 @@ devo ssm <subcommand> [OPTIONS]
 
 **Use when:** You need to connect to RDS, ElastiCache, or other AWS resources through a bastion instance.
 
+(see also: [SSM Port Forwarding Guide](../guides/ssm-port-forwarding.md))
+
 ### [devo dynamodb](dynamodb.md)
 
 DynamoDB table management and data export utilities.
@@ -140,6 +146,8 @@ devo dynamodb <subcommand> [OPTIONS]
 - `list-templates` - List all saved export templates
 
 **Use when:** You need to list, describe, or export DynamoDB tables.
+
+(see also: [DynamoDB Export Guide](../guides/dynamodb-export.md))
 
 ### [devo eventbridge](eventbridge.md)
 

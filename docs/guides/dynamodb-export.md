@@ -1,5 +1,7 @@
 # DynamoDB Export Guide
 
+> For the full command reference, see [devo dynamodb](../commands/dynamodb.md).
+
 Learn how to export DynamoDB table data to various formats for backup, analysis, and migration.
 
 ## Quick Start
@@ -235,79 +237,6 @@ View all saved templates:
 
 ```bash
 devo dynamodb list-templates
-```
-
-## Filtering Data
-
-### Simple Filter
-
-```bash
-devo dynamodb export users \
-  --filter "age > :age" \
-  --filter-values '{":age": {"N": "18"}}'
-```
-
-### Multiple Conditions
-
-```bash
-devo dynamodb export users \
-  --filter "status = :s AND age > :age" \
-  --filter-values '{":s": {"S": "active"}, ":age": {"N": "18"}}'
-```
-
-### Query with Key Condition
-
-```bash
-devo dynamodb export orders \
-  --key-condition "userId = :uid AND orderDate > :date" \
-  --filter-values '{":uid": {"S": "user123"}, ":date": {"S": "2024-01-01"}}'
-```
-
-### Using Index
-
-```bash
-devo dynamodb export users \
-  --index email-index \
-  --key-condition "email = :email" \
-  --filter-values '{":email": {"S": "john@example.com"}}'
-```
-
-## Customizing Output
-
-### Select Specific Attributes
-
-```bash
-devo dynamodb export users -a "id,name,email"
-```
-
-### Custom Delimiter
-
-```bash
-devo dynamodb export users --delimiter "|"
-```
-
-### Boolean Format
-
-```bash
-# Numeric format (1/0)
-devo dynamodb export users --bool-format numeric
-
-# Uppercase (True/False)
-devo dynamodb export users --bool-format uppercase
-```
-
-### Null Values
-
-```bash
-# Use "NULL" for null values
-devo dynamodb export users --null-value "NULL"
-```
-
-### Include Metadata
-
-```bash
-# Add metadata header with export info
-devo dynamodb export users --metadata
 ```
 
 ## Team Workflows

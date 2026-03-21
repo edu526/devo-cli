@@ -33,9 +33,11 @@ If a default profile was previously configured via `set-default` and the logged-
 ```bash
 # Interactive profile selection
 devo aws-login login
+# → Opens interactive menu to select a profile, then launches browser for SSO
 
 # Login to specific profile
 devo aws-login login production
+# → Opens browser for SSO authentication, caches credentials on success
 ```
 
 ### list
@@ -92,9 +94,11 @@ Uses AWS CLI's SSO wizard to configure a new profile. The wizard will:
 ```bash
 # Interactive configuration
 devo aws-login configure
+# → Runs AWS CLI SSO wizard; prompts for SSO URL, region, account, and role
 
 # Configure specific profile
 devo aws-login configure production
+# → Same wizard pre-filled with the "production" profile name
 ```
 
 ### refresh
@@ -113,6 +117,7 @@ If a default profile was previously configured via `set-default`, the `[default]
 
 ```bash
 devo aws-login refresh
+# → Refreshes all expired/expiring profiles; opens browser only if SSO token has also expired
 ```
 
 ### set-default

@@ -61,19 +61,19 @@ nav:
       - Quick Start: getting-started/quickstart.md
       - Installation: getting-started/installation.md
       - Configuration: getting-started/configuration.md
-  - Commands:
+  - Command Reference:
       - Overview: commands/index.md
+      - ssm: commands/ssm.md
       - aws-login: commands/aws-login.md
+      - dynamodb: commands/dynamodb.md
+      - commit: commands/commit.md
       - code-reviewer: commands/code-reviewer.md
       - codeartifact-login: commands/codeartifact.md
-      - commit: commands/commit.md
       - completion: commands/completion.md
       - config: commands/config.md
-      - dynamodb: commands/dynamodb.md
       - eventbridge: commands/eventbridge.md
-      - ssm: commands/ssm.md
       - upgrade: commands/upgrade.md
-  - Guides:
+  - How-To Guides:
       - Overview: guides/index.md
       - Getting Started:
           - AWS Setup: guides/aws-setup.md
@@ -90,9 +90,7 @@ nav:
       - Setup: development/setup.md
       - Contributing: development/contributing.md
       - Building Binaries: development/building.md
-  - CI/CD:
-      - Overview: cicd/overview.md
-      - GitHub Actions: cicd/github-actions.md
+      - CI/CD: cicd/overview.md
       - Semantic Release: cicd/semantic-release.md
   - Reference:
       - Configuration Options: reference/configuration.md

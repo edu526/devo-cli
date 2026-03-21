@@ -2,25 +2,15 @@
 
 Thank you for your interest in contributing! This guide will help you get started.
 
-## Quick Start for New Contributors
-
-### One Command Setup
+## Quick Start
 
 ```bash
-# Clone and setup everything
 git clone <repository-url>
 cd devo-cli
-chmod +x setup-dev.sh
-./setup-dev.sh
+make venv
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+make install
 ```
-
-That's it! The script does everything:
-
-- ✅ Creates virtual environment
-- ✅ Installs CLI in development mode
-- ✅ Installs dependencies
-- ✅ Sets up autocompletion
-- ✅ Refreshes shell cache
 
 ### Verify Setup
 
@@ -95,6 +85,8 @@ Commit format: `<type>(<scope>): <ticket> <summary>`
 
 Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `style`, `perf`
 
+See [Semantic Release](../cicd/semantic-release.md) for how commit types map to version bumps.
+
 ### 5. Push and Create PR
 
 ```bash
@@ -105,7 +97,7 @@ devo commit --pull-request  # Opens PR in browser
 ## Code Style
 
 - Line length: 150 characters
-- Indentation: 2 spaces
+- Indentation: 4 spaces
 - All code in English
 - Follow PEP 8
 
@@ -113,13 +105,13 @@ devo commit --pull-request  # Opens PR in browser
 
 ```python
 class MyCommand:
-  """Command description."""
+    """Command description."""
 
-  DEFAULT_VALUE = "value"
+    DEFAULT_VALUE = "value"
 
-  def execute(self, param: str) -> str:
-    """Execute the command."""
-    return self._process(param)
+    def execute(self, param: str) -> str:
+        """Execute the command."""
+        return self._process(param)
 ```
 
 ## Available Commands
@@ -127,26 +119,11 @@ class MyCommand:
 ```bash
 make help          # Show all commands
 make install       # Install in editable mode
-make refresh       # Refresh shell cache
-make completion    # Setup autocompletion
 make test          # Run tests
 make lint          # Check code style
-make format        # Format code
-make clean         # Clean artifacts
-make build         # Build package
-```
-
-## Testing
-
-```bash
-# Run all tests
-make test
-
-# Run specific test
-pytest tests/test_commit_prompt.py -v
-
-# With coverage
-pytest --cov=cli_tool tests/
+make format        # Format code (isort + black)
+make clean         # Clean build artifacts
+make build-binary  # Build standalone binary
 ```
 
 ## Troubleshooting
@@ -180,8 +157,9 @@ devo --profile my-profile <command>
 
 ## Resources
 
-- [Development Guide](setup.md)
+- [Development Setup](setup.md) — environment setup
+- [CI/CD Overview](../cicd/overview.md) — how tests and releases work
+- [Semantic Release](../cicd/semantic-release.md) — commit types and versioning
 - [AWS Profile Support](../guides/aws-setup.md)
-- [CI/CD Pipeline](../cicd/overview.md)
 
 Thank you for contributing! 🎉
