@@ -8,9 +8,12 @@ import pytest
 from cli_tool.commands.ssm.commands.database.connect import (
     ForwarderRegistry,
     _connect_databases,
+    _databases_needing_setup,
     _find_free_port,
     _is_port_bindable,
     _is_wildcard_bind_blocking,
+    _is_windows_admin,
+    _maybe_run_auto_setup,
     _process_db_for_table,
     _run_attempt,
     _run_connection_loop,
@@ -191,6 +194,168 @@ class TestIsWildcardBindBlocking:
             mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
             assert _is_wildcard_bind_blocking(5432) is False
         assert len(bind_calls) == 2  # both probes attempted before deciding
+
+
+# ---------------------------------------------------------------------------
+# _databases_needing_setup
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestDatabasesNeedingSetup:
+    def test_returns_db_with_default_local_address(self):
+        databases = {"db1": _make_db_config(local_address="127.0.0.1")}
+        assert _databases_needing_setup(databases, set()) == ["db1"]
+
+    def test_returns_db_missing_from_managed_hosts(self):
+        databases = {"db1": _make_db_config(local_address="127.0.0.2", host="db.example.com")}
+        assert _databases_needing_setup(databases, set()) == ["db1"]
+
+    def test_skips_db_that_is_fully_set_up(self):
+        databases = {"db1": _make_db_config(local_address="127.0.0.2", host="db.example.com")}
+        assert _databases_needing_setup(databases, {"db.example.com"}) == []
+
+    def test_returns_only_missing_dbs_in_mixed_set(self):
+        databases = {
+            "ready": _make_db_config(local_address="127.0.0.2", host="ready.example.com"),
+            "missing-host": _make_db_config(local_address="127.0.0.3", host="missing.example.com"),
+            "default-addr": _make_db_config(local_address="127.0.0.1", host="default.example.com"),
+        }
+        result = _databases_needing_setup(databases, {"ready.example.com"})
+        assert sorted(result) == ["default-addr", "missing-host"]
+
+
+# ---------------------------------------------------------------------------
+# _maybe_run_auto_setup
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestMaybeRunAutoSetup:
+    def test_skipped_when_no_auto_setup_flag_is_true(self):
+        databases = {"db1": _make_db_config(local_address="127.0.0.1")}
+        with patch(f"{_MODULE}.click.confirm") as mock_confirm:
+            result = _maybe_run_auto_setup(databases, set(), no_auto_setup=True)
+        assert result == set()
+        mock_confirm.assert_not_called()
+
+    def test_skipped_when_stdin_is_not_a_tty(self):
+        databases = {"db1": _make_db_config(local_address="127.0.0.1")}
+        with patch(f"{_MODULE}.sys.stdin.isatty", return_value=False):
+            with patch(f"{_MODULE}.click.confirm") as mock_confirm:
+                result = _maybe_run_auto_setup(databases, set(), no_auto_setup=False)
+        assert result == set()
+        mock_confirm.assert_not_called()
+
+    def test_skipped_when_nothing_needs_setup(self):
+        databases = {"db1": _make_db_config(local_address="127.0.0.2", host="db.example.com")}
+        with patch(f"{_MODULE}.sys.stdin.isatty", return_value=True):
+            with patch(f"{_MODULE}.click.confirm") as mock_confirm:
+                result = _maybe_run_auto_setup(databases, {"db.example.com"}, no_auto_setup=False)
+        assert result == {"db.example.com"}
+        mock_confirm.assert_not_called()
+
+    def test_runs_setup_when_user_accepts(self):
+        databases = {"db1": _make_db_config(local_address="127.0.0.1", host="db.example.com")}
+        refreshed_db = _make_db_config(local_address="127.0.0.2", host="db.example.com")
+        with patch(f"{_MODULE}.sys.stdin.isatty", return_value=True):
+            with patch(f"{_MODULE}.click.confirm", return_value=True):
+                with patch("cli_tool.commands.ssm.commands.hosts.setup.setup_databases", return_value=(["db1"], [])) as mock_setup:
+                    with patch(f"{_MODULE}.SSMConfigManager") as mock_cm_cls:
+                        mock_cm_cls.return_value.list_databases.return_value = {"db1": refreshed_db}
+                        with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
+                            mock_hm_cls.return_value.get_managed_entries.return_value = [("127.0.0.2", "db.example.com")]
+                            result = _maybe_run_auto_setup(databases, set(), no_auto_setup=False)
+        mock_setup.assert_called_once_with(["db1"])
+        assert result == {"db.example.com"}
+        # Caller's db_config dict was updated in place with refreshed values
+        assert databases["db1"]["local_address"] == "127.0.0.2"
+
+    def test_skips_setup_when_user_declines(self):
+        databases = {"db1": _make_db_config(local_address="127.0.0.1", host="db.example.com")}
+        with patch(f"{_MODULE}.sys.stdin.isatty", return_value=True):
+            with patch(f"{_MODULE}.click.confirm", return_value=False):
+                with patch("cli_tool.commands.ssm.commands.hosts.setup.setup_databases") as mock_setup:
+                    result = _maybe_run_auto_setup(databases, set(), no_auto_setup=False)
+        mock_setup.assert_not_called()
+        assert result == set()
+
+    def test_handles_user_abort_gracefully(self):
+        databases = {"db1": _make_db_config(local_address="127.0.0.1", host="db.example.com")}
+        with patch(f"{_MODULE}.sys.stdin.isatty", return_value=True):
+            with patch(f"{_MODULE}.click.confirm", side_effect=click.Abort()):
+                with patch("cli_tool.commands.ssm.commands.hosts.setup.setup_databases") as mock_setup:
+                    result = _maybe_run_auto_setup(databases, set(), no_auto_setup=False)
+        mock_setup.assert_not_called()
+        assert result == set()
+
+    def test_windows_non_admin_skips_prompt_and_warns(self):
+        """Fix A: on Windows without elevation, do not prompt, print actionable hint."""
+        databases = {"db1": _make_db_config(local_address="127.0.0.1", host="db.example.com")}
+        with patch(f"{_MODULE}.sys.stdin.isatty", return_value=True):
+            with patch(f"{_MODULE}._is_windows_admin", return_value=False):
+                with patch(f"{_MODULE}.click.confirm") as mock_confirm:
+                    with patch(f"{_MODULE}.console") as mock_console:
+                        with patch("cli_tool.commands.ssm.commands.hosts.setup.setup_databases") as mock_setup:
+                            result = _maybe_run_auto_setup(databases, set(), no_auto_setup=False)
+        mock_confirm.assert_not_called()
+        mock_setup.assert_not_called()
+        assert result == set()
+        printed = " ".join(call.args[0] for call in mock_console.print.call_args_list if call.args)
+        assert "Administrator" in printed
+
+    def test_failure_summary_printed_when_setup_partially_fails(self):
+        """Fix C: when setup_databases returns failures, a consolidated red line is printed."""
+        databases = {
+            "ok": _make_db_config(local_address="127.0.0.1", host="ok.example.com"),
+            "bad": _make_db_config(local_address="127.0.0.1", host="bad.example.com"),
+        }
+        with patch(f"{_MODULE}.sys.stdin.isatty", return_value=True):
+            with patch(f"{_MODULE}._is_windows_admin", return_value=True):
+                with patch(f"{_MODULE}.click.confirm", return_value=True):
+                    with patch("cli_tool.commands.ssm.commands.hosts.setup.setup_databases", return_value=(["ok"], ["bad"])):
+                        with patch(f"{_MODULE}.SSMConfigManager") as mock_cm_cls:
+                            mock_cm_cls.return_value.list_databases.return_value = databases
+                            with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
+                                mock_hm_cls.return_value.get_managed_entries.return_value = [("127.0.0.2", "ok.example.com")]
+                                with patch(f"{_MODULE}.console") as mock_console:
+                                    _maybe_run_auto_setup(databases, set(), no_auto_setup=False)
+        printed = " ".join(call.args[0] for call in mock_console.print.call_args_list if call.args)
+        assert "Setup failed for 1" in printed
+        assert "bad" in printed
+
+
+# ---------------------------------------------------------------------------
+# _is_windows_admin
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestIsWindowsAdmin:
+    def test_returns_true_on_non_windows(self):
+        with patch(f"{_MODULE}.sys.platform", "linux"):
+            assert _is_windows_admin() is True
+
+    def test_returns_true_on_windows_when_elevated(self):
+        fake_ctypes = MagicMock()
+        fake_ctypes.windll.shell32.IsUserAnAdmin.return_value = 1
+        with patch(f"{_MODULE}.sys.platform", "win32"):
+            with patch.dict("sys.modules", {"ctypes": fake_ctypes}):
+                assert _is_windows_admin() is True
+
+    def test_returns_false_on_windows_when_not_elevated(self):
+        fake_ctypes = MagicMock()
+        fake_ctypes.windll.shell32.IsUserAnAdmin.return_value = 0
+        with patch(f"{_MODULE}.sys.platform", "win32"):
+            with patch.dict("sys.modules", {"ctypes": fake_ctypes}):
+                assert _is_windows_admin() is False
+
+    def test_returns_false_on_windows_when_check_raises(self):
+        fake_ctypes = MagicMock()
+        fake_ctypes.windll.shell32.IsUserAnAdmin.side_effect = OSError("boom")
+        with patch(f"{_MODULE}.sys.platform", "win32"):
+            with patch.dict("sys.modules", {"ctypes": fake_ctypes}):
+                assert _is_windows_admin() is False
 
 
 # ---------------------------------------------------------------------------
@@ -671,7 +836,7 @@ class TestConnectDatabaseCommand:
             with patch(f"{_MODULE}._show_database_selection", return_value="ALL"):
                 with patch(f"{_MODULE}._connect_databases") as mock_conn:
                     runner.invoke(connect_database, [])
-        mock_conn.assert_called_once_with(databases, False)
+        mock_conn.assert_called_once_with(databases, False, False)
 
     def test_connect_all_flag_skips_menu(self):
         from click.testing import CliRunner
@@ -683,7 +848,7 @@ class TestConnectDatabaseCommand:
             with patch(f"{_MODULE}._connect_databases") as mock_conn:
                 with patch(f"{_MODULE}._show_database_selection") as mock_sel:
                     runner.invoke(connect_database, ["--all"])
-        mock_conn.assert_called_once_with(databases, False)
+        mock_conn.assert_called_once_with(databases, False, False)
         mock_sel.assert_not_called()
 
     def test_connect_all_flag_with_no_hosts(self):
@@ -695,7 +860,7 @@ class TestConnectDatabaseCommand:
             mock_cm_cls.return_value.list_databases.return_value = databases
             with patch(f"{_MODULE}._connect_databases") as mock_conn:
                 runner.invoke(connect_database, ["--all", "--no-hosts"])
-        mock_conn.assert_called_once_with(databases, True)
+        mock_conn.assert_called_once_with(databases, True, False)
 
     def test_single_db_by_name_calls_connect_databases_with_one_item(self):
         from click.testing import CliRunner
@@ -708,7 +873,7 @@ class TestConnectDatabaseCommand:
             mock_cm.get_database.return_value = db_config
             with patch(f"{_MODULE}._connect_databases") as mock_conn:
                 runner.invoke(connect_database, ["db1"])
-        mock_conn.assert_called_once_with({"db1": db_config}, False)
+        mock_conn.assert_called_once_with({"db1": db_config}, False, False)
 
     def test_no_hosts_flag_passed_for_single_db(self):
         from click.testing import CliRunner
@@ -721,7 +886,7 @@ class TestConnectDatabaseCommand:
             mock_cm.get_database.return_value = db_config
             with patch(f"{_MODULE}._connect_databases") as mock_conn:
                 runner.invoke(connect_database, ["db1", "--no-hosts"])
-        mock_conn.assert_called_once_with({"db1": db_config}, True)
+        mock_conn.assert_called_once_with({"db1": db_config}, True, False)
 
     def test_selection_name_used_for_db_lookup(self):
         from click.testing import CliRunner

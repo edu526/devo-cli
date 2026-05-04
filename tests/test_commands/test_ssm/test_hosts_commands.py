@@ -324,6 +324,47 @@ def test_hosts_setup_uses_port_from_db_config_when_local_port_absent(runner, moc
     mock_hosts_manager.add_entry.assert_called_once()
 
 
+@pytest.mark.unit
+def test_hosts_setup_does_not_persist_local_address_when_add_entry_fails(mocker, mock_ssm_config, mock_hosts_manager):
+    """Fix B: a PermissionError on add_entry must NOT leave a half-written config."""
+    from cli_tool.commands.ssm.commands.hosts.setup import setup_databases
+
+    mock_ssm_config["ssm"]["databases"] = {
+        "db1": {"host": "db1.example.com", "port": 5432, "local_address": "127.0.0.1", "local_port": 15432},
+    }
+    mock_hosts_manager.get_next_loopback_ip.return_value = "127.0.0.2"
+    mock_hosts_manager.add_entry.side_effect = PermissionError("denied")
+    save_spy = mocker.patch("cli_tool.commands.ssm.core.config.save_config")
+
+    succeeded, failed = setup_databases()
+
+    assert succeeded == []
+    assert failed == ["db1"]
+    save_spy.assert_not_called()
+    # Original config dict was not mutated either
+    assert mock_ssm_config["ssm"]["databases"]["db1"]["local_address"] == "127.0.0.1"
+
+
+@pytest.mark.unit
+def test_hosts_setup_does_not_persist_local_port_when_add_entry_fails(mocker, mock_ssm_config, mock_hosts_manager):
+    """Fix B: port-conflict reassignment must not be persisted if add_entry fails."""
+    from cli_tool.commands.ssm.commands.hosts.setup import setup_databases
+
+    mock_ssm_config["ssm"]["databases"] = {
+        "db1": {"host": "db1.example.com", "port": 5432, "local_address": "127.0.0.2", "local_port": 15432},
+        "db2": {"host": "db2.example.com", "port": 5433, "local_address": "127.0.0.3", "local_port": 15432},
+    }
+    # Both add_entry calls fail
+    mock_hosts_manager.add_entry.side_effect = PermissionError("denied")
+    save_spy = mocker.patch("cli_tool.commands.ssm.core.config.save_config")
+
+    succeeded, failed = setup_databases()
+
+    assert succeeded == []
+    assert failed == ["db1", "db2"]
+    save_spy.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # hosts_clear
 # ---------------------------------------------------------------------------

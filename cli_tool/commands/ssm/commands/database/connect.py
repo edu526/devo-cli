@@ -1,6 +1,7 @@
 """Database connect command."""
 
 import socket
+import sys
 import threading
 import time
 from typing import Optional
@@ -319,6 +320,84 @@ def _build_threads(
     return threads, port_conflicts, missing_hosts
 
 
+def _databases_needing_setup(databases: dict, managed_hosts: set) -> list[str]:
+    """Return names of DBs that lack hostname forwarding config or /etc/hosts entry."""
+    needs = []
+    for name, cfg in databases.items():
+        local_address = cfg.get("local_address", "127.0.0.1")
+        if local_address == "127.0.0.1":
+            needs.append(name)
+        elif cfg["host"] not in managed_hosts:
+            needs.append(name)
+    return needs
+
+
+def _is_windows_admin() -> bool:
+    """Return True if the current Windows process is elevated.
+
+    Non-Windows always returns True: on Linux/macOS the hosts file write is done
+    via `sudo`, which prompts the user — no pre-check needed.
+    """
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:
+        return False
+
+
+def _maybe_run_auto_setup(databases: dict, managed_hosts: set, no_auto_setup: bool) -> set:
+    """Offer to run hosts setup for DBs missing config; return the (possibly refreshed) managed_hosts."""
+    if no_auto_setup:
+        return managed_hosts
+    if not sys.stdin.isatty():
+        return managed_hosts
+
+    pending = _databases_needing_setup(databases, managed_hosts)
+    if not pending:
+        return managed_hosts
+
+    # On Windows we need elevation upfront; warn instead of prompting a doomed run.
+    if not _is_windows_admin():
+        console.print(f"\n[yellow]⚠ {len(pending)} database(s) need hostname forwarding setup:[/yellow] {', '.join(pending)}")
+        console.print(
+            "[dim]Setup requires Administrator on Windows. Re-open PowerShell as Administrator "
+            "and run `devo ssm connect` (or `devo ssm hosts setup`) again.[/dim]\n"
+        )
+        return managed_hosts
+
+    sudo_note = "(requires Administrator)" if sys.platform == "win32" else "(requires sudo)"
+    console.print(f"\n[yellow]⚠ {len(pending)} database(s) need hostname forwarding setup:[/yellow] {', '.join(pending)}")
+    console.print("[dim]Setup will assign loopback IPs and add entries to /etc/hosts " + sudo_note + ".[/dim]")
+
+    try:
+        proceed = click.confirm("Run setup now?", default=True)
+    except click.Abort:
+        return managed_hosts
+
+    if not proceed:
+        return managed_hosts
+
+    # Local import avoids a circular import at module load time
+    from cli_tool.commands.ssm.commands.hosts.setup import setup_databases
+
+    succeeded, failed = setup_databases(pending)
+    if succeeded:
+        # Reload managed hosts and the live db_config dicts so the caller sees fresh values
+        refreshed = SSMConfigManager().list_databases()
+        for name in succeeded:
+            if name in databases and name in refreshed:
+                databases[name].update(refreshed[name])
+        managed_hosts = {host for _, host in HostsManager().get_managed_entries()}
+    if failed:
+        hint = "re-open PowerShell as Administrator" if sys.platform == "win32" else "re-run with sudo"
+        console.print(f"[red]✗ Setup failed for {len(failed)} database(s) ({', '.join(failed)}) — {hint} and retry.[/red]")
+    console.print()
+    return managed_hosts
+
+
 def _print_no_connect_tip(port_conflicts: int, missing_hosts: int) -> None:
     console.print("[yellow]No databases to connect[/yellow]")
     if port_conflicts > 0:
@@ -327,14 +406,17 @@ def _print_no_connect_tip(port_conflicts: int, missing_hosts: int) -> None:
         console.print("[dim]Run: devo ssm hosts setup[/dim]")
 
 
-def _connect_databases(databases: dict, no_hosts: bool) -> None:
+def _connect_databases(databases: dict, no_hosts: bool, no_auto_setup: bool = False) -> None:
     """Connect to one or more databases in parallel threads."""
     if not _validate_tokens(databases):
         return
 
+    managed_hosts = {host for _, host in HostsManager().get_managed_entries()}
+    if not no_hosts:
+        managed_hosts = _maybe_run_auto_setup(databases, managed_hosts, no_auto_setup)
+
     console.print("[cyan]Starting connections...[/cyan]\n")
 
-    managed_hosts = {host for _, host in HostsManager().get_managed_entries()}
     table = _make_connection_table()
     registry = ForwarderRegistry()
     threads, port_conflicts, missing_hosts = _build_threads(databases, no_hosts, managed_hosts, table, registry)
@@ -388,7 +470,8 @@ def _show_database_selection(databases: dict) -> str | None:
 @click.argument("name", required=False)
 @click.option("--no-hosts", is_flag=True, help="Disable hostname forwarding (use localhost)")
 @click.option("--all", "connect_all", is_flag=True, help="Connect to all configured databases at once")
-def connect_database(name, no_hosts, connect_all):
+@click.option("--no-auto-setup", is_flag=True, help="Don't prompt to run hosts setup for unconfigured databases")
+def connect_database(name, no_hosts, connect_all, no_auto_setup):
     """Connect to a configured database (uses hostname forwarding by default)"""
     config_manager = SSMConfigManager()
     databases = config_manager.list_databases()
@@ -399,7 +482,7 @@ def connect_database(name, no_hosts, connect_all):
         return
 
     if connect_all:
-        _connect_databases(databases, no_hosts)
+        _connect_databases(databases, no_hosts, no_auto_setup)
         return
 
     if not name:
@@ -407,7 +490,7 @@ def connect_database(name, no_hosts, connect_all):
         if selection is None:
             return
         if selection == "ALL":
-            _connect_databases(databases, no_hosts)
+            _connect_databases(databases, no_hosts, no_auto_setup)
             return
         name = selection
 
@@ -420,4 +503,4 @@ def connect_database(name, no_hosts, connect_all):
             console.print(f"  - {db_name}")
         return
 
-    _connect_databases({name: db_config}, no_hosts)
+    _connect_databases({name: db_config}, no_hosts, no_auto_setup)
