@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v3.8.0 (2026-05-04)
+
+### Bug Fixes
+
+- **ssm**: Improve port conflict detection and Windows cleanup
+  ([`c0fde51`](https://github.com/edu526/devo-cli/commit/c0fde514345cbab4ae6b983e1caa8b2b3a6a882e))
+
+### Documentation
+
+- Cleanup reference section, add LICENSE and banner
+  ([`c990a47`](https://github.com/edu526/devo-cli/commit/c990a472b18d82e561a35e25c2d513894c976102))
+
+- Overhaul documentation structure and remove legacy scripts
+  ([`6ee9591`](https://github.com/edu526/devo-cli/commit/6ee95912a1362717def713680f9f0cb7b29904af))
+
+### Features
+
+- **ssm**: Add auto-setup prompt for unconfigured databases on connect
+  ([`8c35675`](https://github.com/edu526/devo-cli/commit/8c35675cbea8ddbed3c25a023c99f3831e74f55b))
+
+- **ssm**: Add graceful shutdown with stop_event for daemon threads
+  ([`e859e15`](https://github.com/edu526/devo-cli/commit/e859e15754ebf903d715bf89215bab7a586f5966))
+
+
 ## v3.7.0 (2026-03-18)
 
 ### Bug Fixes
