@@ -26,11 +26,17 @@ _TOKENS_REFRESH_MSG = "[yellow]Run 'devo aws-login refresh' to renew your tokens
 
 
 class ForwarderRegistry:
-    """Thread-safe registry of active PortForwarder instances for Ctrl+C cleanup."""
+    """Thread-safe registry of active PortForwarder instances for Ctrl+C cleanup.
+
+    Also exposes a `stop_event` so daemon worker threads can detect that the
+    main thread has initiated shutdown and bail out instead of entering the
+    auto-reconnect loop.
+    """
 
     def __init__(self):
         self._forwarders: list = []
         self._lock = threading.Lock()
+        self.stop_event = threading.Event()
 
     def add(self, pf: PortForwarder) -> None:
         with self._lock:
@@ -110,11 +116,16 @@ def _validate_tokens(databases: dict) -> bool:
     return True
 
 
-def _wait_before_reconnect(name: str) -> bool:
-    """Sleep before reconnecting. Returns False if user pressed Ctrl+C."""
+def _wait_before_reconnect(name: str, stop_event: Optional[threading.Event] = None) -> bool:
+    """Sleep before reconnecting. Returns False if Ctrl+C or shutdown requested."""
     try:
         console.print(f"\n[yellow]Connection lost. Reconnecting in {_RECONNECT_DELAY}s... (Ctrl+C to cancel)[/yellow]")
-        time.sleep(_RECONNECT_DELAY)
+        if stop_event is not None:
+            # Wakes up immediately when the main thread sets the event.
+            if stop_event.wait(_RECONNECT_DELAY):
+                return False
+        else:
+            time.sleep(_RECONNECT_DELAY)
     except KeyboardInterrupt:
         console.print("\n[green]Connection closed[/green]")
         return False
@@ -239,8 +250,11 @@ def _run_connection_loop(
     registry: Optional[ForwarderRegistry] = None,
 ) -> None:
     """Core connection loop: optional socat + SSM + auto-reconnect."""
+    stop_event = registry.stop_event if registry is not None else None
     is_reconnect = False
     while True:
+        if stop_event is not None and stop_event.is_set():
+            return
         if is_reconnect:
             console.print(f"[green]✓ Reconnected to {name}[/green]\n")
         try:
@@ -252,12 +266,17 @@ def _run_connection_loop(
             console.print(f"\n[red]Error: {e}[/red]")
             return
 
+        # Main thread initiated shutdown while the SSM session was alive — bail
+        # out before printing the misleading "Connection lost. Reconnecting..."
+        if stop_event is not None and stop_event.is_set():
+            return
+
         if SSMSession._is_token_expired(region=db_config["region"], profile=db_config.get("profile")):
             console.print(_TOKENS_EXPIRED_MSG)
             console.print(_TOKENS_REFRESH_MSG)
             return
 
-        if not _wait_before_reconnect(name):
+        if not _wait_before_reconnect(name, stop_event):
             return
 
         is_reconnect = True
@@ -435,9 +454,19 @@ def _connect_databases(databases: dict, no_hosts: bool, no_auto_setup: bool = Fa
         while any(thread.is_alive() for _, thread in threads):
             time.sleep(1)
     except KeyboardInterrupt:
-        console.print("\n[cyan]Stopping all connections...[/cyan]")
-        registry.stop_all()
-        console.print("[green]All connections closed[/green]")
+        # Absorb extra Ctrl+C presses during cleanup so the user never sees
+        # an unhandled traceback if they hit it twice.
+        try:
+            console.print("\n[cyan]Stopping all connections...[/cyan]")
+            # Signal daemon threads first so they exit their reconnect loop
+            # cleanly instead of printing "Connection lost. Reconnecting...".
+            registry.stop_event.set()
+            registry.stop_all()
+            for _, thread in threads:
+                thread.join(timeout=2)
+            console.print("[green]All connections closed[/green]")
+        except KeyboardInterrupt:
+            pass
 
 
 def _show_database_selection(databases: dict) -> str | None:

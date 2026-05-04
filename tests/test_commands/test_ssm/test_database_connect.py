@@ -1,5 +1,7 @@
 """Unit tests for SSM database connect command module."""
 
+import threading
+import time
 from unittest.mock import MagicMock, patch
 
 import click
@@ -572,7 +574,7 @@ class TestRunConnectionLoop:
         with patch(f"{_MODULE}._run_attempt", side_effect=[0, KeyboardInterrupt]):
             with patch(f"{_MODULE}.SSMSession") as mock_session:
                 mock_session._is_token_expired.return_value = False
-                with patch(f"{_MODULE}._wait_before_reconnect", side_effect=lambda n: wait_calls.append(n) or True):
+                with patch(f"{_MODULE}._wait_before_reconnect", side_effect=lambda n, _ev=None: wait_calls.append(n) or True):
                     _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False)
         assert len(wait_calls) == 1  # reconnect was attempted
 
@@ -617,6 +619,65 @@ class TestRunConnectionLoop:
                 mock_session._is_token_expired.return_value = False
                 with patch(f"{_MODULE}._wait_before_reconnect", return_value=False):
                     _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False)
+
+    def test_stop_event_set_after_attempt_skips_reconnect_path(self):
+        """If main thread sets stop_event while SSM session is alive, exit cleanly."""
+        db_config = _make_db_config()
+        registry = ForwarderRegistry()
+
+        def attempt_then_signal(*_a, **_kw):
+            registry.stop_event.set()
+            return 0
+
+        with patch(f"{_MODULE}._run_attempt", side_effect=attempt_then_signal):
+            with patch(f"{_MODULE}.SSMSession") as mock_session:
+                mock_session._is_token_expired.return_value = False
+                with patch(f"{_MODULE}._wait_before_reconnect") as mock_wait:
+                    with patch(f"{_MODULE}.console") as mock_console:
+                        _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False, registry=registry)
+        mock_wait.assert_not_called()
+        printed = " ".join(str(c) for c in mock_console.print.call_args_list)
+        assert "Connection lost" not in printed
+        assert "Reconnecting" not in printed
+
+    def test_stop_event_set_before_attempt_returns_immediately(self):
+        """If stop_event is already set when the loop starts, do not even call _run_attempt."""
+        db_config = _make_db_config()
+        registry = ForwarderRegistry()
+        registry.stop_event.set()
+        with patch(f"{_MODULE}._run_attempt") as mock_attempt:
+            _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False, registry=registry)
+        mock_attempt.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _wait_before_reconnect — stop_event integration
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestWaitBeforeReconnectStopEvent:
+    def test_returns_false_when_stop_event_set_before_call(self):
+        ev = threading.Event()
+        ev.set()
+        with patch(f"{_MODULE}.console"):
+            assert _wait_before_reconnect("mydb", ev) is False
+
+    def test_returns_false_when_stop_event_set_during_wait(self):
+        ev = threading.Event()
+
+        def set_soon():
+            time.sleep(0.05)
+            ev.set()
+
+        threading.Thread(target=set_soon, daemon=True).start()
+        with patch(f"{_MODULE}.console"):
+            with patch(f"{_MODULE}._RECONNECT_DELAY", 5):
+                start = time.time()
+                result = _wait_before_reconnect("mydb", ev)
+                elapsed = time.time() - start
+        assert result is False
+        assert elapsed < 1.0  # woke up quickly, did not wait the full delay
 
 
 # ---------------------------------------------------------------------------
@@ -686,6 +747,48 @@ class TestConnectDatabases:
                                 with patch(f"{_MODULE}.time.sleep", side_effect=[None, KeyboardInterrupt]):
                                     _connect_databases(databases, no_hosts=False)
 
+        mock_registry.stop_all.assert_called_once()
+
+    def test_keyboard_interrupt_sets_stop_event_and_joins_threads(self):
+        """Ctrl+C must signal daemon threads via stop_event AND join them with a timeout."""
+        databases = {"db1": _make_db_config(local_address="127.0.0.2")}
+        mock_thread = MagicMock()
+        mock_thread.is_alive.return_value = True
+        mock_registry = MagicMock()
+
+        with patch(f"{_MODULE}._validate_tokens", return_value=True):
+            with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
+                mock_hm_cls.return_value.get_managed_entries.return_value = [("127.0.0.2", "db.example.com")]
+                with patch(f"{_MODULE}._is_port_bindable", return_value=True):
+                    with patch(f"{_MODULE}.threading.Thread", return_value=mock_thread):
+                        with patch(_FIND_FREE_PORT, return_value=15432):
+                            with patch(f"{_MODULE}.ForwarderRegistry", return_value=mock_registry):
+                                with patch(f"{_MODULE}.time.sleep", side_effect=[None, KeyboardInterrupt]):
+                                    _connect_databases(databases, no_hosts=False)
+
+        mock_registry.stop_event.set.assert_called_once()
+        mock_thread.join.assert_called_once_with(timeout=2)
+
+    def test_second_keyboard_interrupt_during_cleanup_is_absorbed(self):
+        """A second Ctrl+C while the cleanup runs must not surface as an unhandled exception."""
+        databases = {"db1": _make_db_config(local_address="127.0.0.2")}
+        mock_thread = MagicMock()
+        mock_thread.is_alive.return_value = True
+        mock_thread.join.side_effect = KeyboardInterrupt
+        mock_registry = MagicMock()
+
+        with patch(f"{_MODULE}._validate_tokens", return_value=True):
+            with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
+                mock_hm_cls.return_value.get_managed_entries.return_value = [("127.0.0.2", "db.example.com")]
+                with patch(f"{_MODULE}._is_port_bindable", return_value=True):
+                    with patch(f"{_MODULE}.threading.Thread", return_value=mock_thread):
+                        with patch(_FIND_FREE_PORT, return_value=15432):
+                            with patch(f"{_MODULE}.ForwarderRegistry", return_value=mock_registry):
+                                with patch(f"{_MODULE}.time.sleep", side_effect=[None, KeyboardInterrupt]):
+                                    # Should not raise — the inner KeyboardInterrupt is swallowed
+                                    _connect_databases(databases, no_hosts=False)
+
+        mock_registry.stop_event.set.assert_called_once()
         mock_registry.stop_all.assert_called_once()
 
     def test_unique_ports_assigned_to_each_db(self):
