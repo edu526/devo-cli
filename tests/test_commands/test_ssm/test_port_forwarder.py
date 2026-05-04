@@ -282,6 +282,45 @@ def test_start_forward_windows_success(mocker):
 
 
 @pytest.mark.unit
+def test_start_forward_windows_clears_orphan_portproxy_first(mocker):
+    """Stale netsh portproxy rules are deleted before adding the new one."""
+    pf = _make_forwarder("Windows")
+    mock_run = mocker.patch("subprocess.run")
+
+    pf.start_forward("127.0.0.2", 5432, 15432)
+
+    assert mock_run.call_count == 2
+    delete_call, add_call = mock_run.call_args_list
+    delete_cmd = delete_call.args[0]
+    add_cmd = add_call.args[0]
+    assert delete_cmd[:5] == ["netsh", "interface", "portproxy", "delete", "v4tov4"]
+    assert "listenaddress=127.0.0.2" in delete_cmd
+    assert "listenport=5432" in delete_cmd
+    assert add_cmd[3] == "add"
+
+
+@pytest.mark.unit
+def test_start_forward_windows_orphan_cleanup_failure_does_not_abort(mocker):
+    """If the cleanup `netsh delete` raises, the add still proceeds."""
+    pf = _make_forwarder("Windows")
+    call_count = {"n": 0}
+
+    def run_side_effect(*args, **kwargs):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise OSError("netsh transient error")
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    mocker.patch("subprocess.run", side_effect=run_side_effect)
+
+    result = pf.start_forward("127.0.0.2", 5432, 15432)
+
+    assert result is None
+    assert "127.0.0.2:5432" in pf.processes
+    assert call_count["n"] == 2  # cleanup raised, add still ran
+
+
+@pytest.mark.unit
 def test_start_forward_windows_permission_error(mocker):
     """Raises PermissionError when netsh returns access denied."""
     pf = _make_forwarder("Windows")

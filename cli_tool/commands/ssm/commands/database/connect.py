@@ -76,6 +76,23 @@ def _is_port_bindable(address: str, port: int) -> bool:
             return False
 
 
+def _is_wildcard_bind_blocking(port: int) -> bool:
+    """Return True if `port` is held by a wildcard listener (0.0.0.0 or ::).
+
+    Probes unused loopback IPs. If none can be bound, something is listening on
+    a wildcard address and is blocking every loopback IP — typically a local
+    Postgres/MySQL configured with `listen_addresses = '*'`.
+    """
+    for probe in ("127.0.0.91", "127.0.0.173"):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind((probe, port))
+                return False
+            except OSError:
+                continue
+    return True
+
+
 def _validate_tokens(databases: dict) -> bool:
     """Check AWS tokens for all unique (profile, region) combos. Returns False if any expired."""
     checked: set = set()
@@ -164,8 +181,20 @@ def _process_db_for_table(
 
     if use_hostname_forwarding and not _is_port_bindable(local_address, db_config["port"]):
         connect_to = f"{local_address}:{db_config['port']}"
-        console.print(f"[red]✗ {name}: Port {db_config['port']} on {local_address} is occupied by a local service. Stop it or use --no-hosts.[/red]")
-        return (name, connect_to, "-", remote, profile, "[red]✗ Port occupied by local service[/red]"), None, True
+        if _is_wildcard_bind_blocking(db_config["port"]):
+            console.print(
+                f"[red]✗ {name}: Port {db_config['port']} is held by a service listening on a wildcard address (0.0.0.0/::), "
+                f"which blocks every loopback IP (127.0.0.X). "
+                f"Reconfigure it to bind only to 127.0.0.1 (e.g. Postgres: listen_addresses='localhost') "
+                f"or run with --no-hosts.[/red]"
+            )
+            status = "[red]✗ Port blocked by wildcard bind[/red]"
+        else:
+            console.print(
+                f"[red]✗ {name}: Port {db_config['port']} on {local_address} is occupied by a local service. Stop it or use --no-hosts.[/red]"
+            )
+            status = "[red]✗ Port occupied by local service[/red]"
+        return (name, connect_to, "-", remote, profile, status), None, True
 
     # In --no-hosts mode, avoid using the remote DB port as the local SSM port (it may be
     # occupied by a local DB service). Fall back to 15432 if local_port is not configured.

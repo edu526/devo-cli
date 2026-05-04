@@ -128,9 +128,36 @@ class PortForwarder:
         except FileNotFoundError:
             raise FileNotFoundError("socat command not found. This should not happen as we checked for it earlier.")
 
+    def _kill_orphaned_portproxy(self, local_address: str, local_port: int) -> None:
+        """Remove any stale netsh portproxy rule on local_address:local_port.
+
+        Windows portproxy rules are persisted in the registry and survive abrupt
+        CLI termination (closed terminal, laptop sleep, SIGKILL). Without this,
+        a previous session's rule keeps holding the loopback IP and blocks the
+        new bind. Mirrors `_kill_orphaned_socat` for the Windows backend.
+        """
+        cmd = [
+            "netsh",
+            "interface",
+            "portproxy",
+            "delete",
+            "v4tov4",
+            f"listenaddress={local_address}",
+            f"listenport={local_port}",
+        ]
+        try:
+            subprocess.run(cmd, capture_output=True)  # noqa: S603 — cleanup is best-effort
+        except Exception:
+            pass
+
     def _start_forward_windows(self, local_address: str, local_port: int, target_port: int) -> None:
         """Start forwarding using netsh portproxy (Windows)"""
         key = f"{local_address}:{local_port}"
+
+        # Clear any stale rule from a previous session before adding a new one.
+        # Persistent registry rules are the Windows analogue of orphan socat
+        # processes on Unix.
+        self._kill_orphaned_portproxy(local_address, local_port)
 
         # netsh portproxy requires admin privileges
         cmd = [

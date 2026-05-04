@@ -10,6 +10,7 @@ from cli_tool.commands.ssm.commands.database.connect import (
     _connect_databases,
     _find_free_port,
     _is_port_bindable,
+    _is_wildcard_bind_blocking,
     _process_db_for_table,
     _run_attempt,
     _run_connection_loop,
@@ -145,6 +146,51 @@ class TestFindFreePort:
             mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
             result = _find_free_port(15432)
         assert result == 15435
+
+
+# ---------------------------------------------------------------------------
+# _is_wildcard_bind_blocking
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestIsWildcardBindBlocking:
+    def test_returns_false_when_probes_can_bind(self):
+        """No wildcard listener: probes succeed → False."""
+        with patch(f"{_MODULE}.socket.socket") as mock_socket_cls:
+            mock_sock = MagicMock()
+            mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
+            mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
+            mock_sock.bind.return_value = None
+            assert _is_wildcard_bind_blocking(5432) is False
+
+    def test_returns_true_when_all_probes_fail(self):
+        """Wildcard listener present: every loopback probe fails → True."""
+        with patch(f"{_MODULE}.socket.socket") as mock_socket_cls:
+            mock_sock = MagicMock()
+            mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
+            mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
+            mock_sock.bind.side_effect = OSError("address already in use")
+            assert _is_wildcard_bind_blocking(5432) is True
+
+    def test_returns_false_when_any_probe_succeeds(self):
+        """At least one probe binding → not a wildcard listener."""
+        bind_calls = []
+
+        def bind_side_effect(addr):
+            bind_calls.append(addr[0])
+            if addr[0] == "127.0.0.91":
+                raise OSError("in use")
+            # Second probe succeeds
+            return None
+
+        with patch(f"{_MODULE}.socket.socket") as mock_socket_cls:
+            mock_sock = MagicMock()
+            mock_sock.bind.side_effect = bind_side_effect
+            mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
+            mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
+            assert _is_wildcard_bind_blocking(5432) is False
+        assert len(bind_calls) == 2  # both probes attempted before deciding
 
 
 # ---------------------------------------------------------------------------
@@ -321,14 +367,30 @@ class TestProcessDbForTable:
         assert "15433" in row[5]
 
     def test_socat_port_occupied_returns_error_row(self):
-        """When local_address:port is already bound, returns error row and None port."""
+        """When local_address:port is bound by a non-wildcard service, returns error row."""
         db_config = _make_db_config(local_address="127.0.0.2", local_port=15432)
         managed = {"db.example.com"}
         with patch(f"{_MODULE}._is_port_bindable", return_value=False):
-            with patch(f"{_MODULE}.console"):
-                row, port, _ = _process_db_for_table("mydb", db_config, False, managed, lambda p: p)
+            with patch(f"{_MODULE}._is_wildcard_bind_blocking", return_value=False):
+                with patch(f"{_MODULE}.console") as mock_console:
+                    row, port, _ = _process_db_for_table("mydb", db_config, False, managed, lambda p: p)
         assert port is None
-        assert "occupied" in row[5].lower() or "Port" in row[5]
+        assert "occupied by a local service" in mock_console.print.call_args[0][0]
+        assert "occupied" in row[5].lower()
+
+    def test_wildcard_bind_emits_specific_message(self):
+        """When the port is held by a wildcard listener, surface a wildcard-specific hint."""
+        db_config = _make_db_config(local_address="127.0.0.2", local_port=15432)
+        managed = {"db.example.com"}
+        with patch(f"{_MODULE}._is_port_bindable", return_value=False):
+            with patch(f"{_MODULE}._is_wildcard_bind_blocking", return_value=True):
+                with patch(f"{_MODULE}.console") as mock_console:
+                    row, port, _ = _process_db_for_table("mydb", db_config, False, managed, lambda p: p)
+        assert port is None
+        printed = mock_console.print.call_args[0][0]
+        assert "wildcard" in printed.lower()
+        assert "0.0.0.0" in printed
+        assert "wildcard" in row[5].lower()
 
 
 # ---------------------------------------------------------------------------
