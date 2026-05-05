@@ -179,9 +179,12 @@ def main():
         telemetry_thread = capture_error(cmd_name, e)
         raise
     finally:
-        if telemetry_thread:
-            telemetry_thread.join(timeout=2)
-        show_update_notification()
+        try:
+            if telemetry_thread:
+                telemetry_thread.join(timeout=2)
+            show_update_notification()
+        except KeyboardInterrupt:
+            pass
 
 
 if __name__ == "__main__":
