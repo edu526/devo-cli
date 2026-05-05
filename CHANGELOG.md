@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.8.1 (2026-05-05)
+
+### Bug Fixes
+
+- **cli**: Handle KeyboardInterrupt during shutdown sequence
+  ([`219bd0f`](https://github.com/edu526/devo-cli/commit/219bd0ffff9f2851f68da7a32f1b1791aa0cb2e4))
+
+
 ## v3.8.0 (2026-05-04)
 
 ### Bug Fixes
