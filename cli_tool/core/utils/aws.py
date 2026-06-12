@@ -1,6 +1,7 @@
 """AWS utilities and session management."""
 
 import json
+import shutil
 import subprocess
 from typing import Optional
 
@@ -8,10 +9,23 @@ import boto3
 import click
 from botocore.config import Config
 
+_aws_path_cache: Optional[str] = None
+
+
+def _get_aws_path() -> Optional[str]:
+    """Get AWS CLI binary path, caching result for performance."""
+    global _aws_path_cache
+    if _aws_path_cache is None:
+        _aws_path_cache = shutil.which("aws")
+    return _aws_path_cache
+
 
 def verify_aws_credentials(profile=None, _required_account=None):
     """Verify AWS credentials and return (account_id, user_arn), or (None, None) on failure."""
-    cmd = ["aws", "sts", "get-caller-identity", "--output", "json"]
+    aws_path = _get_aws_path()
+    if not aws_path:
+        return None, None
+    cmd = [aws_path, "sts", "get-caller-identity", "--output", "json"]
     if profile:
         cmd.extend(["--profile", profile])
     try:
@@ -117,12 +131,14 @@ def select_profile(current_profile: Optional[str] = None, allow_none: bool = Fal
 def check_aws_cli() -> bool:
     """Check if AWS CLI is installed (does not check credentials)"""
     try:
-        # Check if AWS CLI is installed
-        version_result = subprocess.run(["aws", "--version"], capture_output=True, text=True, timeout=5)
+        aws_path = _get_aws_path()
+        if not aws_path:
+            click.echo("❌ AWS CLI is not installed. Please install it first.", err=True)
+            return False
+        version_result = subprocess.run([aws_path, "--version"], capture_output=True, text=True, timeout=5)
         if version_result.returncode != 0:
             click.echo("❌ AWS CLI is not installed. Please install it first.", err=True)
             return False
-
         return True
     except FileNotFoundError:
         click.echo("❌ AWS CLI is not installed. Please install it first.", err=True)
@@ -134,7 +150,10 @@ def check_aws_cli() -> bool:
 
 def _get_credentials_from_cli(profile_name: Optional[str] = None):
     """Get credentials using AWS CLI export-credentials command."""
-    cmd = ["aws", "configure", "export-credentials"]
+    aws_path = _get_aws_path()
+    if not aws_path:
+        return None
+    cmd = [aws_path, "configure", "export-credentials"]
     if profile_name:
         cmd.extend(["--profile", profile_name])
 

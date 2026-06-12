@@ -23,19 +23,20 @@ from cli_tool.core.utils.aws import (
 @pytest.mark.unit
 def test_check_aws_cli_returns_true_when_installed(mocker):
     """Returns True when AWS CLI is installed and version command succeeds."""
+    mocker.patch("shutil.which", return_value="/usr/bin/aws")
     mock_run = mocker.patch("subprocess.run")
     mock_run.return_value = MagicMock(returncode=0, stdout="aws-cli/2.0.0 Python/3.9")
 
     result = check_aws_cli()
 
     assert result is True
-    mock_run.assert_called_once_with(["aws", "--version"], capture_output=True, text=True, timeout=5)
+    mock_run.assert_called_once_with(["/usr/bin/aws", "--version"], capture_output=True, text=True, timeout=5)
 
 
 @pytest.mark.unit
 def test_check_aws_cli_returns_false_when_not_installed(mocker):
     """Returns False when AWS CLI binary not found."""
-    mocker.patch("subprocess.run", side_effect=FileNotFoundError())
+    mocker.patch("shutil.which", return_value=None)
 
     result = check_aws_cli()
 
@@ -45,6 +46,7 @@ def test_check_aws_cli_returns_false_when_not_installed(mocker):
 @pytest.mark.unit
 def test_check_aws_cli_returns_false_when_version_fails(mocker):
     """Returns False when aws --version returns nonzero exit code."""
+    mocker.patch("shutil.which", return_value="/usr/bin/aws")
     mocker.patch("subprocess.run", return_value=MagicMock(returncode=1))
 
     result = check_aws_cli()
@@ -55,6 +57,7 @@ def test_check_aws_cli_returns_false_when_version_fails(mocker):
 @pytest.mark.unit
 def test_check_aws_cli_returns_false_on_general_exception(mocker):
     """Returns False on unexpected exceptions."""
+    mocker.patch("shutil.which", return_value="/usr/bin/aws")
     mocker.patch("subprocess.run", side_effect=Exception("unexpected"))
 
     result = check_aws_cli()
