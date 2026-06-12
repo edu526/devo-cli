@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v3.9.0 (2026-06-12)
+
+### Bug Fixes
+
+- Resolve AWS CLI path in WSL environments using shutil.which
+  ([`2cec6cc`](https://github.com/edu526/devo-cli/commit/2cec6cc64c736c84d8869d3b09129d36ba9a9fe2))
+
+### Features
+
+- **.agents/skills**: Add comprehensive skill library with accessibility, bash patterns, and
+  cloudflare deployment
+  ([`1ba714f`](https://github.com/edu526/devo-cli/commit/1ba714f768743870ad606474ec45d7c43c9d3be1))
+
+
 ## v3.8.1 (2026-05-05)
 
 ### Bug Fixes
