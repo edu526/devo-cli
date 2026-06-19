@@ -40,8 +40,10 @@ class TestCreateApp:
         app_state = _make_app_state()
         app = create_app(app_state)
 
-        all_paths = {getattr(r, "path", None) for r in app.routes}
-        expected = {
+        with TestClient(app):
+            all_paths = {getattr(r, "path", None) for r in app.routes}
+
+        expected = [
             "/api/v1/preflight",
             "/api/v1/config",
             "/api/v1/databases",
@@ -50,7 +52,7 @@ class TestCreateApp:
             "/api/v1/profiles",
             "/api/v1/connections",
             "/api/v1/events",
-        }
+        ]
         for path in expected:
             assert any(p is not None and p.startswith(path) for p in all_paths), f"Route {path!r} not mounted"
 
