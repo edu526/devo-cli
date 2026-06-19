@@ -16,6 +16,7 @@
 
 import { writable, type Readable } from "svelte/store";
 import { invoke, Channel } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 
 export interface UpdateMetadata {
   version: string;
@@ -53,6 +54,14 @@ const INITIAL_PROGRESS: ProgressState = {
   total: null,
   error: null,
 };
+
+export async function getAppVersion(): Promise<string | null> {
+  try {
+    return await getVersion();
+  } catch {
+    return null;
+  }
+}
 
 export async function fetchUpdate(): Promise<UpdateMetadata | null> {
   try {

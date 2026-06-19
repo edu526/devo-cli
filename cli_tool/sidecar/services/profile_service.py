@@ -1,6 +1,7 @@
 """Profile expiration monitoring — emits profile.expiring events via EventHub."""
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any
 
@@ -10,6 +11,32 @@ from cli_tool.sidecar.state import EventHub
 
 _WARN_SECONDS = 5 * 60  # emit once when crossing below 5 minutes
 _POLL_INTERVAL = 30  # seconds between polls
+# ponytail: 8 workers caps concurrency for aws configure export-credentials subprocess calls
+_MAX_WORKERS = 8
+
+
+def _build_profile_info(name: str, src: str, default_name: str | None, now: datetime) -> dict[str, Any]:
+    """Build the info dict for one profile. Shared by list and single-profile paths."""
+    expiration = get_profile_credentials_expiration(name)
+    seconds_remaining = None
+    status = "unknown"
+    if expiration:
+        diff = (expiration - now).total_seconds()
+        seconds_remaining = max(0, int(diff))
+        if diff <= 0:
+            status = "expired"
+        elif diff <= _WARN_SECONDS:
+            status = "expiring"
+        else:
+            status = "valid"
+    return {
+        "name": name,
+        "source": src,
+        "expiration": expiration.isoformat() if expiration else None,
+        "seconds_remaining": seconds_remaining,
+        "status": status,
+        "is_default": name == default_name,
+    }
 
 
 def get_profiles_info() -> list[dict[str, Any]]:
@@ -18,39 +45,32 @@ def get_profiles_info() -> list[dict[str, Any]]:
 
     default_name = get_config_value("aws_login.default_credentials_profile")
 
-    out = []
     try:
         profiles = list_aws_profiles()
     except Exception:
-        return out
+        return []
 
+    sso_profiles = [(name, src) for name, src in profiles if src in ("sso", "both")]
     now = datetime.now(timezone.utc)
-    for name, src in profiles:
-        if src not in ("sso", "both"):
-            continue
-        expiration = get_profile_credentials_expiration(name)
-        seconds_remaining = None
-        status = "unknown"
-        if expiration:
-            diff = (expiration - now).total_seconds()
-            seconds_remaining = max(0, int(diff))
-            if diff <= 0:
-                status = "expired"
-            elif diff <= _WARN_SECONDS:
-                status = "expiring"
-            else:
-                status = "valid"
-        out.append(
-            {
-                "name": name,
-                "source": src,
-                "expiration": expiration.isoformat() if expiration else None,
-                "seconds_remaining": seconds_remaining,
-                "status": status,
-                "is_default": name == default_name,
-            }
-        )
-    return out
+
+    with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as ex:
+        return list(ex.map(lambda ns: _build_profile_info(ns[0], ns[1], default_name, now), sso_profiles))
+
+
+def get_profile_info(name: str) -> dict[str, Any] | None:
+    """Return a single SSO profile with live expiration info, or None if not found."""
+    from cli_tool.core.utils.config_manager import get_config_value
+
+    default_name = get_config_value("aws_login.default_credentials_profile")
+    try:
+        profiles = list_aws_profiles()
+    except Exception:
+        return None
+
+    for prof_name, src in profiles:
+        if prof_name == name and src in ("sso", "both"):
+            return _build_profile_info(name, src, default_name, datetime.now(timezone.utc))
+    return None
 
 
 async def watch_profiles(hub: EventHub) -> None:

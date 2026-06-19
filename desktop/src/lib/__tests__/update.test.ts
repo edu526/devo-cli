@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { fetchUpdate, installUpdate, type ProgressState } from "../update";
+import { getVersion } from "@tauri-apps/api/app";
+import { fetchUpdate, getAppVersion, installUpdate, type ProgressState } from "../update";
 
 const mockInvoke = vi.mocked(invoke);
+const mockGetVersion = vi.mocked(getVersion);
 
 class FakeChannel {
   static instances: FakeChannel[] = [];
@@ -21,6 +23,7 @@ describe("update", () => {
   beforeEach(() => {
     FakeChannel.instances = [];
     mockInvoke.mockReset();
+    mockGetVersion.mockReset();
   });
 
   afterEach(() => {
@@ -49,6 +52,20 @@ describe("update", () => {
     it("returns null on invoke error (no updater / offline / dev mode)", async () => {
       mockInvoke.mockRejectedValueOnce(new Error("plugin not registered"));
       const result = await fetchUpdate();
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("getAppVersion", () => {
+    it("returns the app version from Tauri", async () => {
+      mockGetVersion.mockResolvedValueOnce("0.1.0-alpha.2");
+      const result = await getAppVersion();
+      expect(result).toBe("0.1.0-alpha.2");
+    });
+
+    it("returns null on error (browser dev mode / no Tauri runtime)", async () => {
+      mockGetVersion.mockRejectedValueOnce(new Error("no Tauri"));
+      const result = await getAppVersion();
       expect(result).toBeNull();
     });
   });

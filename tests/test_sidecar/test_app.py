@@ -92,6 +92,57 @@ class TestCreateApp:
         # CORS headers should reflect the allowed origin
         assert response.headers.get("access-control-allow-origin") == "tauri://localhost"
 
+    @pytest.mark.parametrize(
+        "origin",
+        [
+            "tauri://localhost",  # macOS / Linux (dev & prod)
+            "http://tauri.localhost",  # Windows dev
+            "https://tauri.localhost",  # Windows production
+            "http://localhost:5173",  # Vite dev server
+        ],
+    )
+    def test_cors_allows_known_webview_origins(self, mocker, origin):
+        # ponytail: parametrized over every Tauri 2 webview origin so a
+        # missing entry fails the test on the matching platform, not just
+        # in the wild when an alpha tester hits "Failed to fetch".
+        async def _noop_watch(*_args, **_kwargs):
+            await asyncio.sleep(9999)
+
+        mocker.patch("cli_tool.sidecar.app.watch_profiles", side_effect=_noop_watch)
+        mocker.patch("cli_tool.sidecar.app.start_config_watcher", return_value=MagicMock())
+
+        app_state = _make_app_state()
+        app = create_app(app_state)
+        with TestClient(app) as client:
+            response = client.get("/healthz", headers={"Origin": origin})
+        assert response.status_code == 200
+        assert response.headers.get("access-control-allow-origin") == origin
+
+    def test_cors_preflight_responds_for_known_origin(self, mocker):
+        # ponytail: actual fetches from the webview trigger an OPTIONS
+        # preflight first; if the middleware short-circuits OPTIONS we get
+        # the same "Failed to fetch" symptom as a missing origin.
+        async def _noop_watch(*_args, **_kwargs):
+            await asyncio.sleep(9999)
+
+        mocker.patch("cli_tool.sidecar.app.watch_profiles", side_effect=_noop_watch)
+        mocker.patch("cli_tool.sidecar.app.start_config_watcher", return_value=MagicMock())
+
+        app_state = _make_app_state()
+        app = create_app(app_state)
+        with TestClient(app) as client:
+            response = client.options(
+                "/api/v1/config",
+                headers={
+                    "Origin": "https://tauri.localhost",
+                    "Access-Control-Request-Method": "PUT",
+                    "Access-Control-Request-Headers": "authorization,content-type",
+                },
+            )
+        assert response.status_code in (200, 204)
+        assert response.headers.get("access-control-allow-origin") == "https://tauri.localhost"
+        assert "PUT" in response.headers.get("access-control-allow-methods", "").upper()
+
     def test_cors_rejects_unlisted_origin(self, mocker):
         async def _noop_watch(*_args, **_kwargs):
             await asyncio.sleep(9999)
@@ -159,6 +210,12 @@ class TestCreateApp:
 
         mocker.patch("cli_tool.sidecar.app.watch_profiles", side_effect=_noop_watch)
         mocker.patch("cli_tool.sidecar.app.start_config_watcher", return_value=MagicMock())
+        # ponytail: this test exercises the body-size middleware, not the
+        # config handler. Without these mocks, the real PATCH would call
+        # load_config/save_config against the developer's ~/.devo/config.json
+        # and merge `{"foo": "bar"}` into it on every pytest run.
+        mocker.patch("cli_tool.sidecar.routers.config.load_config", return_value={})
+        mocker.patch("cli_tool.sidecar.routers.config.save_config")
 
         app_state = _make_app_state()
         app = create_app(app_state)

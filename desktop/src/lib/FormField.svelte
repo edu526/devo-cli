@@ -64,6 +64,19 @@
     padding: 0.45rem 0.6rem;
     font-family: inherit;
   }
+  .control :global(select) {
+    -webkit-appearance: none;
+    appearance: none;
+    padding-right: 2rem;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='none' stroke='%2394a3b8' stroke-width='1.5' d='M1 1l4 4 4-4'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.6rem center;
+  }
+  .control :global(select option) {
+    background: #1a1a1a;
+    color: #e0e0e0;
+  }
   .control :global(input:focus),
   .control :global(select:focus),
   .control :global(textarea:focus) {

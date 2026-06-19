@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { logError } from "./error-log";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -143,7 +144,17 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
 
-  let res = await send();
+  let res: Response;
+  try {
+    res = await send();
+  } catch (e) {
+    // CORS rejection, sidecar down, DNS fail, abort, etc. — these never
+    // produce an HTTP response so the sidecar has no log of them. Capture
+    // them client-side so the user can see why the call never landed.
+    const msg = e instanceof Error ? e.message : String(e);
+    logError("api", `${method} ${path} failed: ${msg}`, _baseUrl);
+    throw e;
+  }
 
   // On 401, try refreshing the token once. /auth/refresh itself is exempt
   // from retry to avoid an infinite loop.
@@ -202,6 +213,7 @@ export const databasesApi = {
 
 export const profilesApi = {
   list: () => req<ProfileRecord[]>("GET", "/profiles"),
+  get: (name: string) => req<ProfileRecord>("GET", `/profiles/${name}`),
   refreshAll: () => req<{ status: string; message: string }>("POST", "/profiles:refresh_all"),
   refresh: (name: string) =>
     req<{ status: string; message: string }>("POST", `/profiles/${name}:refresh`),
@@ -213,7 +225,26 @@ export const hostsApi = {
   list: () => req<HostRecord[]>("GET", "/hosts"),
   add: (ip: string, hostname: string) => req<HostRecord>("POST", "/hosts", { ip, hostname }),
   remove: (hostname: string) => req<void>("DELETE", `/hosts/${hostname}`),
+  setup: (db_names?: string[]) =>
+    req<{ succeeded: HostSetupEntry[]; failed: HostSetupFailure[] }>("POST", "/hosts/setup", {
+      db_names: db_names ?? null,
+    }),
 };
+
+export interface HostSetupEntry {
+  name: string;
+  host: string;
+  ip: string;
+  local_port: number;
+  port_reassigned: boolean;
+}
+
+export interface HostSetupFailure {
+  name: string;
+  host: string;
+  error: string;
+  needs_elevation: boolean;
+}
 
 export const configApi = {
   get: () => req<Record<string, unknown>>("GET", "/config"),
@@ -245,4 +276,13 @@ export interface VersionInfo {
 
 export const versionApi = {
   get: () => req<VersionInfo>("GET", "/version"),
+};
+
+export type BootStatus =
+  | { status: "loading" }
+  | { status: "ready"; sidecar_info: SidecarInfo; version: string }
+  | { status: "version_error"; required: string; found: string };
+
+export const bootApi = {
+  get: () => invoke<BootStatus>("get_boot_status"),
 };

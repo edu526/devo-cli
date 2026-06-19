@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { logsApi, ApiError } from "../lib/api";
   import { ws, type WsMessage } from "../lib/ws";
+  import { errorLog, clearErrorLog } from "../lib/error-log";
   import SearchInput from "../lib/SearchInput.svelte";
 
   type LogLevel = "ALL" | "DEBUG" | "INFO" | "WARN" | "ERROR";
@@ -20,6 +21,90 @@
   let error: string | null = $state(null);
   let paused = $state(false);
   let lineCount = $state(300);
+  let clientErrorsExpanded = $state(true);
+  let expandedErrorIds = $state<Set<number>>(new Set());
+
+  function toggleErrorDetail(id: number): void {
+    const next = new Set(expandedErrorIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    expandedErrorIds = next;
+  }
+
+  function formatErrorReport(entries: typeof $errorLog): string {
+    const lines: string[] = [
+      "Devo Desktop — client error report",
+      `Generated: ${new Date().toISOString()}`,
+      `Count: ${entries.length}`,
+      "",
+    ];
+    for (const e of entries) {
+      lines.push(`[${new Date(e.ts).toISOString()}] [${e.source}] ${e.message}`);
+      if (e.detail) lines.push(e.detail);
+      lines.push("");
+    }
+    return lines.join("\n");
+  }
+
+  async function copyToClipboard(text: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // ponytail: clipboard API can be blocked (no secure context, denied
+      // permission). Fall back to the legacy execCommand path so the user
+      // is never left without a copy option.
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+      } catch {
+        /* swallow — nothing else we can do without clipboard access */
+      }
+      document.body.removeChild(ta);
+    }
+  }
+
+  async function copyError(entry: (typeof $errorLog)[number]): Promise<void> {
+    await copyToClipboard(formatErrorReport([entry]));
+  }
+
+  async function copyAllErrors(): Promise<void> {
+    await copyToClipboard(formatErrorReport($errorLog));
+  }
+
+  function downloadReport(): void {
+    const text = formatErrorReport($errorLog);
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `devo-client-errors-${date}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  const filteredClientErrors = $derived(
+    query.trim()
+      ? $errorLog.filter(
+          (e) =>
+            e.message.toLowerCase().includes(query.toLowerCase()) ||
+            e.source.toLowerCase().includes(query.toLowerCase()) ||
+            (e.detail?.toLowerCase().includes(query.toLowerCase()) ?? false),
+        )
+      : $errorLog,
+  );
+
+  function formatTs(ts: number): string {
+    const d = new Date(ts);
+    return d.toLocaleTimeString();
+  }
 
   const filtered = $derived(
     lines.filter((line) => {
@@ -134,6 +219,72 @@
     </div>
   </div>
 
+  {#if $errorLog.length > 0}
+    <section class="client-errors" data-testid="client-errors">
+      <div class="client-errors-header">
+        <button
+          type="button"
+          class="client-errors-toggle"
+          onclick={() => (clientErrorsExpanded = !clientErrorsExpanded)}
+          aria-expanded={clientErrorsExpanded}
+        >
+          <span class="chev">{clientErrorsExpanded ? "▾" : "▸"}</span>
+          <strong>Client errors</strong>
+          <span class="badge-count">{$errorLog.length}</span>
+        </button>
+        <span class="header-spacer"></span>
+        <button type="button" class="btn-sm btn-secondary" onclick={copyAllErrors}>
+          Copy
+        </button>
+        <button type="button" class="btn-sm btn-secondary" onclick={downloadReport}>
+          Download
+        </button>
+        <button type="button" class="btn-sm btn-secondary" onclick={clearErrorLog}>
+          Clear
+        </button>
+      </div>
+      {#if clientErrorsExpanded}
+        <div class="client-errors-list">
+          {#each filteredClientErrors as entry (entry.id)}
+            <div class="client-error-row" data-source={entry.source}>
+              <div class="client-error-summary">
+                <button
+                  type="button"
+                  class="client-error-toggle"
+                  class:has-detail={!!entry.detail}
+                  onclick={() => entry.detail && toggleErrorDetail(entry.id)}
+                  aria-expanded={expandedErrorIds.has(entry.id)}
+                >
+                  <span class="chev ce-chev">
+                    {#if entry.detail}{expandedErrorIds.has(entry.id) ? "▾" : "▸"}{:else}&nbsp;{/if}
+                  </span>
+                  <span class="ce-ts">{formatTs(entry.ts)}</span>
+                  <span class="ce-source">{entry.source}</span>
+                  <span class="ce-msg">{entry.message}</span>
+                </button>
+                <button
+                  type="button"
+                  class="ce-copy"
+                  onclick={() => copyError(entry)}
+                  aria-label="Copy error"
+                  title="Copy this error"
+                >
+                  Copy
+                </button>
+              </div>
+              {#if entry.detail && expandedErrorIds.has(entry.id)}
+                <pre class="ce-detail">{entry.detail}</pre>
+              {/if}
+            </div>
+          {/each}
+          {#if filteredClientErrors.length === 0}
+            <div class="ce-empty">No client errors match the current filter.</div>
+          {/if}
+        </div>
+      {/if}
+    </section>
+  {/if}
+
   <div class="toolbar">
     <SearchInput bind:value={query} placeholder="Filter text…" />
     <div class="level-filter">
@@ -240,13 +391,18 @@
   }
 
   .line-select {
+    -webkit-appearance: none;
+    appearance: none;
     background: var(--bg-surface-2);
     border: 1px solid var(--border-strong);
     border-radius: 6px;
     color: var(--text-primary);
     font-size: 0.82rem;
-    padding: 0.35rem 0.6rem;
+    padding: 0.35rem 1.8rem 0.35rem 0.6rem;
     cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='none' stroke='%2394a3b8' stroke-width='1.5' d='M1 1l4 4 4-4'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.55rem center;
   }
 
   .line-select:focus {
@@ -288,5 +444,168 @@
   }
   .level-debug {
     color: #4a4a4a;
+  }
+
+  /* ── Client errors panel ────────────────────────────────────────────────── */
+  .client-errors {
+    background: #0d0d0d;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin: 0.75rem 0;
+    overflow: hidden;
+    font-family: "JetBrains Mono", "Cascadia Code", monospace;
+    font-size: 0.75rem;
+    line-height: 1.7;
+  }
+
+  .client-errors-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .client-errors-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .client-errors-toggle:hover {
+    color: var(--accent);
+  }
+
+  .chev {
+    color: var(--text-faint);
+    font-size: 0.75rem;
+  }
+
+  .badge-count {
+    background: var(--danger);
+    color: #1a0a0a;
+    border-radius: 999px;
+    padding: 0 0.45rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    min-width: 1.25rem;
+    text-align: center;
+    font-family: "Inter", system-ui, sans-serif;
+  }
+
+  .header-spacer {
+    flex: 1;
+  }
+
+  .client-errors-list {
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .client-error-row {
+    border-bottom: 1px solid var(--border);
+  }
+  .client-error-row:last-child {
+    border-bottom: 0;
+  }
+
+  .client-error-summary {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .client-error-toggle {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    flex: 1;
+    min-width: 0;
+    padding: 0.25rem 0.5rem 0.25rem 0.75rem;
+    background: transparent;
+    border: 0;
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+  }
+  .client-error-toggle.has-detail {
+    cursor: pointer;
+  }
+  .client-error-toggle.has-detail:hover {
+    background: var(--bg-surface-2);
+  }
+
+  .ce-copy {
+    flex-shrink: 0;
+    align-self: stretch;
+    padding: 0 0.55rem;
+    background: transparent;
+    border: 0;
+    border-left: 1px solid var(--border);
+    color: var(--text-faint);
+    font: inherit;
+    font-size: 0.7rem;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+  .client-error-row:hover .ce-copy,
+  .client-error-row:focus-within .ce-copy,
+  .ce-copy:focus {
+    opacity: 1;
+  }
+  .ce-copy:hover {
+    color: var(--accent);
+    background: var(--bg-surface-2);
+  }
+
+  .ce-chev {
+    width: 0.9rem;
+    flex-shrink: 0;
+    text-align: center;
+  }
+
+  .ce-ts {
+    color: var(--text-faint);
+    flex-shrink: 0;
+  }
+
+  .ce-source {
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .client-error-row[data-source="window"] .ce-source,
+  .client-error-row[data-source="unhandledrejection"] .ce-source {
+    color: var(--danger);
+  }
+
+  .ce-msg {
+    color: var(--text-primary);
+    word-break: break-word;
+    min-width: 0;
+  }
+
+  .ce-detail {
+    margin: 0;
+    padding: 0.4rem 0.75rem 0.4rem 2.5rem;
+    color: var(--text-faint);
+    background: #050505;
+    font-size: 0.72rem;
+    overflow-x: auto;
+    white-space: pre-wrap;
+  }
+
+  .ce-empty {
+    padding: 0.6rem 0.75rem;
+    color: var(--text-faint);
+    font-size: 0.78rem;
   }
 </style>

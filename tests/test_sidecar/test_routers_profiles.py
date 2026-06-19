@@ -41,6 +41,23 @@ class TestListProfiles:
 
 
 @pytest.mark.unit
+class TestGetProfile:
+    def test_returns_profile_when_found(self, mocker):
+        profile = {"name": "dev", "source": "sso", "status": "valid"}
+        mocker.patch("cli_tool.sidecar.routers.profiles.get_profile_info", return_value=profile)
+        client, _ = _make_client()
+        response = client.get("/profiles/dev", headers=AUTH)
+        assert response.status_code == 200
+        assert response.json() == profile
+
+    def test_returns_404_when_not_found(self, mocker):
+        mocker.patch("cli_tool.sidecar.routers.profiles.get_profile_info", return_value=None)
+        client, _ = _make_client()
+        response = client.get("/profiles/missing", headers=AUTH)
+        assert response.status_code == 404
+
+
+@pytest.mark.unit
 class TestRefreshAll:
     def test_returns_202_accepted(self, mocker):
         mocker.patch("threading.Thread")

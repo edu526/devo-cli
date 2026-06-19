@@ -1,4 +1,5 @@
 import { getToken } from "./api";
+import { logError } from "./error-log";
 
 export interface WsMessage {
   event: string;
@@ -44,11 +45,13 @@ class SidecarWs {
     ws.onclose = () => {
       this._emit("$disconnected", { event: "$disconnected" });
       if (!this.destroyed) {
+        logError("ws", `WebSocket disconnected from ${url} — retrying in 3s`);
         this.reconnectTimer = setTimeout(() => this._open(), 3000);
       }
     };
 
     ws.onerror = () => {
+      logError("ws", `WebSocket error on ${url}`);
       ws.close();
     };
 

@@ -93,6 +93,67 @@ class TestGetProfilesInfo:
         out = profile_service.get_profiles_info()
         assert {p["name"]: p["is_default"] for p in out} == {"dev": False, "prod": True}
 
+    def test_parallel_fetch_returns_all_profiles_above_worker_count(self, mocker):
+        """With >_MAX_WORKERS profiles, ThreadPoolExecutor must still return all of them."""
+        future = datetime.now(timezone.utc) + timedelta(hours=4)
+        names = [f"p{i}" for i in range(profile_service._MAX_WORKERS + 5)]
+        mocker.patch(
+            "cli_tool.sidecar.services.profile_service.list_aws_profiles",
+            return_value=[(n, "sso") for n in names],
+        )
+        mocker.patch("cli_tool.core.utils.config_manager.get_config_value", return_value=None)
+        mocker.patch(
+            "cli_tool.sidecar.services.profile_service.get_profile_credentials_expiration",
+            return_value=future,
+        )
+        out = profile_service.get_profiles_info()
+        assert {p["name"] for p in out} == set(names)
+        assert len(out) == len(names)
+
+
+@pytest.mark.unit
+class TestGetProfileInfo:
+    def test_returns_none_when_list_aws_profiles_raises(self, mocker):
+        mocker.patch(
+            "cli_tool.sidecar.services.profile_service.list_aws_profiles",
+            side_effect=Exception("boom"),
+        )
+        mocker.patch("cli_tool.core.utils.config_manager.get_config_value", return_value=None)
+        assert profile_service.get_profile_info("dev") is None
+
+    def test_returns_none_when_profile_not_found(self, mocker):
+        mocker.patch(
+            "cli_tool.sidecar.services.profile_service.list_aws_profiles",
+            return_value=[("dev", "sso")],
+        )
+        mocker.patch("cli_tool.core.utils.config_manager.get_config_value", return_value=None)
+        assert profile_service.get_profile_info("missing") is None
+
+    def test_returns_none_for_non_sso_profile(self, mocker):
+        mocker.patch(
+            "cli_tool.sidecar.services.profile_service.list_aws_profiles",
+            return_value=[("default", "credentials")],
+        )
+        mocker.patch("cli_tool.core.utils.config_manager.get_config_value", return_value=None)
+        assert profile_service.get_profile_info("default") is None
+
+    def test_returns_profile_when_found(self, mocker):
+        future = datetime.now(timezone.utc) + timedelta(hours=4)
+        mocker.patch(
+            "cli_tool.sidecar.services.profile_service.list_aws_profiles",
+            return_value=[("dev", "sso"), ("prod", "sso")],
+        )
+        mocker.patch("cli_tool.core.utils.config_manager.get_config_value", return_value="dev")
+        mocker.patch(
+            "cli_tool.sidecar.services.profile_service.get_profile_credentials_expiration",
+            return_value=future,
+        )
+        info = profile_service.get_profile_info("prod")
+        assert info is not None
+        assert info["name"] == "prod"
+        assert info["status"] == "valid"
+        assert info["is_default"] is False
+
 
 @pytest.mark.unit
 class TestTick:

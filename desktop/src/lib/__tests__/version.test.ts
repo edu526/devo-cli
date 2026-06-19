@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { initApi, versionApi, ApiError } from "../api";
+import { initApi, versionApi, bootApi, ApiError } from "../api";
 
 const mockInvoke = vi.mocked(invoke);
 
@@ -51,5 +51,37 @@ describe("versionApi", () => {
     );
 
     await expect(versionApi.get()).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe("bootApi", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns loading status from Rust", async () => {
+    mockInvoke.mockResolvedValueOnce({ status: "loading" });
+    const result = await bootApi.get();
+    expect(result).toEqual({ status: "loading" });
+  });
+
+  it("returns ready status with sidecar info and version", async () => {
+    const ready = { status: "ready", sidecar_info: { port: 1234, token: "abc" }, version: "3.10.0" };
+    mockInvoke.mockResolvedValueOnce(ready);
+    const result = await bootApi.get();
+    expect(result).toEqual(ready);
+  });
+
+  it("returns version_error with required and found", async () => {
+    const err = { status: "version_error", required: "3.10.0", found: "3.9.0" };
+    mockInvoke.mockResolvedValueOnce(err);
+    const result = await bootApi.get();
+    expect(result).toEqual(err);
+  });
+
+  it("invokes get_boot_status command", async () => {
+    mockInvoke.mockResolvedValueOnce({ status: "loading" });
+    await bootApi.get();
+    expect(mockInvoke).toHaveBeenCalledWith("get_boot_status");
   });
 });

@@ -14,6 +14,16 @@ from rich.console import Console
 from rich.table import Table
 
 from cli_tool.commands.ssm.core import PortForwarder, SSMSession
+from cli_tool.commands.ssm.core.states import (
+    CONNECTED,
+    ERROR,
+    EXPIRED_CREDENTIALS,
+    PROBE_TIMEOUT_SECONDS,
+    RECONNECTING,
+    STARTING,
+    STOPPED,
+    TRANSIENT_STATES,
+)
 
 console = Console()
 
@@ -32,7 +42,7 @@ class ConnectionRecord:
 
     def __init__(self, name: str, local_port: Optional[int] = None) -> None:
         self.name = name
-        self.state: Literal["starting", "connected", "reconnecting", "expired_credentials", "error", "stopped"] = "starting"
+        self.state: Literal[STARTING, CONNECTED, RECONNECTING, EXPIRED_CREDENTIALS, ERROR, STOPPED] = STARTING
         self.local_port: Optional[int] = local_port
         self.pf: Optional[PortForwarder] = None
         self.ssm_proc: Optional[subprocess.Popen] = None
@@ -42,6 +52,7 @@ class ConnectionRecord:
         self.started_at: Optional[float] = None  # time.monotonic() at first start
         self.attempts: int = 0  # number of SSM connect attempts so far
         self.last_error_at: Optional[float] = None  # wall-clock epoch of last failure
+        self.probe_thread: Optional[threading.Thread] = None
 
 
 class ForwarderRegistry:
@@ -327,7 +338,7 @@ def _run_connection_loop(
             },
         )
 
-    def _probe_then_emit_connected(port: int, timeout: float = 15.0) -> None:
+    def _probe_then_emit_connected(port: int, timeout: float = PROBE_TIMEOUT_SECONDS) -> None:
         """Probe localhost:port in background; emit 'connected' when ready."""
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -335,14 +346,16 @@ def _run_connection_loop(
                 return
             try:
                 with socket.create_connection(("127.0.0.1", port), timeout=0.5):
-                    _emit_state("connected")
+                    if (record is None or record.state in TRANSIENT_STATES) and not _should_stop():
+                        _emit_state(CONNECTED)
                     return
             except OSError:
                 time.sleep(0.5)
         # Timed out — SSM process is running but port not ready; emit anyway
-        _emit_state("connected")
+        if (record is None or record.state in TRANSIENT_STATES) and not _should_stop():
+            _emit_state(CONNECTED)
 
-    _emit_state("starting")
+    _emit_state(STARTING)
     if record is not None and record.started_at is None:
         import time as _t
 
@@ -367,40 +380,55 @@ def _run_connection_loop(
 
         threading.Thread(target=_metrics_loop, daemon=True).start()
 
+    def _join_probe() -> None:
+        if record is not None and record.probe_thread is not None:
+            record.probe_thread.join(timeout=0.5)
+            record.probe_thread = None
+
     is_reconnect = False
     while True:
         if _should_stop():
-            _emit_state("stopped")
+            _emit_state(STOPPED)
+            _join_probe()
             return
         if is_reconnect:
             console.print(f"[green]✓ Reconnected to {name}[/green]\n")
-        threading.Thread(target=_probe_then_emit_connected, args=(actual_local_port,), daemon=True).start()
+        if record is not None:
+            record.probe_thread = threading.Thread(target=_probe_then_emit_connected, args=(actual_local_port,), daemon=True)
+            record.probe_thread.start()
+        else:
+            threading.Thread(target=_probe_then_emit_connected, args=(actual_local_port,), daemon=True).start()
         if record is not None:
             record.attempts += 1
         try:
             _run_attempt(db_config, actual_local_port, use_hostname_forwarding, registry, record)
         except KeyboardInterrupt:
             console.print("\n[green]Connection closed[/green]")
-            _emit_state("stopped")
+            _emit_state(STOPPED)
+            _join_probe()
             return
         except Exception as e:
             console.print(f"\n[red]Error: {e}[/red]")
-            _emit_state("error", error=str(e))
+            _emit_state(ERROR, error=str(e))
+            _join_probe()
             return
 
         if _should_stop():
-            _emit_state("stopped")
+            _emit_state(STOPPED)
+            _join_probe()
             return
 
         if SSMSession._is_token_expired(region=db_config["region"], profile=db_config.get("profile")):
             console.print(_TOKENS_EXPIRED_MSG)
             console.print(_TOKENS_REFRESH_MSG)
-            _emit_state("expired_credentials")
+            _emit_state(EXPIRED_CREDENTIALS)
+            _join_probe()
             return
 
-        _emit_state("reconnecting")
+        _emit_state(RECONNECTING)
         if not _wait_before_reconnect(name, per_stop or global_stop):
-            _emit_state("stopped")
+            _emit_state(STOPPED)
+            _join_probe()
             return
 
         is_reconnect = True

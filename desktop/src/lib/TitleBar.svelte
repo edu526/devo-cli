@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { updateAvailable, installUpdate } from "./update";
+  import { updateAvailable, installUpdate, getAppVersion } from "./update";
 
   let maximized = $state(false);
   let unlisten: (() => void) | null = null;
   let updateInstalling = $state(false);
   let updateError: string | null = $state(null);
+  let appVersion: string | null = $state(null);
 
   async function getWin() {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -59,6 +60,7 @@
     } catch {
       // not running inside Tauri (browser dev mode)
     }
+    appVersion = await getAppVersion();
   });
 
   onDestroy(() => unlisten?.());
@@ -86,6 +88,9 @@
       </defs>
     </svg>
     <span class="tb-name">Devo</span>
+    {#if appVersion}
+      <span class="tb-version" title="App version">v{appVersion}</span>
+    {/if}
     {#if $updateAvailable}
       <button
         class="update-badge"
@@ -145,10 +150,10 @@
 
   .tb-brand {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: 0.45rem;
     padding: 0 0.75rem 0 0.9rem;
-    width: 180px;
+    width: 230px;
     flex-shrink: 0;
     cursor: grab;
   }
@@ -157,6 +162,7 @@
     width: 18px;
     height: 18px;
     flex-shrink: 0;
+    align-self: center;
   }
 
   .tb-name {
@@ -166,6 +172,14 @@
     background: linear-gradient(135deg, #4f8ef7, #a78bfa);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+  }
+
+  .tb-version {
+    font-size: 0.7rem;
+    color: #666;
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 500;
+    white-space: nowrap;
   }
 
   .tb-drag {

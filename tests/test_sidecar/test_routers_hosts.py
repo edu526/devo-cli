@@ -73,3 +73,41 @@ class TestDeleteHost:
         detail = response.json()["detail"]
         assert "command" in detail
         assert detail["command"] == "sudo devo ssm hosts remove mydb"
+
+
+@pytest.mark.unit
+class TestSetupHosts:
+    def test_setup_returns_results(self, mocker):
+        mocker.patch(
+            "cli_tool.sidecar.routers.hosts.setup_hosts",
+            return_value={
+                "succeeded": [{"name": "db1", "host": "db1.example.com", "ip": "127.0.0.2", "local_port": 15432, "port_reassigned": False}],
+                "failed": [],
+            },
+        )
+        client, _ = _make_client()
+        response = client.post("/hosts/setup", json={}, headers=AUTH)
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["succeeded"]) == 1
+        assert body["failed"] == []
+
+    def test_setup_no_body(self, mocker):
+        mocker.patch(
+            "cli_tool.sidecar.routers.hosts.setup_hosts",
+            return_value={"succeeded": [], "failed": []},
+        )
+        client, _ = _make_client()
+        response = client.post("/hosts/setup", headers=AUTH)
+        assert response.status_code == 200
+
+    def test_setup_needs_elevation_returns_401(self, mocker):
+        mocker.patch(
+            "cli_tool.sidecar.routers.hosts.setup_hosts",
+            side_effect=NeedsElevation("sudo devo ssm hosts setup"),
+        )
+        client, _ = _make_client()
+        response = client.post("/hosts/setup", json={}, headers=AUTH)
+        assert response.status_code == 401
+        detail = response.json()["detail"]
+        assert detail["command"] == "sudo devo ssm hosts setup"

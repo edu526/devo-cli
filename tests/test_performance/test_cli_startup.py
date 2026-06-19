@@ -118,18 +118,22 @@ def test_cli_command_list_startup(benchmark, cli_runner):
     def invoke_and_parse_commands():
         """Invoke CLI and parse available commands."""
         result = cli_runner.invoke(cli, ["--help"])
-        # Parse commands from help output
+        # Parse commands from help output. Click groups commands under
+        # section headers like "Git:", "AWS:", "Tools:", "Config:" — the
+        # first word of each indented line under such a header is a command.
         commands = []
-        in_commands_section = False
+        in_section = False
         for line in result.output.split("\n"):
-            if "Commands:" in line:
-                in_commands_section = True
+            stripped = line.strip()
+            if stripped in ("Usage:", "Options:"):
+                in_section = False
                 continue
-            if in_commands_section and line.strip():
-                # Extract command name (first word)
-                parts = line.strip().split()
-                if parts:
-                    commands.append(parts[0])
+            if stripped.endswith(":") and not line.startswith(" "):
+                in_section = True
+                continue
+            if in_section and line.startswith(" ") and stripped:
+                # First word of an indented line under a group header
+                commands.append(stripped.split()[0])
         return result, commands
 
     # Benchmark command listing

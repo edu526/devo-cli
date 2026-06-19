@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { get } from "svelte/store";
-  import { hostsApi, type HostRecord, ApiError } from "../lib/api";
+  import { hostsApi, type HostRecord, type HostSetupEntry, ApiError } from "../lib/api";
   import { hostsCache } from "../lib/page-stores";
   import SearchInput from "../lib/SearchInput.svelte";
   import FormField from "../lib/FormField.svelte";
@@ -20,6 +20,8 @@
   let query = $state("");
   let form = $state<HostForm>({ ip: "", hostname: "" });
   let formErrors: FieldErrors<HostForm> = $state({});
+  let settingUp = $state(false);
+  let setupResult: HostSetupEntry[] | null = $state(null);
 
   const filtered = $derived(
     query.trim()
@@ -107,6 +109,34 @@
     }
   }
 
+  async function runSetup() {
+    actionError = null;
+    elevationCommand = null;
+    setupResult = null;
+    settingUp = true;
+    try {
+      const result = await hostsApi.setup();
+      if (result.failed.length > 0) {
+        const msgs = result.failed.map((f) => `${f.name}: ${f.error}`).join("\n");
+        actionError = `Setup partially failed:\n${msgs}`;
+      }
+      if (result.succeeded.length > 0) {
+        setupResult = result.succeeded;
+      }
+      await load();
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        const detail = e.detail as { command?: string; message?: string };
+        elevationCommand = detail?.command ?? null;
+        actionError = detail?.message ?? "Elevated privileges required";
+      } else {
+        actionError = String(e);
+      }
+    } finally {
+      settingUp = false;
+    }
+  }
+
   function onModalKeydown(e: KeyboardEvent) {
     if (e.key === "Escape") showModal = false;
     e.stopPropagation();
@@ -122,6 +152,10 @@
     </h1>
     <div class="header-actions">
       <SearchInput bind:value={query} placeholder="Filter hosts…" />
+      <button class="btn-secondary" onclick={runSetup} disabled={settingUp}>
+        {#if settingUp}<span class="spinner-sm"></span>{/if}
+        Auto Setup
+      </button>
       <button
         class="btn-primary"
         onclick={() => {
@@ -144,6 +178,21 @@
     </div>
   {:else if actionError}
     <div class="alert-error">{actionError}</div>
+  {/if}
+
+  {#if setupResult && setupResult.length > 0}
+    <div class="alert-success">
+      <p>✓ Setup complete — {setupResult.length} host{setupResult.length > 1 ? "s" : ""} configured:</p>
+      <ul>
+        {#each setupResult as r (r.name)}
+          <li>
+            <code>{r.host}</code> → <code>{r.ip}</code>:<code>{r.local_port}</code>
+            {#if r.port_reassigned}<span class="muted"> (port reassigned)</span>{/if}
+          </li>
+        {/each}
+      </ul>
+      <button class="btn-sm btn-secondary" onclick={() => (setupResult = null)}>Dismiss</button>
+    </div>
   {/if}
 
   {#if loading}
@@ -273,5 +322,30 @@
     word-break: break-all;
     font-size: 0.8rem;
     color: #e0e0e0;
+  }
+
+  .alert-success {
+    background: #0f2a1a;
+    border: 1px solid #22c55e;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    color: #86efac;
+    font-size: 0.85rem;
+  }
+
+  .alert-success ul {
+    margin: 0.5rem 0;
+    padding-left: 1.25rem;
+    list-style: none;
+  }
+
+  .alert-success li {
+    margin: 0.25rem 0;
+    font-size: 0.8rem;
+  }
+
+  .alert-success .muted {
+    color: #6b7280;
   }
 </style>

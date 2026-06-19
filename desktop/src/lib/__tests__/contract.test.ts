@@ -57,8 +57,10 @@ const SIDECAR_ENDPOINTS: SidecarEndpoint[] = [
   { method: "DELETE", path: "/api/v1/instances/{name}" },
   { method: "GET", path: "/api/v1/hosts" },
   { method: "POST", path: "/api/v1/hosts" },
+  { method: "POST", path: "/api/v1/hosts/setup" },
   { method: "DELETE", path: "/api/v1/hosts/{hostname}" },
   { method: "GET", path: "/api/v1/profiles" },
+  { method: "GET", path: "/api/v1/profiles/{name}" },
   { method: "POST", path: "/api/v1/profiles:refresh_all" },
   { method: "POST", path: "/api/v1/profiles/{name}:refresh" },
   { method: "POST", path: "/api/v1/profiles/{name}:set_default" },
@@ -128,12 +130,14 @@ describe("sidecar ↔ frontend contract", () => {
     await databasesApi.update("d", { port: 6543 });
     await databasesApi.delete("d");
     await profilesApi.list();
+    await profilesApi.get("dev");
     await profilesApi.refreshAll();
     await profilesApi.refresh("dev");
     await profilesApi.setDefault("dev");
     await profilesApi.getIdentity("dev");
     await hostsApi.list();
     await hostsApi.add("127.0.0.1", "x");
+    await hostsApi.setup();
     await hostsApi.remove("x");
     await configApi.get();
     await configApi.patch({ foo: 1 });

@@ -1,7 +1,8 @@
 """Hosts file management — wraps HostsManager, surfaces elevation requirement."""
 
-from typing import Any
+from typing import Any, Optional
 
+from cli_tool.commands.ssm.core.hosts_setup import setup_databases
 from cli_tool.commands.ssm.utils import HostsManager
 
 
@@ -44,3 +45,17 @@ def remove_host(hostname: str) -> None:
     except PermissionError:
         cmd = _elevation_command(f"devo ssm hosts remove {hostname}")
         raise NeedsElevation(cmd)
+
+
+def setup_hosts(db_names: Optional[list[str]] = None) -> dict[str, Any]:
+    """Run auto-setup for configured databases. Returns structured results.
+
+    If any database failed because /etc/hosts could not be written, raises
+    NeedsElevation with the command the user can run in their terminal —
+    matching the behaviour of add_host / remove_host.
+    """
+    succeeded, failed = setup_databases(db_names)
+    elevation_needed = next((f for f in failed if f.get("needs_elevation")), None)
+    if elevation_needed:
+        raise NeedsElevation(_elevation_command("devo ssm hosts setup"))
+    return {"succeeded": succeeded, "failed": failed}

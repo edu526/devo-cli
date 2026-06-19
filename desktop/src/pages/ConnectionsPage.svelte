@@ -137,7 +137,7 @@
         connections = connections.map((c) =>
           c.name === name ? { ...c, state, local_port, error } : c,
         );
-      } else {
+      } else if (state === "error" || state === "expired_credentials") {
         connections = [...connections, { name, state, local_port, error }];
       }
     }

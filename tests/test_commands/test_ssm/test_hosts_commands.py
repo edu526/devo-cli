@@ -34,7 +34,9 @@ def mock_hosts_manager(mocker):
     mock_cls = mocker.patch("cli_tool.commands.ssm.commands.hosts.add.HostsManager")
     mock_cls_list = mocker.patch("cli_tool.commands.ssm.commands.hosts.list.HostsManager")
     mock_cls_remove = mocker.patch("cli_tool.commands.ssm.commands.hosts.remove.HostsManager")
-    mock_cls_setup = mocker.patch("cli_tool.commands.ssm.commands.hosts.setup.HostsManager")
+    # setup logic lives in core/hosts_setup.py now — patch there so the
+    # pure function picks up the mock when the CLI wrapper delegates to it.
+    mock_cls_setup = mocker.patch("cli_tool.commands.ssm.core.hosts_setup.HostsManager")
     mock_cls_clear = mocker.patch("cli_tool.commands.ssm.commands.hosts.clear.HostsManager")
 
     instance = mock_cls.return_value

@@ -162,6 +162,50 @@ class TestRemoveHost:
             remove_host("mydb.local")
 
 
+@pytest.mark.unit
+class TestSetupHosts:
+    def _patch_setup(self, mocker, succeeded, failed):
+        mocker.patch(
+            "cli_tool.sidecar.services.hosts_service.setup_databases",
+            return_value=(succeeded, failed),
+        )
+
+    def test_returns_structured_results(self, mocker):
+        self._patch_setup(
+            mocker,
+            [{"name": "db1", "host": "h", "ip": "127.0.0.2", "local_port": 15432, "port_reassigned": False}],
+            [],
+        )
+        from cli_tool.sidecar.services.hosts_service import setup_hosts
+
+        result = setup_hosts()
+        assert result["succeeded"][0]["name"] == "db1"
+        assert result["failed"] == []
+
+    def test_elevation_failure_raises_needs_elevation(self, mocker):
+        self._patch_setup(
+            mocker,
+            [],
+            [{"name": "db1", "host": "h", "error": "denied", "needs_elevation": True}],
+        )
+        from cli_tool.sidecar.services.hosts_service import setup_hosts
+
+        with pytest.raises(NeedsElevation):
+            setup_hosts()
+
+    def test_non_elevation_failure_does_not_raise(self, mocker):
+        self._patch_setup(
+            mocker,
+            [{"name": "db1", "host": "h", "ip": "127.0.0.2", "local_port": 15432, "port_reassigned": False}],
+            [{"name": "db2", "host": "h2", "error": "boom", "needs_elevation": False}],
+        )
+        from cli_tool.sidecar.services.hosts_service import setup_hosts
+
+        result = setup_hosts()
+        assert len(result["succeeded"]) == 1
+        assert result["failed"][0]["name"] == "db2"
+
+
 # ---------------------------------------------------------------------------
 # profile_service
 # ---------------------------------------------------------------------------

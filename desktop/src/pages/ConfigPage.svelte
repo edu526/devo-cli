@@ -209,12 +209,23 @@
   }
 
   .pref-row select {
+    -webkit-appearance: none;
+    appearance: none;
     background: var(--bg-surface-2);
     border: 1px solid var(--border);
     border-radius: 4px;
     color: var(--text-primary);
     font-size: 0.82rem;
-    padding: 0.25rem 0.5rem;
+    padding: 0.25rem 1.8rem 0.25rem 0.5rem;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='none' stroke='%2394a3b8' stroke-width='1.5' d='M1 1l4 4 4-4'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.55rem center;
+  }
+
+  .pref-row select option {
+    background: var(--bg-surface);
+    color: var(--text-primary);
   }
 
   .editor-wrap {
@@ -236,6 +247,7 @@
 
   .editor-wrap :global(.cm-editor) {
     background: var(--bg-surface);
+    width: 100%;
     height: 100%;
     min-height: 400px;
   }

@@ -33,11 +33,19 @@ from cli_tool.sidecar.state import AppState
 
 logger = logging.getLogger(__name__)
 
-# CORS allowlist is intentionally restrictive. `tauri://localhost` covers
-# the production Tauri shell; `http://localhost:5173` is the Vite dev server
-# (see desktop/vite.config.ts). Both are non-network-accessible in the
-# Tauri model.
-_DEFAULT_ALLOWED_ORIGINS = ("tauri://localhost", "http://localhost:5173")
+# CORS allowlist is intentionally restrictive. Tauri 2 webview origins
+# (verified against tauri 2.11.1 manager::get_app_url):
+#   - `tauri://localhost`         — macOS / Linux (dev & production)
+#   - `http://tauri.localhost`    — Windows dev
+#   - `https://tauri.localhost`   — Windows production
+#   - `http://localhost:5173`     — Vite dev server (see desktop/vite.config.ts)
+# All are non-network-accessible in the Tauri model.
+_DEFAULT_ALLOWED_ORIGINS = (
+    "tauri://localhost",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+    "http://localhost:5173",
+)
 
 # Cap incoming JSON bodies at 1 MB. The sidecar's largest legitimate
 # payload (a config patch) is well under 64 KB. The constant is exported

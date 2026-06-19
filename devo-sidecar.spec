@@ -33,6 +33,7 @@ hidden_imports = [
     "cli_tool.commands.ssm.core.config",
     "cli_tool.commands.ssm.core.session",
     "cli_tool.commands.ssm.core.connection_runner",
+    "cli_tool.commands.ssm.core.hosts_setup",
     "cli_tool.commands.ssm.utils",
     "cli_tool.commands.ssm.utils.hosts_manager",
     # AWS login (profile listing + credential verification)

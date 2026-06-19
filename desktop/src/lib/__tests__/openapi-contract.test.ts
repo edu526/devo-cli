@@ -73,10 +73,14 @@ const SIDECAR_SPEC: OpenAPIV3.Document = {
       get: { responses: { "200": { description: "OK" } } },
       post: { responses: { "201": { description: "Created" } } },
     },
+    "/api/v1/hosts/setup": {
+      post: { responses: { "200": { description: "OK" } } },
+    },
     "/api/v1/hosts/{hostname}": {
       delete: { responses: { "204": { description: "No Content" } } },
     },
     "/api/v1/profiles": { get: { responses: { "200": { description: "OK" } } } },
+    "/api/v1/profiles/{name}": { get: { responses: { "200": { description: "OK" } } } },
     "/api/v1/profiles:refresh_all": { post: { responses: { "202": { description: "Accepted" } } } },
     "/api/v1/profiles/{name}:refresh": { post: { responses: { "202": { description: "Accepted" } } } },
     "/api/v1/profiles/{name}:set_default": { post: { responses: { "200": { description: "OK" } } } },
@@ -154,12 +158,14 @@ describe("openapi contract: frontend ↔ sidecar", () => {
     await databasesApi.update("d", { port: 6543 });
     await databasesApi.delete("d");
     await profilesApi.list();
+    await profilesApi.get("dev");
     await profilesApi.refreshAll();
     await profilesApi.refresh("dev");
     await profilesApi.setDefault("dev");
     await profilesApi.getIdentity("dev");
     await hostsApi.list();
     await hostsApi.add("127.0.0.1", "x");
+    await hostsApi.setup();
     await hostsApi.remove("x");
     await configApi.get();
     await configApi.patch({ foo: 1 });

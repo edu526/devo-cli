@@ -1563,7 +1563,7 @@ def test_get_legacy_dynamodb_config_file_returns_path(tmp_path, monkeypatch):
 def test_load_config_migrates_legacy_and_reloads(tmp_path, mocker):
     """When no config.json exists but legacy files do, migration runs and result reloaded."""
     devo_dir = tmp_path / ".devo"
-    devo_dir.mkdir()
+    devo_dir.mkdir(exist_ok=True)
     config_file = devo_dir / "config.json"
     legacy_ssm = devo_dir / "ssm-config.json"
     legacy_ssm.write_text('{"databases": {}}')
@@ -1585,7 +1585,7 @@ def test_try_migrate_legacy_configs_returns_false_when_config_exists(tmp_path, m
     from cli_tool.core.utils.config_manager import _try_migrate_legacy_configs
 
     devo_dir = tmp_path / ".devo"
-    devo_dir.mkdir()
+    devo_dir.mkdir(exist_ok=True)
     config_file = devo_dir / "config.json"
     config_file.write_text("{}")
 
@@ -1602,7 +1602,7 @@ def test_try_migrate_legacy_configs_migrates_ssm_only(tmp_path, mocker):
     from cli_tool.core.utils.config_manager import _try_migrate_legacy_configs
 
     devo_dir = tmp_path / ".devo"
-    devo_dir.mkdir()
+    devo_dir.mkdir(exist_ok=True)
     config_file = devo_dir / "config.json"
     legacy_ssm = devo_dir / "ssm-config.json"
     legacy_ssm.write_text('{"databases": {"mydb": {}}}')
@@ -1624,7 +1624,7 @@ def test_try_migrate_legacy_configs_migrates_dynamodb_only(tmp_path, mocker):
     from cli_tool.core.utils.config_manager import _try_migrate_legacy_configs
 
     devo_dir = tmp_path / ".devo"
-    devo_dir.mkdir()
+    devo_dir.mkdir(exist_ok=True)
     dynamo_dir = devo_dir / "dynamodb"
     dynamo_dir.mkdir()
     config_file = devo_dir / "config.json"
@@ -1647,7 +1647,7 @@ def test_try_migrate_legacy_configs_handles_corrupt_ssm(tmp_path, mocker):
     from cli_tool.core.utils.config_manager import _try_migrate_legacy_configs
 
     devo_dir = tmp_path / ".devo"
-    devo_dir.mkdir()
+    devo_dir.mkdir(exist_ok=True)
     config_file = devo_dir / "config.json"
     legacy_ssm = devo_dir / "ssm-config.json"
     legacy_ssm.write_text("NOT JSON {{{{")
@@ -1669,7 +1669,7 @@ def test_try_migrate_legacy_configs_handles_corrupt_dynamodb(tmp_path, mocker):
     from cli_tool.core.utils.config_manager import _try_migrate_legacy_configs
 
     devo_dir = tmp_path / ".devo"
-    devo_dir.mkdir()
+    devo_dir.mkdir(exist_ok=True)
     dynamo_dir = devo_dir / "dynamodb"
     dynamo_dir.mkdir()
     config_file = devo_dir / "config.json"
@@ -1766,7 +1766,7 @@ def test_migrate_legacy_configs_ssm_error_logs_failure(tmp_path, mocker):
     from cli_tool.core.utils.config_manager import migrate_legacy_configs
 
     devo_dir = tmp_path / ".devo"
-    devo_dir.mkdir()
+    devo_dir.mkdir(exist_ok=True)
     config_file = devo_dir / "config.json"
     config_file.write_text("{}")
     legacy_ssm = devo_dir / "ssm-config.json"
@@ -1788,7 +1788,7 @@ def test_migrate_legacy_configs_dynamodb_error_logs_failure(tmp_path, mocker):
     from cli_tool.core.utils.config_manager import migrate_legacy_configs
 
     devo_dir = tmp_path / ".devo"
-    devo_dir.mkdir()
+    devo_dir.mkdir(exist_ok=True)
     dynamo_dir = devo_dir / "dynamodb"
     dynamo_dir.mkdir()
     config_file = devo_dir / "config.json"
@@ -1812,7 +1812,7 @@ def test_migrate_legacy_configs_with_backup_creates_backup(tmp_path, mocker):
     from cli_tool.core.utils.config_manager import migrate_legacy_configs
 
     devo_dir = tmp_path / ".devo"
-    devo_dir.mkdir()
+    devo_dir.mkdir(exist_ok=True)
     config_file = devo_dir / "config.json"
     legacy_ssm = devo_dir / "ssm-config.json"
     legacy_ssm.write_text('{"databases": {}}')
@@ -1836,7 +1836,7 @@ def test_migrate_legacy_configs_with_backup_dynamodb(tmp_path, mocker):
     from cli_tool.core.utils.config_manager import migrate_legacy_configs
 
     devo_dir = tmp_path / ".devo"
-    devo_dir.mkdir()
+    devo_dir.mkdir(exist_ok=True)
     dynamo_dir = devo_dir / "dynamodb"
     dynamo_dir.mkdir()
     config_file = devo_dir / "config.json"

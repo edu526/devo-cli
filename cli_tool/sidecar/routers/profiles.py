@@ -12,7 +12,7 @@ from cli_tool.commands.aws_login.core.credentials import (
 )
 from cli_tool.sidecar.deps import get_app_state, require_bearer
 from cli_tool.sidecar.rate_limit import limiter
-from cli_tool.sidecar.services.profile_service import get_profiles_info
+from cli_tool.sidecar.services.profile_service import get_profile_info, get_profiles_info
 from cli_tool.sidecar.state import AppState, EventHub
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,14 @@ def _state(request: Request) -> AppState:
 @router.get("")
 def list_profiles() -> list[dict[str, Any]]:
     return get_profiles_info()
+
+
+@router.get("/{name}")
+def get_profile(name: str) -> dict[str, Any]:
+    info = get_profile_info(name)
+    if info is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Profile '{name}' not found")
+    return info
 
 
 def _do_refresh_all(hub: EventHub) -> None:
@@ -75,13 +83,18 @@ def refresh_all(request: Request, response: Response) -> dict[str, Any]:
 def _do_refresh_one(hub: EventHub, name: str) -> None:
     """Synchronous body of the per-profile refresh background thread.
 
+    Uses `aws sso login --profile {name}` (same as `devo aws-login` login
+    command), NOT `--sso-session`, so only this profile's credentials are
+    fetched.  With `--sso-session` the SHARED session token is refreshed
+    and every profile on that session benefits — that's `refresh_all`
+    behaviour, not per-profile.
+
     The actual subprocess + verify_credentials calls are kept in this
     helper so the unit tests can patch them out without standing up
     the FastAPI request context.
     """
     import subprocess
 
-    from cli_tool.commands.aws_login.commands.refresh import _build_sso_login_cmd
     from cli_tool.commands.aws_login.core.config import get_profile_config
     from cli_tool.commands.aws_login.core.credentials import verify_credentials
 
@@ -96,7 +109,7 @@ def _do_refresh_one(hub: EventHub, name: str) -> None:
             hub.publish("profile.refreshed", {"names": [], "success": False, "error": msg})
             return
 
-        login_cmd = _build_sso_login_cmd(name)
+        login_cmd = ["aws", "sso", "login", "--profile", name]
         logger.info("Running: %s", " ".join(login_cmd))
         result = subprocess.run(login_cmd, timeout=120)
         if result.returncode != 0:

@@ -188,8 +188,8 @@ class TestDoRefreshOne:
         mocker.patch.dict(
             "sys.modules",
             {
-                "cli_tool.commands.aws_login.commands.refresh": MagicMock(_build_sso_login_cmd=MagicMock(side_effect=Exception("weird"))),
-                "cli_tool.commands.aws_login.core.config": MagicMock(),
+                "cli_tool.commands.aws_login.commands.refresh": MagicMock(_build_sso_login_cmd=MagicMock(return_value=["aws", "sso", "login"])),
+                "cli_tool.commands.aws_login.core.config": MagicMock(get_profile_config=MagicMock(side_effect=Exception("weird"))),
                 "cli_tool.commands.aws_login.core.credentials": MagicMock(),
             },
         )

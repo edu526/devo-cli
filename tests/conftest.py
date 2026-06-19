@@ -21,6 +21,42 @@ from rich.console import Console
 # (which fails under fastapi.testclient.TestClient).
 os.environ.setdefault("DEVO_TESTING", "1")
 
+
+# ============================================================================
+# Defense-in-depth: never let a test touch the developer's real ~/.devo/
+# ============================================================================
+
+
+@pytest.fixture(autouse=True)
+def _isolate_user_config(tmp_path, monkeypatch):
+    """Point config_manager at a per-test tmp dir so no test can write
+    to the developer's real ~/.devo/config.json.
+
+    Without this, any test that exercises a FastAPI handler which calls
+    load_config()/save_config() (e.g. PATCH /api/v1/config inside a
+    TestClient) would silently merge a test fixture into the dev's real
+    config — easy to miss in review, only noticed when the dev opens
+    Desktop and sees weird keys. Individual tests can still mock the
+    module functions themselves to point at a different path; this
+    autouse fixture is the safety net underneath.
+
+    The dir is pre-created because the sidecar's inotify watcher needs
+    it to exist when `start_config_watcher()` runs inside the FastAPI
+    lifespan.
+    """
+    # ponytail: pre-create the dir so the watchdog inotify watcher
+    # can attach on app startup. A handful of legacy migration tests
+    # that do their own `mkdir()` against this path now need
+    # `exist_ok=True`; see test_load_config_migrates_legacy_and_reloads.
+    from cli_tool.core.utils import config_manager
+
+    isolated = tmp_path / ".devo"
+    isolated.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(config_manager, "get_config_dir", lambda: isolated)
+    monkeypatch.setattr(config_manager, "get_config_file", lambda: isolated / "config.json")
+    yield
+
+
 # ============================================================================
 # Test Data Fixtures
 # ============================================================================
@@ -159,8 +195,10 @@ def temp_config_dir(tmp_path):
         config_file = temp_config_dir / 'config.json'
         # Write and read config files safely
     """
+    # ponytail: exist_ok so this co-exists with the autouse
+    # `_isolate_user_config` fixture which already creates the same dir.
     config_dir = tmp_path / ".devo"
-    config_dir.mkdir()
+    config_dir.mkdir(exist_ok=True)
     return config_dir
 
 

@@ -5,6 +5,9 @@ Covers:
 - cli_tool/commands/ssm/commands/shortcuts.py lines 8-11, 23-25, 32-34
 """
 
+import threading
+import time
+
 import click
 import pytest
 from click.testing import CliRunner
@@ -276,3 +279,259 @@ class TestShellShortcut:
         result = runner.invoke(ssm, ["shell", "my-instance"])
 
         assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# connection_runner.py – _probe_then_emit_connected state guard
+# (regression: probe thread must not flip state to 'connected' after the
+#  main loop has declared 'expired_credentials' / 'error' / 'stopped')
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestProbeStateGuard:
+    def test_probe_does_not_overwrite_expired_credentials_state(self, mocker):
+        """After the main loop emits 'expired_credentials', the background
+        probe thread's timeout fallback must NOT emit 'connected' on top of
+        it. Covers connection_runner.py:330-345."""
+        from cli_tool.commands.ssm.core.connection_runner import (
+            ConnectionRecord,
+            ForwarderRegistry,
+            _run_connection_loop,
+        )
+        from cli_tool.commands.ssm.core.session import SSMSession
+        from cli_tool.commands.ssm.core.states import (
+            CONNECTED,
+            EXPIRED_CREDENTIALS,
+            STOPPED,
+        )
+
+        record = ConnectionRecord(name="x")
+        registry = ForwarderRegistry()
+        main_finished = threading.Event()
+
+        # SSM subprocess dies fast and returns cleanly (no exception raised)
+        mocker.patch("cli_tool.commands.ssm.core.connection_runner._run_attempt")
+        # Post-mortem token check sees expired creds
+        mocker.patch.object(SSMSession, "_is_token_expired", staticmethod=lambda **kw: True)
+        # Local port is never ready (refused)
+        mocker.patch(
+            "cli_tool.commands.ssm.core.connection_runner.socket.create_connection",
+            side_effect=OSError("refused"),
+        )
+
+        # Block the probe on the main thread finishing, so when the probe
+        # reaches the timeout branch the state-guard sees the final state.
+        def fake_sleep(seconds):
+            if seconds == 0.5:
+                main_finished.wait(timeout=2.0)
+
+        mocker.patch(
+            "cli_tool.commands.ssm.core.connection_runner.time.sleep",
+            side_effect=fake_sleep,
+        )
+
+        # Return a monotonically increasing counter so the probe's deadline
+        # is eventually exceeded regardless of which thread calls first
+        # (the metrics thread also calls time.monotonic once for uptime).
+        counter = {"n": 0}
+
+        def fake_monotonic():
+            counter["n"] += 1
+            return float(counter["n"])
+
+        mocker.patch(
+            "cli_tool.commands.ssm.core.connection_runner.time.monotonic",
+            side_effect=fake_monotonic,
+        )
+
+        def run_and_signal():
+            _run_connection_loop(
+                name="x",
+                db_config={"region": "us-east-1", "profile": "p"},
+                actual_local_port=1,
+                use_hostname_forwarding=False,
+                registry=registry,
+                record=record,
+            )
+            main_finished.set()
+
+        t = threading.Thread(target=run_and_signal, daemon=True)
+        t.start()
+        t.join(timeout=2.0)
+        # Give the probe a moment to finish its state-guard check.
+        time.sleep(0.2)
+
+        assert record.state == EXPIRED_CREDENTIALS
+
+    def test_probe_does_not_emit_connected_after_stop_event(self, mocker):
+        """After record.stop_event is set, the probe must not emit 'connected'
+        even if the port is reachable and the main thread hasn't yet emitted
+        'stopped'. Covers connection_runner.py:337-340."""
+        from cli_tool.commands.ssm.core.connection_runner import (
+            ConnectionRecord,
+            ForwarderRegistry,
+            _run_connection_loop,
+        )
+        from cli_tool.commands.ssm.core.session import SSMSession
+        from cli_tool.commands.ssm.core.states import (
+            CONNECTED,
+            EXPIRED_CREDENTIALS,
+            STOPPED,
+        )
+
+        record = ConnectionRecord(name="x")
+        registry = ForwarderRegistry()
+        state_changes: list = []
+        registry.add_observer(lambda e, p: state_changes.append(p.get("state")) if e == "connection.state_changed" else None)
+        probe_in_body = threading.Event()
+        stop_clicked = threading.Event()
+        probe_done = threading.Event()
+        main_finished = threading.Event()
+
+        class _FakeSocket:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                probe_done.set()
+                return False
+
+        # SSM attempt blocks until both the probe is in the with-block AND
+        # stop has been clicked, then waits for the probe to finish its
+        # state-guard check before returning. This guarantees the probe
+        # evaluates the state-guard before the main thread emits 'stopped'.
+        def fake_run_attempt(*args, **kwargs):
+            probe_in_body.wait(timeout=2.0)
+            stop_clicked.wait(timeout=2.0)
+            probe_done.wait(timeout=2.0)
+            return 0
+
+        mocker.patch(
+            "cli_tool.commands.ssm.core.connection_runner._run_attempt",
+            side_effect=fake_run_attempt,
+        )
+        mocker.patch.object(SSMSession, "_is_token_expired", staticmethod(lambda **kw: False))
+
+        # Port is reachable, but the mock blocks until stop is clicked so
+        # the probe is sitting inside the with-block when the event is set.
+        def fake_create_connection(*args, **kwargs):
+            probe_in_body.set()
+            stop_clicked.wait(timeout=2.0)
+            return _FakeSocket()
+
+        mocker.patch(
+            "cli_tool.commands.ssm.core.connection_runner.socket.create_connection",
+            side_effect=fake_create_connection,
+        )
+        mocker.patch("cli_tool.commands.ssm.core.connection_runner.time.sleep")
+        counter = {"n": 0}
+
+        def fake_monotonic():
+            counter["n"] += 1
+            return float(counter["n"])
+
+        mocker.patch(
+            "cli_tool.commands.ssm.core.connection_runner.time.monotonic",
+            side_effect=fake_monotonic,
+        )
+
+        def run_and_signal():
+            _run_connection_loop(
+                name="x",
+                db_config={"region": "us-east-1", "profile": "p"},
+                actual_local_port=1,
+                use_hostname_forwarding=False,
+                registry=registry,
+                record=record,
+            )
+            main_finished.set()
+
+        t = threading.Thread(target=run_and_signal, daemon=True)
+        t.start()
+
+        probe_in_body.wait(timeout=2.0)
+        record.stop_event.set()
+        stop_clicked.set()
+        main_finished.wait(timeout=2.0)
+        time.sleep(0.1)
+
+        assert CONNECTED not in state_changes, f"probe emitted 'connected' after stop_event was set: {state_changes}"
+        assert record.state == STOPPED
+
+    def test_probe_does_not_overwrite_error_state(self, mocker):
+        """After the main loop emits 'error' (from a generic exception in
+        _run_attempt), the background probe thread's timeout fallback must
+        NOT emit 'connected' on top of it. Covers connection_runner.py:340-355.
+        """
+        from cli_tool.commands.ssm.core.connection_runner import (
+            ConnectionRecord,
+            ForwarderRegistry,
+            _run_connection_loop,
+        )
+        from cli_tool.commands.ssm.core.session import SSMSession
+        from cli_tool.commands.ssm.core.states import (
+            CONNECTED,
+            ERROR,
+            STOPPED,
+        )
+
+        record = ConnectionRecord(name="x")
+        registry = ForwarderRegistry()
+        main_finished = threading.Event()
+
+        # SSM subprocess raises a generic error (not an expired-credential case)
+        mocker.patch(
+            "cli_tool.commands.ssm.core.connection_runner._run_attempt",
+            side_effect=RuntimeError("ssm crashed"),
+        )
+        # Local port is never ready (refused) — forces probe into timeout branch
+        mocker.patch(
+            "cli_tool.commands.ssm.core.connection_runner.socket.create_connection",
+            side_effect=OSError("refused"),
+        )
+
+        # Block the probe on the main thread finishing, so when the probe
+        # reaches the timeout branch the state-guard sees the final state.
+        def fake_sleep(seconds):
+            if seconds == 0.5:
+                main_finished.wait(timeout=2.0)
+
+        mocker.patch(
+            "cli_tool.commands.ssm.core.connection_runner.time.sleep",
+            side_effect=fake_sleep,
+        )
+
+        # Return a monotonically increasing counter so the probe's deadline
+        # is eventually exceeded regardless of which thread calls first
+        # (the metrics thread also calls time.monotonic once for uptime).
+        counter = {"n": 0}
+
+        def fake_monotonic():
+            counter["n"] += 1
+            return float(counter["n"])
+
+        mocker.patch(
+            "cli_tool.commands.ssm.core.connection_runner.time.monotonic",
+            side_effect=fake_monotonic,
+        )
+
+        def run_and_signal():
+            _run_connection_loop(
+                name="x",
+                db_config={"region": "us-east-1", "profile": "p"},
+                actual_local_port=1,
+                use_hostname_forwarding=False,
+                registry=registry,
+                record=record,
+            )
+            main_finished.set()
+
+        t = threading.Thread(target=run_and_signal, daemon=True)
+        t.start()
+        t.join(timeout=2.0)
+        # Give the probe a moment to finish its state-guard check.
+        time.sleep(0.2)
+
+        assert record.state == ERROR
+        assert record.error is not None and "ssm crashed" in record.error
