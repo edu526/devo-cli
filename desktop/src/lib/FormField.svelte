@@ -19,7 +19,7 @@
 </script>
 
 <div class="form-field" class:has-error={!!error}>
-  <label for={id}>
+  <label class="field-label" for={id}>
     {label}
     {#if required}<span class="required" aria-label="required">*</span>{/if}
   </label>
@@ -44,6 +44,15 @@
     font-size: 0.8rem;
     color: #94a3b8;
     font-weight: 500;
+  }
+  /* Override the global .modal label rule (flex-direction: column)
+     which would push the required * onto a new line below the label
+     text. Keep the * inline with the label. */
+  .field-label {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 0.15rem;
   }
   .required {
     color: #f87171;

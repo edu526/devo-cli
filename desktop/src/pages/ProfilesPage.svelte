@@ -4,6 +4,7 @@
   import {
     profilesApi,
     ssoSessionsApi,
+    getLastErrorDiagnostics,
     type ProfileRecord,
     type IdentityRecord,
     type SsoSessionRecord,
@@ -14,6 +15,8 @@
   import { profilesCache } from "../lib/page-stores";
   import SearchInput from "../lib/SearchInput.svelte";
   import FormField from "../lib/FormField.svelte";
+  import SearchableSelect from "../lib/SearchableSelect.svelte";
+  import { retryNetworkErrors } from "../lib/retry";
   import {
     profileSchema,
     ssoSessionSchema,
@@ -55,6 +58,7 @@
   let creatingSession = $state(false);
   let discoverInProgress = $state(false);
   let discoverError: string | null = $state(null);
+  let discoverAttempt = $state(0); // 0 = no retry, 1..3 = current attempt
   let discoveredAccounts: DiscoveredAccount[] = $state([]);
   let selectedAccountId = $state<string>("");
   let selectedRole = $state<string>("");
@@ -124,6 +128,46 @@
   // the underlying TypeError / status text when debugging.
   let discoverErrorRaw = $state<string | null>(null);
 
+  async function startDiscover() {
+    if (!selectedSession) return;
+    discoverInProgress = true;
+    discoverError = null;
+    discoverErrorRaw = null;
+    discoverAttempt = 1;
+    discoveredAccounts = [];
+    selectedAccountId = "";
+    selectedRole = "";
+    profileForm.sso_account_id = "";
+    profileForm.sso_role_name = "";
+    try {
+      await retryNetworkErrors(
+        async () => {
+          discoverAttempt = Math.max(discoverAttempt, 1);
+          await profilesApi.discover(selectedSession);
+        },
+        {
+          attempts: 3,
+          baseMs: 600,
+          onRetry: (n) => (discoverAttempt = n + 1),
+        },
+      );
+      // Result arrives via WS `sso.discover.completed`
+    } catch (e) {
+      discoverError = friendlyError(e);
+      // Show the raw error plus the network diagnostics captured by
+      // api.ts (resource timing, time since last success, webview UA).
+      // The user can copy this in a bug report; we can also see at a
+      // glance whether the request was killed before starting
+      // (resourceEntryCount: 0 → Tauri webview race condition) or
+      // actually attempted and failed.
+      const raw = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+      const diag = getLastErrorDiagnostics();
+      discoverErrorRaw = diag ? `${raw}\n\n${diag}` : raw;
+      discoverInProgress = false;
+      discoverAttempt = 0;
+    }
+  }
+
   async function createSession() {
     newSessionErrors = {};
     const v = validate(ssoSessionSchema, newSessionForm);
@@ -149,26 +193,6 @@
       newSessionErrors = { name: friendlyError(e) };
     } finally {
       creatingSession = false;
-    }
-  }
-
-  async function startDiscover() {
-    if (!selectedSession) return;
-    discoverInProgress = true;
-    discoverError = null;
-    discoverErrorRaw = null;
-    discoveredAccounts = [];
-    selectedAccountId = "";
-    selectedRole = "";
-    profileForm.sso_account_id = "";
-    profileForm.sso_role_name = "";
-    try {
-      await profilesApi.discover(selectedSession);
-      // Result arrives via WS `sso.discover.completed`
-    } catch (e) {
-      discoverError = friendlyError(e);
-      discoverErrorRaw = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-      discoverInProgress = false;
     }
   }
 
@@ -325,6 +349,35 @@
       actionError = e instanceof ApiError ? String(e.detail) : String(e);
     } finally {
       busyIdentity = new Set([...busyIdentity].filter((n) => n !== name));
+    }
+  }
+
+  let busyDelete: Set<string> = $state(new Set());
+  let confirmDelete: string | null = $state(null);
+
+  function askDelete(name: string) {
+    confirmDelete = name;
+  }
+  function cancelDelete() {
+    confirmDelete = null;
+  }
+  async function confirmDeleteNow() {
+    const name = confirmDelete;
+    if (!name) return;
+    confirmDelete = null;
+    actionError = null;
+    busyDelete = new Set([...busyDelete, name]);
+    try {
+      await profilesApi.delete(name);
+      // Optimistic: drop from local list immediately, then reload to
+      // confirm the sidecar agrees.
+      profiles = profiles.filter((p) => p.name !== name);
+      if (defaultProfile === name) defaultProfile = null;
+      await load();
+    } catch (e) {
+      actionError = e instanceof ApiError ? String(e.detail) : String(e);
+    } finally {
+      busyDelete = new Set([...busyDelete].filter((n) => n !== name));
     }
   }
 
@@ -533,6 +586,35 @@
                   {busyIdentity.has(p.name) ? "Checking…" : "Identity"}
                 </span>
               </button>
+              <span class="footer-sep" aria-hidden="true"></span>
+              <button
+                class="action-icon action-danger"
+                aria-label="Delete profile"
+                disabled={busyDelete.has(p.name)}
+                onclick={() => askDelete(p.name)}
+              >
+                <svg
+                  class="action-glyph"
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  <line x1="10" y1="11" x2="10" y2="17" />
+                  <line x1="14" y1="11" x2="14" y2="17" />
+                </svg>
+                <span class="action-label">
+                  {busyDelete.has(p.name) ? "Deleting…" : "Delete"}
+                </span>
+              </button>
             </div>
           </div>
         </div>
@@ -652,8 +734,12 @@
           </h3>
           {#if discoverInProgress}
             <p class="muted-sm">
-              <span class="spinner-sm"></span> Approve the request in the browser window that
-              just opened. This may take up to 2 minutes.
+              <span class="spinner-sm"></span>
+              {#if discoverAttempt > 1}
+                Retrying… (attempt {discoverAttempt} of 3)
+              {:else}
+                Approve the request in the browser window that just opened. This may take up to 2 minutes.
+              {/if}
             </p>
           {:else if discoverError}
             <div class="alert-error">
@@ -675,20 +761,18 @@
             </button>
           {:else}
             <FormField label="Account" required>
-              <select
+              <SearchableSelect
+                options={discoveredAccounts.map((a) => ({
+                  value: a.accountId,
+                  label: `${a.accountName} (${a.accountId})`,
+                }))}
                 bind:value={selectedAccountId}
+                placeholder="Search accounts…"
                 onchange={() => {
                   selectedRole = "";
                   applyAccountSelection();
                 }}
-              >
-                <option value="" disabled>Select an account…</option>
-                {#each discoveredAccounts as a (a.accountId)}
-                  <option value={a.accountId}>
-                    {a.accountName} ({a.accountId})
-                  </option>
-                {/each}
-              </select>
+              />
             </FormField>
 
             {#if selectedAccountId}
@@ -696,16 +780,15 @@
                 {#if availableRoles.length === 0}
                   <p class="muted-sm">No roles available for this account.</p>
                 {:else}
-                  <select
+                  <SearchableSelect
+                    options={availableRoles.map((r) => ({
+                      value: r.roleName,
+                      label: r.roleName,
+                    }))}
                     bind:value={selectedRole}
+                    placeholder="Search roles…"
                     onchange={applyAccountSelection}
-                    disabled={availableRoles.length === 0}
-                  >
-                    <option value="" disabled>Select a role…</option>
-                    {#each availableRoles as r (r.roleName)}
-                      <option value={r.roleName}>{r.roleName}</option>
-                    {/each}
-                  </select>
+                  />
                 {/if}
               </FormField>
             {/if}
@@ -751,7 +834,7 @@
           disabled={creatingProfile}>Cancel</button
         >
         <button
-          class="btn-primary"
+          class="btn-primary btn-create-profile"
           onclick={submitProfile}
           disabled={creatingProfile ||
             !selectedAccountId ||
@@ -762,6 +845,44 @@
             <span class="spinner-sm"></span> Creating…
           {:else}
             Create profile
+          {/if}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if confirmDelete}
+  <div
+    class="modal-backdrop"
+    role="presentation"
+    onclick={cancelDelete}
+    onkeydown={cancelDelete}
+  >
+    <div
+      class="modal modal-confirm"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="delete-title"
+      tabindex="-1"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={onModalKeydown}
+    >
+      <h2 id="delete-title">Delete profile?</h2>
+      <p class="modal-hint">
+        This removes the <code>[profile {confirmDelete}]</code> block from
+        <code>~/.aws/config</code>. Cached credentials in
+        <code>~/.aws/credentials</code> are left untouched.
+      </p>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick={cancelDelete} disabled={busyDelete.size > 0}
+          >Cancel</button
+        >
+        <button class="btn-danger" onclick={confirmDeleteNow} disabled={busyDelete.size > 0}>
+          {#if busyDelete.size > 0}
+            <span class="spinner-sm"></span> Deleting…
+          {:else}
+            Delete
           {/if}
         </button>
       </div>
@@ -870,6 +991,33 @@
   .btn-sm {
     padding: 0.35rem 0.7rem;
     font-size: 0.78rem;
+  }
+
+  /* Keep the Create-profile button width stable so the inline spinner
+     doesn't push the label to the side. min-width is sized to fit the
+     longer of the two labels (with spinner) so the layout doesn't
+     jump when toggling loading state. */
+  .btn-create-profile {
+    min-width: 7.2rem;
+    justify-content: center;
+  }
+
+  .footer-sep {
+    width: 1px;
+    height: 18px;
+    background: var(--border, #2a2a2a);
+    margin: 0 0.15rem;
+  }
+  .action-danger {
+    color: #f87171;
+  }
+  .action-danger:hover:not(:disabled) {
+    color: #fff;
+    background: rgba(248, 113, 113, 0.12);
+    border-color: rgba(248, 113, 113, 0.4);
+  }
+  .modal-confirm {
+    min-width: 380px;
   }
 
   .error-details {

@@ -205,6 +205,31 @@ class TestDiscover:
         response = client.post("/profiles:discover", json={}, headers=AUTH)
         assert response.status_code == 422
 
+
+@pytest.mark.unit
+class TestDeleteProfile:
+    def test_returns_204_when_profile_exists(self, mocker):
+        mocker.patch(
+            "cli_tool.sidecar.routers.profiles.get_profile_config",
+            return_value={"sso_account_id": "111"},
+        )
+        mocked_remove = mocker.patch("cli_tool.sidecar.routers.profiles.remove_profile_section")
+        client, _ = _make_client()
+        response = client.delete("/profiles/dev", headers=AUTH)
+        assert response.status_code == 204
+        assert response.text == ""
+        mocked_remove.assert_called_once_with("dev")
+
+    def test_returns_404_when_profile_not_found(self, mocker):
+        mocker.patch(
+            "cli_tool.sidecar.routers.profiles.get_profile_config",
+            return_value=None,
+        )
+        client, _ = _make_client()
+        response = client.delete("/profiles/missing", headers=AUTH)
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"]
+
     def test_returns_202_with_real_limiter(self, mocker):  # ponytail: regression for "Load failed" — @limiter.limit endpoints
         # MUST declare a Response parameter; otherwise slowapi's
         # _inject_headers raises mid-request and the client sees a
