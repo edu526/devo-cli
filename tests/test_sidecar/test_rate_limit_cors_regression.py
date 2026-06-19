@@ -24,6 +24,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 # Mark this as a slow integration test.
 import pytest
@@ -54,7 +55,7 @@ def live_sidecar():
     proc = subprocess.Popen(
         [sys.executable, "-m", "cli_tool.sidecar", "--port", "0"],
         env=env,
-        cwd="/home/eduardo/Escritorio/PERSONALES/devo-cli",
+        cwd=str(Path(__file__).resolve().parents[2]),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
