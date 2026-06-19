@@ -35,7 +35,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e ".[dev]"
+          pip install -e ".[dev,sidecar]"
 
       - name: Run tests with coverage
         run: pytest --cov=cli_tool --cov-report=xml --cov-report=term-missing --cov-fail-under=40 -v

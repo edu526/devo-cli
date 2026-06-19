@@ -36,7 +36,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Python dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,sidecar]"
 
       - name: Run pre-commit checks
         run: pre-commit run --all-files
