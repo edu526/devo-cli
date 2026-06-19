@@ -40,9 +40,7 @@ class TestCreateApp:
         app_state = _make_app_state()
         app = create_app(app_state)
 
-        with TestClient(app):
-            all_paths = {getattr(r, "path", None) for r in app.routes}
-
+        all_paths = [getattr(r, "path", None) for r in app.routes]
         expected = [
             "/api/v1/preflight",
             "/api/v1/config",
@@ -53,8 +51,8 @@ class TestCreateApp:
             "/api/v1/connections",
             "/api/v1/events",
         ]
-        for path in expected:
-            assert any(p is not None and p.startswith(path) for p in all_paths), f"Route {path!r} not mounted"
+        missing = [p for p in expected if not any(r is not None and r.startswith(p) for r in all_paths)]
+        assert not missing, f"Routes not mounted: {missing}. Total routes: {len(all_paths)}. Paths: {all_paths}"
 
     def test_app_state_stored(self, mocker):
         async def _noop_watch(*_args, **_kwargs):
