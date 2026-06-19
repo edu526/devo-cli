@@ -134,6 +134,13 @@ td {
   padding: 0.6rem 0.75rem;
   border-bottom: 1px solid #1e1e1e;
   vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* Single-line truncation — pair with a per-cell max-width */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 tr:hover td {

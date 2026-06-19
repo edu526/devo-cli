@@ -179,7 +179,7 @@
             <tr>
               <td class="name">{name}</td>
               <td>{rec.bastion}</td>
-              <td><code>{rec.host}</code></td>
+              <td class="host-cell truncate"><code>{rec.host}</code></td>
               <td>{rec.port}</td>
               <td>{rec.local_port ?? "auto"}</td>
               <td>{rec.region}</td>
@@ -238,10 +238,7 @@
           <input bind:value={form.bastion} placeholder="prod-bastion" />
         </FormField>
         <FormField label="Remote host" required error={formErrors.host}>
-          <input
-            bind:value={form.host}
-            placeholder="mydb.cluster.us-east-1.rds.amazonaws.com"
-          />
+          <input bind:value={form.host} placeholder="mydb.cluster.us-east-1.rds.amazonaws.com" />
         </FormField>
         <FormField label="Remote port" required error={formErrors.port}>
           <input type="number" bind:value={form.port} placeholder="5432" />
@@ -290,5 +287,8 @@
     display: flex;
     align-items: center;
     gap: 0.6rem;
+  }
+  .host-cell {
+    max-width: 220px;
   }
 </style>

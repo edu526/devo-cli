@@ -232,66 +232,66 @@
   {:else}
     <div class="table-wrap">
       <table>
-          <thead>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>State</th>
+            <th>Host</th>
+            <th>Local Port</th>
+            <th>Uptime</th>
+            <th>Error</th>
+            <th class="actions-col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each rows as row (row.name)}
             <tr>
-              <th>Name</th>
-              <th>State</th>
-              <th>Host</th>
-              <th>Local Port</th>
-              <th>Uptime</th>
-              <th>Error</th>
-              <th class="actions-col">Actions</th>
+              <td class="name">{row.name}</td>
+              <td><span class="badge {stateClass(connState(row))}">{connState(row)}</span></td>
+              <td class="host-cell truncate"><code>{row.db.host}</code></td>
+              <td>{row.conn?.local_port ?? row.db.local_port ?? "auto"}</td>
+              <td class="uptime-cell">{formatUptime(row.conn?.uptime_seconds)}</td>
+              <td class="error-cell truncate">{row.conn?.error ?? ""}</td>
+              <td class="actions-cell">
+                <div class="actions-wrap">
+                  {#if canStart(row)}
+                    <button
+                      class="btn-sm btn-primary"
+                      onclick={() => startOne(row.name)}
+                      disabled={busyConns.has(row.name) || busyAll}
+                    >
+                      {#if busyConns.has(row.name)}
+                        <span class="spinner-sm"></span> Starting…
+                      {:else}
+                        Start
+                      {/if}
+                    </button>
+                  {:else}
+                    <button
+                      class="btn-sm btn-secondary"
+                      onclick={() => stopOne(row.name)}
+                      disabled={busyConns.has(row.name) || busyAll}
+                    >
+                      {#if busyConns.has(row.name)}
+                        <span class="spinner-sm"></span> Stopping…
+                      {:else}
+                        Stop
+                      {/if}
+                    </button>
+                    <button
+                      class="btn-sm btn-secondary"
+                      onclick={() => startOne(row.name)}
+                      disabled={busyConns.has(row.name) || busyAll}
+                      title="Restart"
+                    >
+                      ↻
+                    </button>
+                  {/if}
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {#each rows as row (row.name)}
-              <tr>
-                <td class="name">{row.name}</td>
-                <td><span class="badge {stateClass(connState(row))}">{connState(row)}</span></td>
-                <td class="host-cell"><code>{row.db.host}</code></td>
-                <td>{row.conn?.local_port ?? row.db.local_port ?? "auto"}</td>
-                <td class="uptime-cell">{formatUptime(row.conn?.uptime_seconds)}</td>
-                <td class="error-cell">{row.conn?.error ?? ""}</td>
-                <td class="actions-cell">
-                  <div class="actions-wrap">
-                    {#if canStart(row)}
-                      <button
-                        class="btn-sm btn-primary"
-                        onclick={() => startOne(row.name)}
-                        disabled={busyConns.has(row.name) || busyAll}
-                      >
-                        {#if busyConns.has(row.name)}
-                          <span class="spinner-sm"></span> Starting…
-                        {:else}
-                          Start
-                        {/if}
-                      </button>
-                    {:else}
-                      <button
-                        class="btn-sm btn-secondary"
-                        onclick={() => stopOne(row.name)}
-                        disabled={busyConns.has(row.name) || busyAll}
-                      >
-                        {#if busyConns.has(row.name)}
-                          <span class="spinner-sm"></span> Stopping…
-                        {:else}
-                          Stop
-                        {/if}
-                      </button>
-                      <button
-                        class="btn-sm btn-secondary"
-                        onclick={() => startOne(row.name)}
-                        disabled={busyConns.has(row.name) || busyAll}
-                        title="Restart"
-                      >
-                        ↻
-                      </button>
-                    {/if}
-                  </div>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
+          {/each}
+        </tbody>
       </table>
     </div>
   {/if}
@@ -306,15 +306,9 @@
 
   .host-cell {
     max-width: 220px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .error-cell {
     max-width: 200px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     color: #f87171;
     font-size: 0.8rem;
   }

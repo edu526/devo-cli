@@ -172,20 +172,6 @@
     paused = !paused;
   }
 
-  async function download() {
-    const content = lines.join("\n");
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `sidecar-${date}.log`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
   onMount(() => {
     load();
     // Periodic snapshot as a safety net: WS may miss lines if the
@@ -210,9 +196,6 @@
         {paused ? "▶ Resume" : "⏸ Pause"}
       </button>
       <button class="btn-secondary" onclick={() => load()} disabled={loading}>↺ Refresh</button>
-      <button class="btn-secondary" onclick={download} disabled={lines.length === 0}>
-        ⤓ Download
-      </button>
       <button class="btn-danger" onclick={clear} disabled={clearing}>
         {clearing ? "Clearing…" : "Clear"}
       </button>
@@ -233,15 +216,11 @@
           <span class="badge-count">{$errorLog.length}</span>
         </button>
         <span class="header-spacer"></span>
-        <button type="button" class="btn-sm btn-secondary" onclick={copyAllErrors}>
-          Copy
-        </button>
+        <button type="button" class="btn-sm btn-secondary" onclick={copyAllErrors}> Copy </button>
         <button type="button" class="btn-sm btn-secondary" onclick={downloadReport}>
           Download
         </button>
-        <button type="button" class="btn-sm btn-secondary" onclick={clearErrorLog}>
-          Clear
-        </button>
+        <button type="button" class="btn-sm btn-secondary" onclick={clearErrorLog}> Clear </button>
       </div>
       {#if clientErrorsExpanded}
         <div class="client-errors-list">
