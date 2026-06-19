@@ -12,7 +12,11 @@ from cli_tool.commands.aws_login.core.credentials import (
 )
 from cli_tool.sidecar.deps import get_app_state, require_bearer
 from cli_tool.sidecar.rate_limit import limiter
-from cli_tool.sidecar.services.profile_service import get_profile_info, get_profiles_info
+from cli_tool.sidecar.services.profile_service import (
+    create_profile,
+    get_profile_info,
+    get_profiles_info,
+)
 from cli_tool.sidecar.state import AppState, EventHub
 
 logger = logging.getLogger(__name__)
@@ -35,6 +39,32 @@ def get_profile(name: str) -> dict[str, Any]:
     if info is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Profile '{name}' not found")
     return info
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+def create_profile_endpoint(body: dict[str, Any]) -> dict[str, Any]:
+    """Append a new SSO profile to ~/.aws/config.
+
+    Body: {name, sso_start_url, sso_region, sso_account_id, sso_role_name,
+    region, output?}. Returns 409 on name collision or validation failure.
+    """
+    try:
+        return create_profile(
+            name=body["name"],
+            sso_start_url=body["sso_start_url"],
+            sso_region=body["sso_region"],
+            sso_account_id=body["sso_account_id"],
+            sso_role_name=body["sso_role_name"],
+            region=body["region"],
+            output=body.get("output", "json"),
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Missing required field: {exc.args[0]}",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 def _do_refresh_all(hub: EventHub) -> None:

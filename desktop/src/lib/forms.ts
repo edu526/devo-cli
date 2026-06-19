@@ -91,3 +91,34 @@ export const hostSchema = z.object({
 });
 
 export type HostForm = z.infer<typeof hostSchema>;
+
+// ── AWS Profile ───────────────────────────────────────────────────────────
+
+export const profileSchema = z.object({
+  name: z
+    .string()
+    .min(1, "Name is required")
+    .max(64, "Name must be ≤ 64 chars")
+    .regex(/^[a-zA-Z0-9_=,.@+-]+$/, "Only letters, digits and _ - = , . @ + are allowed"),
+  sso_start_url: z
+    .string()
+    .min(1, "SSO start URL is required")
+    .url("Must be a valid URL (https://…)"),
+  sso_region: z
+    .string()
+    .min(1, "SSO region is required")
+    .regex(/^[a-z]{2}-[a-z]+-\d+$/, "Region must look like us-east-1"),
+  sso_account_id: z.string().regex(/^\d{12}$/, "Account ID must be exactly 12 digits"),
+  sso_role_name: z
+    .string()
+    .min(1, "Role name is required")
+    .max(64)
+    .regex(/^[a-zA-Z0-9_=,.@+-]+$/, "Invalid role name"),
+  region: z
+    .string()
+    .min(1, "Region is required")
+    .regex(/^[a-z]{2}-[a-z]+-\d+$/, "Region must look like us-east-1"),
+  output: z.string().optional(),
+});
+
+export type ProfileForm = z.infer<typeof profileSchema>;

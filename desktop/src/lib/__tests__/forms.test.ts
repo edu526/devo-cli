@@ -4,6 +4,7 @@ import {
   databaseSchema,
   instanceSchema,
   hostSchema,
+  profileSchema,
 } from "../forms";
 
 describe("validate()", () => {
@@ -88,6 +89,36 @@ describe("databaseSchema", () => {
       port: 5432,
       region: "us-east-1",
     });
+    expect(r.success).toBe(false);
+  });
+});
+
+describe("profileSchema", () => {
+  const valid = {
+    name: "newdev",
+    sso_start_url: "https://example.awsapps.com/start",
+    sso_region: "us-east-1",
+    sso_account_id: "123456789012",
+    sso_role_name: "ReadOnlyRole",
+    region: "us-east-1",
+  };
+
+  it("accepts a well-formed profile", () => {
+    expect(validate(profileSchema, valid).success).toBe(true);
+  });
+
+  it("rejects a non-12-digit account id", () => {
+    const r = validate(profileSchema, { ...valid, sso_account_id: "12345" });
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects a region not shaped like us-east-1", () => {
+    const r = validate(profileSchema, { ...valid, sso_region: "us east 1" });
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects a start URL that is not a valid URL", () => {
+    const r = validate(profileSchema, { ...valid, sso_start_url: "not a url" });
     expect(r.success).toBe(false);
   });
 });

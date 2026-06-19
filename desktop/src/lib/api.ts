@@ -59,6 +59,16 @@ export interface ProfileRecord {
   is_default: boolean;
 }
 
+export interface ProfileIn {
+  name: string;
+  sso_start_url: string;
+  sso_region: string;
+  sso_account_id: string;
+  sso_role_name: string;
+  region: string;
+  output?: string;
+}
+
 export interface IdentityRecord {
   account_id: string;
   user_id: string;
@@ -214,6 +224,7 @@ export const databasesApi = {
 export const profilesApi = {
   list: () => req<ProfileRecord[]>("GET", "/profiles"),
   get: (name: string) => req<ProfileRecord>("GET", `/profiles/${name}`),
+  create: (body: ProfileIn) => req<ProfileRecord>("POST", "/profiles", body),
   refreshAll: () => req<{ status: string; message: string }>("POST", "/profiles:refresh_all"),
   refresh: (name: string) =>
     req<{ status: string; message: string }>("POST", `/profiles/${name}:refresh`),

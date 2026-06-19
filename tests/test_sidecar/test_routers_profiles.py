@@ -58,6 +58,45 @@ class TestGetProfile:
 
 
 @pytest.mark.unit
+class TestCreateProfile:
+    _VALID_BODY = {
+        "name": "newdev",
+        "sso_start_url": "https://example.awsapps.com/start",
+        "sso_region": "us-east-1",
+        "sso_account_id": "123456789012",
+        "sso_role_name": "ReadOnlyRole",
+        "region": "us-east-1",
+    }
+
+    def test_creates_profile_and_returns_201(self, mocker):
+        record = {"name": "newdev", "source": "sso", "status": "unknown", "is_default": False}
+        mocker.patch(
+            "cli_tool.sidecar.routers.profiles.create_profile",
+            return_value=record,
+        )
+        client, _ = _make_client()
+        response = client.post("/profiles", json=self._VALID_BODY, headers=AUTH)
+        assert response.status_code == 201
+        assert response.json() == record
+
+    def test_returns_409_on_validation_failure(self, mocker):
+        mocker.patch(
+            "cli_tool.sidecar.routers.profiles.create_profile",
+            side_effect=ValueError("Profile 'newdev' already exists"),
+        )
+        client, _ = _make_client()
+        response = client.post("/profiles", json=self._VALID_BODY, headers=AUTH)
+        assert response.status_code == 409
+        assert "already exists" in response.json()["detail"]
+
+    def test_returns_422_on_missing_field(self, mocker):
+        client, _ = _make_client()
+        response = client.post("/profiles", json={"name": "newdev"}, headers=AUTH)
+        assert response.status_code == 422
+        assert "Missing required field" in response.json()["detail"]
+
+
+@pytest.mark.unit
 class TestRefreshAll:
     def test_returns_202_accepted(self, mocker):
         mocker.patch("threading.Thread")

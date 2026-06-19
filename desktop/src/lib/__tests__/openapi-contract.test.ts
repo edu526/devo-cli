@@ -79,7 +79,10 @@ const SIDECAR_SPEC: OpenAPIV3.Document = {
     "/api/v1/hosts/{hostname}": {
       delete: { responses: { "204": { description: "No Content" } } },
     },
-    "/api/v1/profiles": { get: { responses: { "200": { description: "OK" } } } },
+    "/api/v1/profiles": {
+      get: { responses: { "200": { description: "OK" } } },
+      post: { responses: { "201": { description: "Created" } } },
+    },
     "/api/v1/profiles/{name}": { get: { responses: { "200": { description: "OK" } } } },
     "/api/v1/profiles:refresh_all": { post: { responses: { "202": { description: "Accepted" } } } },
     "/api/v1/profiles/{name}:refresh": { post: { responses: { "202": { description: "Accepted" } } } },
@@ -159,6 +162,14 @@ describe("openapi contract: frontend ↔ sidecar", () => {
     await databasesApi.delete("d");
     await profilesApi.list();
     await profilesApi.get("dev");
+    await profilesApi.create({
+      name: "newdev",
+      sso_start_url: "https://example.awsapps.com/start",
+      sso_region: "us-east-1",
+      sso_account_id: "123456789012",
+      sso_role_name: "ReadOnlyRole",
+      region: "us-east-1",
+    });
     await profilesApi.refreshAll();
     await profilesApi.refresh("dev");
     await profilesApi.setDefault("dev");

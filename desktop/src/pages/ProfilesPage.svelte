@@ -1,10 +1,17 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { get } from "svelte/store";
-  import { profilesApi, type ProfileRecord, type IdentityRecord, ApiError } from "../lib/api";
+  import {
+    profilesApi,
+    type ProfileRecord,
+    type IdentityRecord,
+    ApiError,
+  } from "../lib/api";
   import { ws, type WsMessage } from "../lib/ws";
   import { profilesCache } from "../lib/page-stores";
   import SearchInput from "../lib/SearchInput.svelte";
+  import FormField from "../lib/FormField.svelte";
+  import { profileSchema, validate, type ProfileForm, type FieldErrors } from "../lib/forms";
 
   const initialProfiles = (get(profilesCache) ?? []) as ProfileRecord[];
   let profiles: ProfileRecord[] = $state(initialProfiles);
@@ -21,6 +28,67 @@
   let busyRefresh: Set<string> = $state(new Set());
   let ssoInProgress: string | null = $state(null);
   let query = $state("");
+
+  let showCreateModal = $state(false);
+  let creating = $state(false);
+  let form = $state<ProfileForm>({
+    name: "",
+    sso_start_url: "",
+    sso_region: "us-east-1",
+    sso_account_id: "",
+    sso_role_name: "",
+    region: "us-east-1",
+    output: "json",
+  });
+  let formErrors: FieldErrors<ProfileForm> = $state({});
+
+  function openCreate() {
+    form = {
+      name: "",
+      sso_start_url: "",
+      sso_region: "us-east-1",
+      sso_account_id: "",
+      sso_role_name: "",
+      region: "us-east-1",
+      output: "json",
+    };
+    formErrors = {};
+    actionError = null;
+    showCreateModal = true;
+  }
+
+  async function createProfile() {
+    formErrors = {};
+    const v = validate(profileSchema, form);
+    if (!v.success) {
+      formErrors = v.errors;
+      return;
+    }
+    actionError = null;
+    creating = true;
+    try {
+      await profilesApi.create({
+        name: v.data.name,
+        sso_start_url: v.data.sso_start_url,
+        sso_region: v.data.sso_region,
+        sso_account_id: v.data.sso_account_id,
+        sso_role_name: v.data.sso_role_name,
+        region: v.data.region,
+        output: v.data.output,
+      });
+      showCreateModal = false;
+      await load();
+    } catch (e) {
+      actionError = e instanceof ApiError ? String(e.detail) : String(e);
+    } finally {
+      creating = false;
+    }
+  }
+
+  function onModalKeydown(e: KeyboardEvent) {
+    if (e.key === "Escape") showCreateModal = false;
+    e.stopPropagation();
+  }
 
   const statusPriority: Record<string, number> = { expired: 0, expiring: 1, valid: 2, unknown: 3 };
 
@@ -159,6 +227,10 @@
       </h1>
       <div class="header-actions">
         <SearchInput bind:value={query} placeholder="Filter profiles…" />
+        <button class="btn-secondary" onclick={openCreate}>
+          <span class="btn-glyph">+</span>
+          <span>Add Profile</span>
+        </button>
         <button class="btn-primary" onclick={refreshAll} disabled={anyBusyRefresh}>
           {#if refreshing}
             <span class="spinner-sm"></span> Refreshing…
@@ -295,11 +367,150 @@
   {/if}
 </div>
 
+{#if showCreateModal}
+  <div
+    class="modal-backdrop"
+    role="presentation"
+    onclick={() => (showCreateModal = false)}
+    onkeydown={() => (showCreateModal = false)}
+  >
+    <div
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="add-profile-title"
+      tabindex="-1"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={onModalKeydown}
+    >
+      <h2 id="add-profile-title">New AWS Profile</h2>
+      <p class="modal-hint">
+        Adds a new entry to <code>~/.aws/config</code>. Click <span class="kbd">↻</span> on the
+        card after creating to start the SSO browser login.
+      </p>
+
+      {#if actionError}
+        <div class="alert-error">{actionError}</div>
+      {/if}
+
+      <div class="form-grid">
+        <FormField label="Profile name" required error={formErrors.name}>
+          <input
+            bind:value={form.name}
+            placeholder="dev-account"
+            spellcheck="false"
+            autocomplete="off"
+          />
+        </FormField>
+
+        <FormField
+          label="AWS region"
+          required
+          hint="Default region for this profile"
+          error={formErrors.region}
+        >
+          <input bind:value={form.region} placeholder="us-east-1" spellcheck="false" />
+        </FormField>
+
+        <FormField
+          label="SSO start URL"
+          required
+          hint="e.g. https://my-company.awsapps.com/start"
+          error={formErrors.sso_start_url}
+        >
+          <input
+            bind:value={form.sso_start_url}
+            placeholder="https://example.awsapps.com/start"
+            spellcheck="false"
+            autocomplete="off"
+          />
+        </FormField>
+
+        <FormField label="SSO region" required error={formErrors.sso_region}>
+          <input bind:value={form.sso_region} placeholder="us-east-1" spellcheck="false" />
+        </FormField>
+
+        <FormField
+          label="Account ID"
+          required
+          hint="12-digit AWS account"
+          error={formErrors.sso_account_id}
+        >
+          <input
+            bind:value={form.sso_account_id}
+            placeholder="123456789012"
+            spellcheck="false"
+            inputmode="numeric"
+            maxlength="12"
+          />
+        </FormField>
+
+        <FormField
+          label="Role name"
+          required
+          hint="e.g. ReadOnlyRole"
+          error={formErrors.sso_role_name}
+        >
+          <input
+            bind:value={form.sso_role_name}
+            placeholder="ReadOnlyRole"
+            spellcheck="false"
+          />
+        </FormField>
+      </div>
+
+      <div class="modal-actions">
+        <button
+          class="btn-secondary"
+          onclick={() => (showCreateModal = false)}
+          disabled={creating}>Cancel</button
+        >
+        <button class="btn-primary" onclick={createProfile} disabled={creating}>
+          {#if creating}
+            <span class="spinner-sm"></span> Creating…
+          {:else}
+            Create
+          {/if}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
   .header-actions {
     display: flex;
     align-items: center;
     gap: 0.6rem;
+  }
+
+  .btn-glyph {
+    font-size: 1rem;
+    line-height: 1;
+    margin-right: 0.2rem;
+    font-weight: 500;
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem 1rem;
+  }
+
+  .modal-hint {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  .modal-hint code {
+    background: var(--bg-surface-2);
+    padding: 0.05rem 0.3rem;
+    border-radius: 3px;
+    font-size: 0.78rem;
+  }
+  .modal-hint .kbd {
+    font-family: "JetBrains Mono", monospace;
+    color: var(--text-secondary);
   }
 
   .cards {

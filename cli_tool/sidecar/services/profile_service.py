@@ -73,6 +73,46 @@ def get_profile_info(name: str) -> dict[str, Any] | None:
     return None
 
 
+def create_profile(
+    name: str,
+    sso_start_url: str,
+    sso_region: str,
+    sso_account_id: str,
+    sso_role_name: str,
+    region: str,
+    output: str = "json",
+) -> dict[str, Any]:
+    """Append a new SSO profile to ~/.aws/config and return its info record.
+
+    Raises ValueError on validation failure or name collision; the router
+    translates that into a 409.
+    """
+    from cli_tool.commands.aws_login.core.config import add_profile_to_config
+
+    add_profile_to_config(
+        profile_name=name,
+        sso_start_url=sso_start_url,
+        sso_region=sso_region,
+        sso_account_id=sso_account_id,
+        sso_role_name=sso_role_name,
+        region=region,
+        output=output,
+    )
+    info = get_profile_info(name)
+    if info is not None:
+        return info
+    # Defensive fallback: the new profile may not appear in `list_aws_profiles`
+    # yet if the FS layer hasn't re-read, so build a minimal record by hand.
+    return {
+        "name": name,
+        "source": "sso",
+        "expiration": None,
+        "seconds_remaining": None,
+        "status": "unknown",
+        "is_default": False,
+    }
+
+
 async def watch_profiles(hub: EventHub) -> None:
     """Background asyncio task: poll expirations and emit profile.expiring events."""
     warned: set[str] = set()

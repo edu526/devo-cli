@@ -1,5 +1,6 @@
 """AWS configuration file management."""
 
+import re
 import sys
 from pathlib import Path
 
@@ -7,6 +8,8 @@ import click
 from rich.console import Console
 
 console = Console()
+
+_PROFILE_NAME_RE = re.compile(r"^[a-zA-Z0-9_=,.@+-]+$")
 
 
 def _format_source_label(source: str) -> str:
@@ -295,6 +298,56 @@ def remove_profile_section(profile_name):
     """Remove a profile section from the AWS config file."""
     section = _get_profile_section(profile_name)
     remove_section_from_file(get_aws_config_path(), section)
+
+
+def add_profile_to_config(
+    profile_name: str,
+    sso_start_url: str,
+    sso_region: str,
+    sso_account_id: str,
+    sso_role_name: str,
+    region: str,
+    output: str = "json",
+) -> None:
+    """Append a new SSO profile section to ~/.aws/config.
+
+    Writes the legacy (pre-sso-session) SSO format. Both `aws configure sso`
+    and the AWS SDK read it, so it works whether or not the user has an
+    `[sso-session]` block. Refuses to overwrite an existing profile.
+
+    Raises ValueError on validation failure or name collision.
+    """
+    if not profile_name or not _PROFILE_NAME_RE.match(profile_name):
+        raise ValueError(f"Invalid profile name: {profile_name!r}")
+    if not sso_start_url or not sso_start_url.startswith(("https://", "http://")):
+        raise ValueError("sso_start_url must be a URL")
+    if not sso_region:
+        raise ValueError("sso_region is required")
+    if not sso_account_id or not sso_account_id.isdigit() or len(sso_account_id) != 12:
+        raise ValueError("sso_account_id must be exactly 12 digits")
+    if not sso_role_name or not _PROFILE_NAME_RE.match(sso_role_name):
+        raise ValueError(f"Invalid sso_role_name: {sso_role_name!r}")
+    if not region:
+        raise ValueError("region is required")
+
+    if get_profile_config(profile_name):
+        raise ValueError(f"Profile {profile_name!r} already exists")
+
+    config_path = get_aws_config_path()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    profile_section = _get_profile_section(profile_name)
+    new_profile = (
+        f"\n{profile_section}\n"
+        f"sso_start_url = {sso_start_url}\n"
+        f"sso_region = {sso_region}\n"
+        f"sso_account_id = {sso_account_id}\n"
+        f"sso_role_name = {sso_role_name}\n"
+        f"region = {region}\n"
+        f"output = {output}\n"
+    )
+    with config_path.open("a") as f:
+        f.write(new_profile)
 
 
 def _flush_sso_session(current_section: str, session_config: dict, sessions: dict) -> None:
