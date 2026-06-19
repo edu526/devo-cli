@@ -115,9 +115,10 @@ a = Analysis(
     excludes=[
         "matplotlib", "numpy", "pandas", "scipy", "PIL", "tkinter",
         "test", "unittest", "pydoc",
-        # CLI-only dependencies not needed in the sidecar
-        # (click is required by uvicorn.config — do NOT exclude it)
-        "rich", "strands_agents", "strands", "gitpython",
+        # strands is only used by AI commands (commit, code-reviewer) —
+        # not reachable from the sidecar import chain. Keep it out to
+        # avoid bundling the full Bedrock SDK.
+        "strands_agents", "strands",
     ],
     noarchive=False,
 )
