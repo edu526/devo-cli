@@ -20,7 +20,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["binaries/devo-sidecar"],
+    "externalBin": [
+      "binaries/devo-sidecar"
+    ],
     "linux": {
       "appimage": {
         "bundleMediaFramework": false
