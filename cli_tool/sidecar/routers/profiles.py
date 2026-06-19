@@ -77,7 +77,7 @@ def create_sso_session_endpoint(body: dict[str, Any]) -> dict[str, Any]:
 
 @router.post(":discover", status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("6/minute")
-def discover_profiles(body: dict[str, Any], request: Request) -> dict[str, Any]:
+def discover_profiles(body: dict[str, Any], request: Request, response: Response) -> dict[str, Any]:
     """Kick off the SSO discovery pipeline for a session.
 
     Body: {session: "<sso-session name>"}. Returns 202 immediately. The

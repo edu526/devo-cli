@@ -87,6 +87,7 @@
     newSessionErrors = {};
     discoverInProgress = false;
     discoverError = null;
+    discoverErrorRaw = null;
     discoveredAccounts = [];
     selectedAccountId = "";
     selectedRole = "";
@@ -112,11 +113,16 @@
         profileForm.sso_session = selectedSession;
       }
     } catch (e) {
-      ssoSessionsError = e instanceof ApiError ? String(e.detail) : String(e);
+      ssoSessionsError = friendlyError(e);
     } finally {
       ssoSessionsLoading = false;
     }
   }
+
+  // Raw error string for the "Technical details" expander in the modal.
+  // Kept separate from the friendly message so the user can always see
+  // the underlying TypeError / status text when debugging.
+  let discoverErrorRaw = $state<string | null>(null);
 
   async function createSession() {
     newSessionErrors = {};
@@ -140,7 +146,7 @@
       newSessionMode = false;
       profileForm.sso_session = created.name;
     } catch (e) {
-      newSessionErrors = { name: e instanceof ApiError ? String(e.detail) : String(e) };
+      newSessionErrors = { name: friendlyError(e) };
     } finally {
       creatingSession = false;
     }
@@ -150,6 +156,7 @@
     if (!selectedSession) return;
     discoverInProgress = true;
     discoverError = null;
+    discoverErrorRaw = null;
     discoveredAccounts = [];
     selectedAccountId = "";
     selectedRole = "";
@@ -159,7 +166,8 @@
       await profilesApi.discover(selectedSession);
       // Result arrives via WS `sso.discover.completed`
     } catch (e) {
-      discoverError = e instanceof ApiError ? String(e.detail) : String(e);
+      discoverError = friendlyError(e);
+      discoverErrorRaw = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
       discoverInProgress = false;
     }
   }
@@ -209,7 +217,7 @@
       showCreateModal = false;
       await load();
     } catch (e) {
-      actionError = e instanceof ApiError ? String(e.detail) : String(e);
+      actionError = friendlyError(e);
     } finally {
       creatingProfile = false;
     }
@@ -221,6 +229,22 @@
   }
 
   const statusPriority: Record<string, number> = { expired: 0, expiring: 1, valid: 2, unknown: 3 };
+
+  // Surface network errors as actionable messages instead of the raw
+  // "TypeError: Load failed" that fetch throws when the sidecar is
+  // unreachable, the CORS preflight is blocked, or the request is
+  // aborted. ApiError (the sidecar's JSON error envelope) is passed
+  // through unchanged so 409/422 messages still appear as-is.
+  function friendlyError(e: unknown): string {
+    if (e instanceof ApiError) return String(e.detail);
+    if (
+      e instanceof TypeError &&
+      (e.message === "Load failed" || e.message === "Failed to fetch")
+    ) {
+      return "Cannot reach Devo's sidecar — it may have stopped. Restart Devo Desktop and try again.";
+    }
+    return e instanceof Error ? e.message : String(e);
+  }
 
   const filtered = $derived.by(() => {
     const base = query.trim()
@@ -632,7 +656,15 @@
               just opened. This may take up to 2 minutes.
             </p>
           {:else if discoverError}
-            <div class="alert-error">{discoverError}</div>
+            <div class="alert-error">
+              {discoverError}
+              {#if discoverErrorRaw && discoverErrorRaw !== discoverError}
+                <details class="error-details">
+                  <summary>Technical details</summary>
+                  <code>{discoverErrorRaw}</code>
+                </details>
+              {/if}
+            </div>
             <button class="btn-secondary btn-sm" onclick={startDiscover}>Retry</button>
           {:else if discoveredAccounts.length === 0}
             <p class="muted-sm">
@@ -838,6 +870,32 @@
   .btn-sm {
     padding: 0.35rem 0.7rem;
     font-size: 0.78rem;
+  }
+
+  .error-details {
+    margin-top: 0.4rem;
+    font-size: 0.75rem;
+  }
+  .error-details summary {
+    cursor: pointer;
+    color: #fca5a5;
+    font-size: 0.72rem;
+    user-select: none;
+  }
+  .error-details summary:hover {
+    color: #fff;
+  }
+  .error-details code {
+    display: block;
+    margin-top: 0.3rem;
+    padding: 0.4rem 0.5rem;
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 4px;
+    color: #fca5a5;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.72rem;
+    white-space: pre-wrap;
+    word-break: break-all;
   }
 
   .cards {

@@ -1,9 +1,10 @@
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from slowapi import _rate_limit_exceeded_handler
+from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 
 from cli_tool.commands.ssm.core.connection_runner import ForwarderRegistry
 from cli_tool.sidecar.rate_limit import limiter
@@ -17,6 +18,27 @@ def _make_client():
     app.state.app_state = app_state
     # Required for @limiter.limit(...) decorators on this router
     app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+    app.include_router(router)
+    return TestClient(app), app_state
+
+
+def _make_client_with_real_limiter():
+    """Like _make_client but wires up an ENABLED slowapi limiter.
+
+    The conftest sets DEVO_TESTING=1 so the shared `limiter` is disabled
+    by default. That hid a bug where a @limiter.limit endpoint raised
+    `Exception: parameter 'response' must be an instance of
+    starlette.responses.Response` from inside _inject_headers — the
+    client saw it as a `Load failed`. This fixture recreates the
+    production wiring so the regression cannot return silently.
+    """
+    app = FastAPI()
+    app_state = AppState(token="test-token", registry=ForwarderRegistry(), event_hub=EventHub())
+    app.state.app_state = app_state
+    real_limiter = Limiter(key_func=get_remote_address, headers_enabled=True)
+    app.state.limiter = real_limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.add_middleware(SlowAPIMiddleware)
     app.include_router(router)
@@ -182,6 +204,24 @@ class TestDiscover:
         client, _ = _make_client()
         response = client.post("/profiles:discover", json={}, headers=AUTH)
         assert response.status_code == 422
+
+    def test_returns_202_with_real_limiter(self, mocker):  # ponytail: regression for "Load failed" — @limiter.limit endpoints
+        # MUST declare a Response parameter; otherwise slowapi's
+        # _inject_headers raises mid-request and the client sees a
+        # network failure instead of the real 202. The fixture wires
+        # up an enabled Limiter on the app; the decorator still
+        # uses the module-level `limiter` (disabled by DEVO_TESTING),
+        # but the important thing here is that the response is
+        # returned and not mid-request-raised.
+        mocked_start = mocker.patch("cli_tool.sidecar.routers.profiles.start_discover")
+        client, _ = _make_client_with_real_limiter()
+        response = client.post(
+            "/profiles:discover",
+            json={"session": "corp"},
+            headers=AUTH,
+        )
+        assert response.status_code == 202
+        mocked_start.assert_called_once()
 
 
 @pytest.mark.unit
