@@ -138,6 +138,83 @@ export function getToken(): string {
   return _token;
 }
 
+// ── Network diagnostics ──────────────────────────────────────────────────
+//
+// `fetch()` reports any network-level failure (CORS preflight blocked,
+// sidecar down, request aborted, webview internal error) as a generic
+// `TypeError: Load failed`. The webview does NOT expose its internal
+// network state to JavaScript, so the only way to tell what actually
+// went wrong is to read `performance.getEntriesByType("resource")` —
+// if there's no entry for our URL, the request was killed before the
+// browser even started it (Tauri webview race condition); if there IS
+// an entry, we can see how far the request got (duration, status, etc).
+//
+// We capture this on every network failure and expose the last one via
+// `getLastErrorDiagnostics()` so the UI can show it to the user.
+// Cleared on the next successful response.
+
+let _lastSuccessAt: number | null = null;
+let _lastErrorDiagnostics: string | null = null;
+
+export function getLastErrorDiagnostics(): string | null {
+  return _lastErrorDiagnostics;
+}
+
+function _captureApiDiagnostics(method: string, path: string): string {
+  const url = `${_baseUrl}${path}`;
+  const nav = typeof navigator !== "undefined" ? navigator : undefined;
+  const perf = typeof performance !== "undefined" ? performance : undefined;
+
+  const diag: Record<string, unknown> = {
+    ts: new Date().toISOString(),
+    webview: nav?.userAgent ?? "unknown",
+    online: nav?.onLine ?? null,
+    method,
+    url,
+  };
+
+  diag.msSinceLastSuccess = _lastSuccessAt !== null ? Date.now() - _lastSuccessAt : "never";
+
+  if (perf) {
+    const entries = perf
+      .getEntriesByType("resource")
+      .filter((e) => e.name === url)
+      .slice(-3);
+    diag.resourceEntryCount = entries.length;
+    if (entries.length > 0) {
+      diag.resourceEntries = entries.map((e) => {
+        const r = e as PerformanceResourceTiming;
+        return {
+          durationMs: Math.round(r.duration),
+          transferSize: r.transferSize,
+          responseStatus: r.responseStatus,
+        };
+      });
+    }
+  }
+
+  // navigator.connection is only available in some webviews (Chromium-
+  // based). WebKitGTK reports it under different names. Best-effort.
+  if (nav) {
+    const conn = (nav as unknown as { connection?: NetworkInformation }).connection;
+    if (conn) {
+      diag.connection = {
+        effectiveType: conn.effectiveType,
+        downlink: conn.downlink,
+        rtt: conn.rtt,
+      };
+    }
+  }
+
+  return JSON.stringify(diag, null, 2);
+}
+
+interface NetworkInformation {
+  effectiveType?: string;
+  downlink?: number;
+  rtt?: number;
+}
+
 export interface RefreshResponse {
   token: string;
   expires_at: number;
@@ -187,11 +264,22 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   } catch (e) {
     // CORS rejection, sidecar down, DNS fail, abort, etc. — these never
     // produce an HTTP response so the sidecar has no log of them. Capture
-    // them client-side so the user can see why the call never landed.
+    // them client-side with a diagnostics blob (resource timing entries,
+    // time since last success, webview UA) so we can tell whether the
+    // request was killed before starting (Tauri webview race condition
+    // — `resourceEntryCount` will be 0) vs. attempted and failed.
     const msg = e instanceof Error ? e.message : String(e);
+    const diag = _captureApiDiagnostics(method, path);
+    _lastErrorDiagnostics = diag;
     logError("api", `${method} ${path} failed: ${msg}`, _baseUrl);
+    logError("api", `${method} ${path} diagnostics`, diag);
     throw e;
   }
+
+  // Any response (2xx, 4xx, 5xx) means the request actually reached the
+  // network. Clear stale diagnostics and update the last-success clock.
+  _lastSuccessAt = Date.now();
+  _lastErrorDiagnostics = null;
 
   // On 401, try refreshing the token once. /auth/refresh itself is exempt
   // from retry to avoid an infinite loop.
@@ -252,6 +340,7 @@ export const profilesApi = {
   list: () => req<ProfileRecord[]>("GET", "/profiles"),
   get: (name: string) => req<ProfileRecord>("GET", `/profiles/${name}`),
   create: (body: ProfileIn) => req<ProfileRecord>("POST", "/profiles", body),
+  delete: (name: string) => req<void>("DELETE", `/profiles/${name}`),
   discover: (session: string) => req<DiscoverResponse>("POST", "/profiles:discover", { session }),
   refreshAll: () => req<{ status: string; message: string }>("POST", "/profiles:refresh_all"),
   refresh: (name: string) =>

@@ -6,7 +6,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
-from cli_tool.commands.aws_login.core.config import add_sso_session_to_config
+from cli_tool.commands.aws_login.core.config import (
+    add_sso_session_to_config,
+    get_profile_config,
+    remove_profile_section,
+)
 from cli_tool.commands.aws_login.core.credentials import (
     verify_credentials,
     write_default_credentials,
@@ -256,6 +260,23 @@ def set_default_profile(name: str) -> dict[str, Any]:
     set_config_value("aws_login.default_credentials_profile", name)
     logger.info("Default credentials profile set to '%s'", name)
     return {"name": name, **result}
+
+
+@router.delete("/{name}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_profile(name: str) -> None:
+    """Remove the [profile <name>] block from ~/.aws/config.
+
+    Returns 204 on success, 404 if the profile doesn't exist. The
+    [profile <name>] section in credentials is left untouched (the
+    cached access keys become orphaned but harmless).
+    """
+    if not get_profile_config(name):
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=f"Profile '{name}' not found",
+        )
+    remove_profile_section(name)
+    logger.info("Removed profile '%s' from ~/.aws/config", name)
 
 
 @router.get("/{name}/identity")

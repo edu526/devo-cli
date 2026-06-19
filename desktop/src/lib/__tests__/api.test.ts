@@ -4,6 +4,7 @@ import {
   initApi,
   getBaseUrl,
   getToken,
+  getLastErrorDiagnostics,
   ApiError,
   connectionsApi,
   instancesApi,
@@ -212,6 +213,59 @@ describe("api", () => {
       const fetchSpy = vi.mocked(globalThis.fetch);
       await logsApi.get(500);
       expect(fetchSpy.mock.calls[0]![0]).toContain("/logs?lines=500");
+    });
+  });
+
+  describe("network diagnostics", () => {
+    beforeEach(async () => {
+      mockInvoke.mockResolvedValue({ port: 12345, token: "tok" });
+      await initApi();
+    });
+
+    it("captures diagnostics when fetch throws a TypeError (Load failed)", async () => {
+      vi.spyOn(globalThis, "fetch").mockRejectedValue(
+        new TypeError("Load failed"),
+      );
+      expect(getLastErrorDiagnostics()).toBeNull();
+      await expect(connectionsApi.list()).rejects.toThrow("Load failed");
+      const diag = getLastErrorDiagnostics();
+      expect(diag).not.toBeNull();
+      const parsed = JSON.parse(diag!);
+      expect(parsed.method).toBe("GET");
+      expect(parsed.url).toBe("http://127.0.0.1:12345/api/v1/connections");
+      expect(parsed.ts).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      // msSinceLastSuccess is either "never" (first request ever) or a
+      // number ≥ 0 (a previous test in this file set _lastSuccessAt).
+      // Either is valid — we just want the field present and sensible.
+      expect(["never", "number"]).toContain(typeof parsed.msSinceLastSuccess);
+      if (typeof parsed.msSinceLastSuccess === "number") {
+        expect(parsed.msSinceLastSuccess).toBeGreaterThanOrEqual(0);
+      }
+      expect(parsed.webview).toBeDefined();
+    });
+
+    it("clears diagnostics after a successful response", async () => {
+      // First call fails
+      vi.spyOn(globalThis, "fetch")
+        .mockRejectedValueOnce(new TypeError("Load failed"))
+        .mockResolvedValueOnce(new Response("[]", { status: 200 }));
+      await expect(connectionsApi.list()).rejects.toThrow("Load failed");
+      expect(getLastErrorDiagnostics()).not.toBeNull();
+      // Second call succeeds
+      const data = await connectionsApi.list();
+      expect(data).toEqual([]);
+      expect(getLastErrorDiagnostics()).toBeNull();
+    });
+
+    it("records msSinceLastSuccess on the next failure", async () => {
+      vi.spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(new Response("[]", { status: 200 }))
+        .mockRejectedValueOnce(new TypeError("Load failed"));
+      await connectionsApi.list(); // success
+      await expect(connectionsApi.list()).rejects.toThrow("Load failed");
+      const parsed = JSON.parse(getLastErrorDiagnostics()!);
+      expect(typeof parsed.msSinceLastSuccess).toBe("number");
+      expect(parsed.msSinceLastSuccess).toBeGreaterThanOrEqual(0);
     });
   });
 });

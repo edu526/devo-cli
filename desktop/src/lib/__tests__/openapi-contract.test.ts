@@ -89,7 +89,10 @@ const SIDECAR_SPEC: OpenAPIV3.Document = {
       post: { responses: { "201": { description: "Created" } } },
     },
     "/api/v1/profiles:discover": { post: { responses: { "202": { description: "Accepted" } } } },
-    "/api/v1/profiles/{name}": { get: { responses: { "200": { description: "OK" } } } },
+    "/api/v1/profiles/{name}": {
+      get: { responses: { "200": { description: "OK" } } },
+      delete: { responses: { "204": { description: "No Content" } } },
+    },
     "/api/v1/profiles:refresh_all": { post: { responses: { "202": { description: "Accepted" } } } },
     "/api/v1/profiles/{name}:refresh": { post: { responses: { "202": { description: "Accepted" } } } },
     "/api/v1/profiles/{name}:set_default": { post: { responses: { "200": { description: "OK" } } } },
@@ -175,6 +178,7 @@ describe("openapi contract: frontend ↔ sidecar", () => {
       sso_role_name: "ReadOnlyRole",
       region: "us-east-1",
     });
+    await profilesApi.delete("newdev");
     await profilesApi.discover("my-sso");
     await ssoSessionsApi.list();
     await ssoSessionsApi.create({
