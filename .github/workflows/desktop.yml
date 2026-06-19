@@ -29,6 +29,7 @@ jobs:
     outputs:
       version: ${{ steps.bump.outputs.version }}
       sha: ${{ steps.bump.outputs.sha }}
+      bumped: ${{ steps.bump.outputs.bumped }}
     permissions:
       contents: write
     steps:
@@ -65,28 +66,85 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add desktop/src-tauri/tauri.conf.json desktop/src-tauri/Cargo.toml
+            BUMPED=false
             if git diff --staged --quiet; then
               echo "ℹ️  Files already at $NEXT_VERSION, no bump commit needed"
             else
               git commit -m "chore(desktop): bump to $NEXT_VERSION"
               git push
               echo "✅ Bumped to $NEXT_VERSION"
+              BUMPED=true
             fi
 
             echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
             echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+            echo "bumped=$BUMPED" >> $GITHUB_OUTPUT
           else
             # PR or manual dispatch: keep current version, no commit
             CURRENT_VERSION=$(jq -r '.version' desktop/src-tauri/tauri.conf.json)
             echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
             echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+            echo "bumped=false" >> $GITHUB_OUTPUT
             echo "ℹ️  No bump (event: ${{ github.event_name }}) — keeping $CURRENT_VERSION"
           fi
+
+  create-release:
+    name: Create GitHub release
+    runs-on: ubuntu-latest
+    needs: bump-version
+    if: needs.bump-version.outputs.bumped == 'true'
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.create.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.bump-version.outputs.sha }}
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create tag and release
+        id: create
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ needs.bump-version.outputs.version }}"
+          TAG="app-v${VERSION}"
+          SHA="${{ needs.bump-version.outputs.sha }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "⚠️  Tag $TAG already exists, skipping tag creation"
+          else
+            git tag "$TAG" "$SHA"
+            git push origin "$TAG"
+            echo "✅ Created tag $TAG"
+          fi
+
+          if gh release view "$TAG" --repo ${{ github.repository }} >/dev/null 2>&1; then
+            echo "⚠️  Release $TAG already exists, skipping release creation"
+          else
+            gh release create "$TAG" \
+              --prerelease \
+              --title "Devo Desktop v${VERSION}" \
+              --target "$SHA" \
+              --notes "Alpha release v${VERSION}" \
+              --repo ${{ github.repository }}
+            echo "✅ Created release $TAG"
+          fi
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
   build-desktop:
     name: Build Desktop (${{ matrix.platform }}-${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
-    needs: bump-version
+    needs: [bump-version, create-release]
+    if: always() && needs.bump-version.result == 'success' && needs.create-release.result != 'failure'
     strategy:
       fail-fast: false
       matrix:
@@ -112,7 +170,9 @@ jobs:
           - os: windows-latest
             platform: windows
             arch: x86_64
-            tauri_targets: msi,nsis
+            # ponytail: msi does not accept semver pre-release identifiers (e.g. 0.1.0-alpha.1);
+            # use nsis for alpha builds until stable versions drop the pre-release tag.
+            tauri_targets: nsis
             rust_target: x86_64-pc-windows-msvc
             updater_target: windows-x86_64
 
@@ -254,7 +314,6 @@ jobs:
         with:
           name: devo-desktop-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.sha }}
           path: |
-            desktop/src-tauri/target/${{ matrix.rust_target }}/release/bundle/msi/*.msi
             desktop/src-tauri/target/${{ matrix.rust_target }}/release/bundle/nsis/*.exe
           if-no-files-found: error
 
@@ -264,8 +323,8 @@ jobs:
   update-alpha-channel:
     name: Update alpha channel manifest
     runs-on: ubuntu-latest
-    needs: [build-desktop, bump-version]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build-desktop, bump-version, create-release]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.create-release.result == 'success'
     permissions:
       contents: write
     steps:
