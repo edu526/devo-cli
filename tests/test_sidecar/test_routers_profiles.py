@@ -61,8 +61,7 @@ class TestGetProfile:
 class TestCreateProfile:
     _VALID_BODY = {
         "name": "newdev",
-        "sso_start_url": "https://example.awsapps.com/start",
-        "sso_region": "us-east-1",
+        "sso_session": "my-sso",
         "sso_account_id": "123456789012",
         "sso_role_name": "ReadOnlyRole",
         "region": "us-east-1",
@@ -89,11 +88,100 @@ class TestCreateProfile:
         assert response.status_code == 409
         assert "already exists" in response.json()["detail"]
 
-    def test_returns_422_on_missing_field(self, mocker):
+    def test_returns_422_on_missing_field(self):
         client, _ = _make_client()
         response = client.post("/profiles", json={"name": "newdev"}, headers=AUTH)
         assert response.status_code == 422
         assert "Missing required field" in response.json()["detail"]
+
+
+@pytest.mark.unit
+class TestListSsoSessions:
+    def test_returns_sessions(self, mocker):
+        sessions = [
+            {"name": "corp", "sso_start_url": "https://x.awsapps.com/start", "sso_region": "us-east-1"},
+        ]
+        mocker.patch(
+            "cli_tool.sidecar.routers.profiles.list_sso_sessions",
+            return_value=sessions,
+        )
+        client, _ = _make_client()
+        response = client.get("/profiles/sessions", headers=AUTH)
+        assert response.status_code == 200
+        assert response.json() == sessions
+
+    def test_does_not_shadow_get_profile_by_name(self, mocker):
+        # /profiles/sessions must NOT be matched by /profiles/{name}.
+        # We register both: a sessions list and a name lookup. Calling
+        # /profiles/sessions should return the list, not a 404 for a
+        # profile named "sessions".
+        mocker.patch(
+            "cli_tool.sidecar.routers.profiles.list_sso_sessions",
+            return_value=[{"name": "s1"}],
+        )
+        mocker.patch(
+            "cli_tool.sidecar.routers.profiles.get_profile_info",
+            return_value=None,
+        )
+        client, _ = _make_client()
+        response = client.get("/profiles/sessions", headers=AUTH)
+        assert response.status_code == 200
+        assert response.json() == [{"name": "s1"}]
+
+
+@pytest.mark.unit
+class TestCreateSsoSession:
+    _VALID = {
+        "name": "corp",
+        "sso_start_url": "https://x.awsapps.com/start",
+        "sso_region": "us-east-1",
+    }
+
+    def test_creates_and_returns_201(self, mocker):
+        client, _ = _make_client()
+        mocker.patch("cli_tool.sidecar.routers.profiles.add_sso_session_to_config")
+        response = client.post("/profiles/sessions", json=self._VALID, headers=AUTH)
+        assert response.status_code == 201
+        assert response.json()["name"] == "corp"
+
+    def test_returns_409_on_collision(self, mocker):
+        mocker.patch(
+            "cli_tool.sidecar.routers.profiles.add_sso_session_to_config",
+            side_effect=ValueError("sso-session 'corp' already exists"),
+        )
+        client, _ = _make_client()
+        response = client.post("/profiles/sessions", json=self._VALID, headers=AUTH)
+        assert response.status_code == 409
+
+    def test_returns_422_on_missing_field(self):
+        client, _ = _make_client()
+        response = client.post(
+            "/profiles/sessions",
+            json={"name": "corp"},
+            headers=AUTH,
+        )
+        assert response.status_code == 422
+
+
+@pytest.mark.unit
+class TestDiscover:
+    def test_returns_202_and_kicks_off_background(self, mocker):
+        mocked_start = mocker.patch("cli_tool.sidecar.routers.profiles.start_discover")
+        client, _ = _make_client()
+        response = client.post(
+            "/profiles:discover",
+            json={"session": "corp"},
+            headers=AUTH,
+        )
+        assert response.status_code == 202
+        mocked_start.assert_called_once()
+        args = mocked_start.call_args.args
+        assert args[1] == "corp"
+
+    def test_returns_422_without_session(self):
+        client, _ = _make_client()
+        response = client.post("/profiles:discover", json={}, headers=AUTH)
+        assert response.status_code == 422
 
 
 @pytest.mark.unit

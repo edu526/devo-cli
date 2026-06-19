@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
+from cli_tool.commands.aws_login.core.config import add_sso_session_to_config
 from cli_tool.commands.aws_login.core.credentials import (
     verify_credentials,
     write_default_credentials,
@@ -16,6 +17,8 @@ from cli_tool.sidecar.services.profile_service import (
     create_profile,
     get_profile_info,
     get_profiles_info,
+    list_sso_sessions,
+    start_discover,
 )
 from cli_tool.sidecar.state import AppState, EventHub
 
@@ -33,6 +36,68 @@ def list_profiles() -> list[dict[str, Any]]:
     return get_profiles_info()
 
 
+@router.get("/sessions")
+def list_sso_sessions_endpoint() -> list[dict[str, Any]]:
+    """Return SSO sessions defined in ~/.aws/config.
+
+    Drives the session dropdown in the desktop "Add Profile" wizard.
+    Declared BEFORE the `/{name}` routes so it doesn't get shadowed.
+    """
+    return list_sso_sessions()
+
+
+@router.post("/sessions", status_code=status.HTTP_201_CREATED)
+def create_sso_session_endpoint(body: dict[str, Any]) -> dict[str, Any]:
+    """Append a new `[sso-session NAME]` block to ~/.aws/config.
+
+    Body: {name, sso_start_url, sso_region}. Returns 409 on collision,
+    422 on missing fields.
+    """
+    required = ("name", "sso_start_url", "sso_region")
+    missing = [k for k in required if not body.get(k)]
+    if missing:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Missing required field(s): {', '.join(missing)}",
+        )
+    try:
+        add_sso_session_to_config(
+            name=body["name"],
+            sso_start_url=body["sso_start_url"],
+            sso_region=body["sso_region"],
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return {
+        "name": body["name"],
+        "sso_start_url": body["sso_start_url"],
+        "sso_region": body["sso_region"],
+    }
+
+
+@router.post(":discover", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("6/minute")
+def discover_profiles(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    """Kick off the SSO discovery pipeline for a session.
+
+    Body: {session: "<sso-session name>"}. Returns 202 immediately. The
+    pipeline runs in the background and reports progress via WS events
+    `sso.discover.starting` and `sso.discover.completed`.
+    """
+    session = body.get("session")
+    if not session:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing required field: session",
+        )
+    app_state = _state(request)
+    start_discover(app_state.event_hub, session)
+    return {
+        "status": "accepted",
+        "message": f"Discovery started for session '{session}' — watch WS for sso.discover.completed",
+    }
+
+
 @router.get("/{name}")
 def get_profile(name: str) -> dict[str, Any]:
     info = get_profile_info(name)
@@ -45,24 +110,31 @@ def get_profile(name: str) -> dict[str, Any]:
 def create_profile_endpoint(body: dict[str, Any]) -> dict[str, Any]:
     """Append a new SSO profile to ~/.aws/config.
 
-    Body: {name, sso_start_url, sso_region, sso_account_id, sso_role_name,
-    region, output?}. Returns 409 on name collision or validation failure.
+    Body: {name, sso_account_id, sso_role_name, region, output?, and ONE OF:
+    sso_session (reference to an existing [sso-session] block) OR
+    sso_start_url + sso_region (inline legacy format)}.
+
+    Returns 201 on success, 409 on name collision / invalid input, 422 on
+    missing required fields.
     """
+    required = ("name", "sso_account_id", "sso_role_name", "region")
+    missing = [k for k in required if not body.get(k)]
+    if missing:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Missing required field(s): {', '.join(missing)}",
+        )
     try:
         return create_profile(
             name=body["name"],
-            sso_start_url=body["sso_start_url"],
-            sso_region=body["sso_region"],
             sso_account_id=body["sso_account_id"],
             sso_role_name=body["sso_role_name"],
             region=body["region"],
+            sso_session=body.get("sso_session"),
+            sso_start_url=body.get("sso_start_url"),
+            sso_region=body.get("sso_region"),
             output=body.get("output", "json"),
         )
-    except KeyError as exc:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Missing required field: {exc.args[0]}",
-        ) from exc
     except ValueError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 

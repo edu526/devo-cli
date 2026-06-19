@@ -61,12 +61,39 @@ export interface ProfileRecord {
 
 export interface ProfileIn {
   name: string;
-  sso_start_url: string;
-  sso_region: string;
   sso_account_id: string;
   sso_role_name: string;
   region: string;
+  /** Reference to an existing [sso-session] block in ~/.aws/config. */
+  sso_session?: string;
+  /** Legacy inline mode — use sso_session instead when possible. */
+  sso_start_url?: string;
+  sso_region?: string;
   output?: string;
+}
+
+export interface SsoSessionRecord {
+  name: string;
+  sso_start_url: string;
+  sso_region: string;
+}
+
+export interface SsoSessionIn {
+  name: string;
+  sso_start_url: string;
+  sso_region: string;
+}
+
+export interface DiscoveredAccount {
+  accountId: string;
+  accountName: string;
+  emailAddress?: string;
+  roles: { roleName: string }[];
+}
+
+export interface DiscoverResponse {
+  status: string;
+  message: string;
 }
 
 export interface IdentityRecord {
@@ -225,11 +252,17 @@ export const profilesApi = {
   list: () => req<ProfileRecord[]>("GET", "/profiles"),
   get: (name: string) => req<ProfileRecord>("GET", `/profiles/${name}`),
   create: (body: ProfileIn) => req<ProfileRecord>("POST", "/profiles", body),
+  discover: (session: string) => req<DiscoverResponse>("POST", "/profiles:discover", { session }),
   refreshAll: () => req<{ status: string; message: string }>("POST", "/profiles:refresh_all"),
   refresh: (name: string) =>
     req<{ status: string; message: string }>("POST", `/profiles/${name}:refresh`),
   setDefault: (name: string) => req<{ name: string }>("POST", `/profiles/${name}:set_default`),
   getIdentity: (name: string) => req<IdentityRecord>("GET", `/profiles/${name}/identity`),
+};
+
+export const ssoSessionsApi = {
+  list: () => req<SsoSessionRecord[]>("GET", "/profiles/sessions"),
+  create: (body: SsoSessionIn) => req<SsoSessionRecord>("POST", "/profiles/sessions", body),
 };
 
 export const hostsApi = {

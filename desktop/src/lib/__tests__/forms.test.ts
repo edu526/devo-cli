@@ -5,6 +5,7 @@ import {
   instanceSchema,
   hostSchema,
   profileSchema,
+  ssoSessionSchema,
 } from "../forms";
 
 describe("validate()", () => {
@@ -96,8 +97,7 @@ describe("databaseSchema", () => {
 describe("profileSchema", () => {
   const valid = {
     name: "newdev",
-    sso_start_url: "https://example.awsapps.com/start",
-    sso_region: "us-east-1",
+    sso_session: "my-sso",
     sso_account_id: "123456789012",
     sso_role_name: "ReadOnlyRole",
     region: "us-east-1",
@@ -113,12 +113,34 @@ describe("profileSchema", () => {
   });
 
   it("rejects a region not shaped like us-east-1", () => {
-    const r = validate(profileSchema, { ...valid, sso_region: "us east 1" });
+    const r = validate(profileSchema, { ...valid, region: "us east 1" });
     expect(r.success).toBe(false);
   });
 
+  it("rejects an empty profile name", () => {
+    const r = validate(profileSchema, { ...valid, name: "" });
+    expect(r.success).toBe(false);
+  });
+});
+
+describe("ssoSessionSchema", () => {
+  const valid = {
+    name: "my-company",
+    sso_start_url: "https://example.awsapps.com/start",
+    sso_region: "us-east-1",
+  };
+
+  it("accepts a well-formed session", () => {
+    expect(validate(ssoSessionSchema, valid).success).toBe(true);
+  });
+
   it("rejects a start URL that is not a valid URL", () => {
-    const r = validate(profileSchema, { ...valid, sso_start_url: "not a url" });
+    const r = validate(ssoSessionSchema, { ...valid, sso_start_url: "not a url" });
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects a region not shaped like us-east-1", () => {
+    const r = validate(ssoSessionSchema, { ...valid, sso_region: "us east 1" });
     expect(r.success).toBe(false);
   });
 });

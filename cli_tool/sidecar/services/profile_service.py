@@ -1,13 +1,22 @@
 """Profile expiration monitoring — emits profile.expiring events via EventHub."""
 
 import asyncio
+import json
+import logging
+import subprocess
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any
 
-from cli_tool.commands.aws_login.core.config import list_aws_profiles
+from cli_tool.commands.aws_login.core.config import (
+    get_existing_sso_sessions,
+    list_aws_profiles,
+)
 from cli_tool.commands.aws_login.core.credentials import get_profile_credentials_expiration
 from cli_tool.sidecar.state import EventHub
+
+logger = logging.getLogger(__name__)
 
 _WARN_SECONDS = 5 * 60  # emit once when crossing below 5 minutes
 _POLL_INTERVAL = 30  # seconds between polls
@@ -75,28 +84,30 @@ def get_profile_info(name: str) -> dict[str, Any] | None:
 
 def create_profile(
     name: str,
-    sso_start_url: str,
-    sso_region: str,
     sso_account_id: str,
     sso_role_name: str,
     region: str,
+    sso_session: str | None = None,
+    sso_start_url: str | None = None,
+    sso_region: str | None = None,
     output: str = "json",
 ) -> dict[str, Any]:
     """Append a new SSO profile to ~/.aws/config and return its info record.
 
-    Raises ValueError on validation failure or name collision; the router
-    translates that into a 409.
+    Two modes (see add_profile_to_config). Raises ValueError on validation
+    failure or name collision; the router translates that into a 409.
     """
     from cli_tool.commands.aws_login.core.config import add_profile_to_config
 
     add_profile_to_config(
         profile_name=name,
-        sso_start_url=sso_start_url,
-        sso_region=sso_region,
         sso_account_id=sso_account_id,
         sso_role_name=sso_role_name,
         region=region,
         output=output,
+        sso_session=sso_session,
+        sso_start_url=sso_start_url,
+        sso_region=sso_region,
     )
     info = get_profile_info(name)
     if info is not None:
@@ -111,6 +122,160 @@ def create_profile(
         "status": "unknown",
         "is_default": False,
     }
+
+
+def list_sso_sessions() -> list[dict[str, Any]]:
+    """Return SSO sessions defined in ~/.aws/config.
+
+    Each entry: {name, sso_start_url, sso_region}. Used by the desktop
+    "Add Profile" wizard to populate its session dropdown.
+    """
+    sessions = get_existing_sso_sessions()
+    return sorted(
+        (
+            {
+                "name": name,
+                "sso_start_url": cfg.get("sso_start_url", ""),
+                "sso_region": cfg.get("sso_region", ""),
+            }
+            for name, cfg in sessions.items()
+        ),
+        key=lambda s: s["name"].lower(),
+    )
+
+
+def _run_aws_sso_login(session_name: str) -> None:
+    """Run `aws sso login --sso-session <name>`. Blocks until the user
+    finishes the browser flow (or it times out)."""
+    subprocess.run(
+        ["aws", "sso", "login", "--sso-session", session_name],
+        timeout=180,
+        check=False,
+    )
+
+
+def _list_accounts(access_token: str, sso_region: str) -> list[dict[str, Any]]:
+    """Run `aws sso list-accounts` and return the accountList."""
+    result = subprocess.run(
+        [
+            "aws",
+            "sso",
+            "list-accounts",
+            "--access-token",
+            access_token,
+            "--region",
+            sso_region or "us-east-1",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"list-accounts failed: {result.stderr.strip()}")
+    return json.loads(result.stdout).get("accountList", [])
+
+
+def _list_roles(access_token: str, account_id: str, sso_region: str) -> list[dict[str, Any]]:
+    """Run `aws sso list-account-roles` for one account and return roleList."""
+    result = subprocess.run(
+        [
+            "aws",
+            "sso",
+            "list-account-roles",
+            "--access-token",
+            access_token,
+            "--account-id",
+            account_id,
+            "--region",
+            sso_region or "us-east-1",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"list-account-roles failed: {result.stderr.strip()}")
+    return json.loads(result.stdout).get("roleList", [])
+
+
+def _do_discover(hub: EventHub, session_name: str) -> None:
+    """Background pipeline: sso login → list accounts → list roles per account.
+
+    Publishes one of two WS events:
+      * sso.discover.starting   — fires immediately, signals the browser
+                                   SSO flow has begun
+      * sso.discover.completed  — fires with {session, success, ...payload}
+    """
+    from cli_tool.commands.aws_login.core.credentials import get_sso_cache_token
+
+    hub.publish("sso.discover.starting", {"session": session_name})
+
+    try:
+        sessions = get_existing_sso_sessions()
+        cfg = sessions.get(session_name)
+        if not cfg:
+            raise ValueError(f"sso-session {session_name!r} not found")
+        sso_start_url = cfg.get("sso_start_url", "")
+        sso_region = cfg.get("sso_region", "")
+
+        # Skip the explicit login if a valid token is already cached —
+        # `aws sso login` is a no-op in that case anyway, but skipping
+        # avoids spawning a subprocess and the visual "starting" flicker.
+        if not get_sso_cache_token(sso_start_url):
+            _run_aws_sso_login(session_name)
+
+        access_token = get_sso_cache_token(sso_start_url)
+        if not access_token:
+            raise RuntimeError("SSO login did not produce a cached access token")
+
+        accounts = _list_accounts(access_token, sso_region)
+        # Fetch roles in parallel — each call is sub-second but the user
+        # shouldn't wait N*30s sequentially for N accounts.
+        accounts_with_roles: list[dict[str, Any]] = []
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            futures = {ex.submit(_list_roles, access_token, a["accountId"], sso_region): a for a in accounts if "accountId" in a}
+            for fut in futures:
+                acct = futures[fut]
+                try:
+                    roles = fut.result()
+                except Exception as exc:
+                    logger.warning("list-roles for %s failed: %s", acct.get("accountId"), exc)
+                    roles = []
+                accounts_with_roles.append(
+                    {
+                        "accountId": acct.get("accountId", ""),
+                        "accountName": acct.get("accountName", ""),
+                        "emailAddress": acct.get("emailAddress", ""),
+                        "roles": [{"roleName": r.get("roleName", "")} for r in roles],
+                    }
+                )
+
+        hub.publish(
+            "sso.discover.completed",
+            {
+                "session": session_name,
+                "success": True,
+                "accounts": accounts_with_roles,
+            },
+        )
+    except Exception as exc:
+        logger.exception("sso.discover failed for session %s", session_name)
+        hub.publish(
+            "sso.discover.completed",
+            {
+                "session": session_name,
+                "success": False,
+                "error": str(exc),
+            },
+        )
+
+
+def start_discover(hub: EventHub, session_name: str) -> None:
+    """Spawn the background discovery pipeline for a session."""
+    t = threading.Thread(target=_do_discover, args=(hub, session_name), daemon=True)
+    t.start()
 
 
 async def watch_profiles(hub: EventHub) -> None:

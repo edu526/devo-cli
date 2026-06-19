@@ -92,14 +92,14 @@ export const hostSchema = z.object({
 
 export type HostForm = z.infer<typeof hostSchema>;
 
-// ── AWS Profile ───────────────────────────────────────────────────────────
+// ── AWS SSO session ──────────────────────────────────────────────────────
 
-export const profileSchema = z.object({
+export const ssoSessionSchema = z.object({
   name: z
     .string()
-    .min(1, "Name is required")
-    .max(64, "Name must be ≤ 64 chars")
-    .regex(/^[a-zA-Z0-9_=,.@+-]+$/, "Only letters, digits and _ - = , . @ + are allowed"),
+    .min(1, "Session name is required")
+    .max(64)
+    .regex(/^[a-zA-Z0-9_=,.@+-]+$/, "Invalid session name"),
   sso_start_url: z
     .string()
     .min(1, "SSO start URL is required")
@@ -108,6 +108,19 @@ export const profileSchema = z.object({
     .string()
     .min(1, "SSO region is required")
     .regex(/^[a-z]{2}-[a-z]+-\d+$/, "Region must look like us-east-1"),
+});
+
+export type SsoSessionForm = z.infer<typeof ssoSessionSchema>;
+
+// ── AWS Profile ───────────────────────────────────────────────────────────
+
+export const profileSchema = z.object({
+  name: z
+    .string()
+    .min(1, "Name is required")
+    .max(64, "Name must be ≤ 64 chars")
+    .regex(/^[a-zA-Z0-9_=,.@+-]+$/, "Only letters, digits and _ - = , . @ + are allowed"),
+  sso_session: z.string().optional(),
   sso_account_id: z.string().regex(/^\d{12}$/, "Account ID must be exactly 12 digits"),
   sso_role_name: z
     .string()

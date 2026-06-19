@@ -302,33 +302,48 @@ def remove_profile_section(profile_name):
 
 def add_profile_to_config(
     profile_name: str,
-    sso_start_url: str,
-    sso_region: str,
     sso_account_id: str,
     sso_role_name: str,
     region: str,
     output: str = "json",
+    sso_session: str | None = None,
+    sso_start_url: str | None = None,
+    sso_region: str | None = None,
 ) -> None:
     """Append a new SSO profile section to ~/.aws/config.
 
-    Writes the legacy (pre-sso-session) SSO format. Both `aws configure sso`
-    and the AWS SDK read it, so it works whether or not the user has an
-    `[sso-session]` block. Refuses to overwrite an existing profile.
+    Two modes:
+      * `sso_session` set: the profile references an existing
+        `[sso-session NAME]` block. This is the modern AWS-recommended
+        format and the one the devo aws-login CLI uses.
+      * `sso_start_url` + `sso_region` set: the legacy inline format.
+        Still works but duplicates session config across profiles.
 
-    Raises ValueError on validation failure or name collision.
+    Exactly one mode must be supplied. Refuses to overwrite an existing
+    profile. Raises ValueError on validation failure or name collision.
     """
     if not profile_name or not _PROFILE_NAME_RE.match(profile_name):
         raise ValueError(f"Invalid profile name: {profile_name!r}")
-    if not sso_start_url or not sso_start_url.startswith(("https://", "http://")):
-        raise ValueError("sso_start_url must be a URL")
-    if not sso_region:
-        raise ValueError("sso_region is required")
     if not sso_account_id or not sso_account_id.isdigit() or len(sso_account_id) != 12:
         raise ValueError("sso_account_id must be exactly 12 digits")
     if not sso_role_name or not _PROFILE_NAME_RE.match(sso_role_name):
         raise ValueError(f"Invalid sso_role_name: {sso_role_name!r}")
     if not region:
         raise ValueError("region is required")
+
+    using_session = bool(sso_session)
+    using_inline = bool(sso_start_url) and bool(sso_region)
+    if using_session and using_inline:
+        raise ValueError("Provide either sso_session OR sso_start_url+sso_region, not both")
+    if not using_session and not using_inline:
+        raise ValueError("Provide sso_session or sso_start_url+sso_region")
+
+    if using_session:
+        if not get_existing_sso_sessions().get(sso_session):
+            raise ValueError(f"sso-session {sso_session!r} not found in ~/.aws/config")
+    else:
+        if not sso_start_url.startswith(("https://", "http://")):
+            raise ValueError("sso_start_url must be a URL")
 
     if get_profile_config(profile_name):
         raise ValueError(f"Profile {profile_name!r} already exists")
@@ -337,17 +352,56 @@ def add_profile_to_config(
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
     profile_section = _get_profile_section(profile_name)
-    new_profile = (
-        f"\n{profile_section}\n"
-        f"sso_start_url = {sso_start_url}\n"
-        f"sso_region = {sso_region}\n"
-        f"sso_account_id = {sso_account_id}\n"
-        f"sso_role_name = {sso_role_name}\n"
-        f"region = {region}\n"
-        f"output = {output}\n"
-    )
+    if using_session:
+        new_profile = (
+            f"\n{profile_section}\n"
+            f"sso_session = {sso_session}\n"
+            f"sso_account_id = {sso_account_id}\n"
+            f"sso_role_name = {sso_role_name}\n"
+            f"region = {region}\n"
+            f"output = {output}\n"
+        )
+    else:
+        new_profile = (
+            f"\n{profile_section}\n"
+            f"sso_start_url = {sso_start_url}\n"
+            f"sso_region = {sso_region}\n"
+            f"sso_account_id = {sso_account_id}\n"
+            f"sso_role_name = {sso_role_name}\n"
+            f"region = {region}\n"
+            f"output = {output}\n"
+        )
     with config_path.open("a") as f:
         f.write(new_profile)
+
+
+def add_sso_session_to_config(name: str, sso_start_url: str, sso_region: str) -> None:
+    """Append a new `[sso-session NAME]` block to ~/.aws/config.
+
+    Refuses to overwrite an existing session of the same name. The session
+    name is used as the `sso_session` reference in profiles.
+    """
+    if not name or not _PROFILE_NAME_RE.match(name):
+        raise ValueError(f"Invalid sso-session name: {name!r}")
+    if not sso_start_url or not sso_start_url.startswith(("https://", "http://")):
+        raise ValueError("sso_start_url must be a URL")
+    if not sso_region:
+        raise ValueError("sso_region is required")
+
+    if get_existing_sso_sessions().get(name):
+        raise ValueError(f"sso-session {name!r} already exists")
+
+    config_path = get_aws_config_path()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    new_session = (
+        f"\n[sso-session {name}]\n"
+        f"sso_start_url = {sso_start_url}\n"
+        f"sso_region = {sso_region}\n"
+        f"sso_registration_scopes = sso:account:access\n"
+    )
+    with config_path.open("a") as f:
+        f.write(new_session)
 
 
 def _flush_sso_session(current_section: str, session_config: dict, sessions: dict) -> None:

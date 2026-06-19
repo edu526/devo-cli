@@ -26,6 +26,7 @@ import {
   instancesApi,
   databasesApi,
   profilesApi,
+  ssoSessionsApi,
   hostsApi,
   configApi,
   logsApi,
@@ -83,6 +84,11 @@ const SIDECAR_SPEC: OpenAPIV3.Document = {
       get: { responses: { "200": { description: "OK" } } },
       post: { responses: { "201": { description: "Created" } } },
     },
+    "/api/v1/profiles/sessions": {
+      get: { responses: { "200": { description: "OK" } } },
+      post: { responses: { "201": { description: "Created" } } },
+    },
+    "/api/v1/profiles:discover": { post: { responses: { "202": { description: "Accepted" } } } },
     "/api/v1/profiles/{name}": { get: { responses: { "200": { description: "OK" } } } },
     "/api/v1/profiles:refresh_all": { post: { responses: { "202": { description: "Accepted" } } } },
     "/api/v1/profiles/{name}:refresh": { post: { responses: { "202": { description: "Accepted" } } } },
@@ -164,11 +170,17 @@ describe("openapi contract: frontend ↔ sidecar", () => {
     await profilesApi.get("dev");
     await profilesApi.create({
       name: "newdev",
-      sso_start_url: "https://example.awsapps.com/start",
-      sso_region: "us-east-1",
+      sso_session: "my-sso",
       sso_account_id: "123456789012",
       sso_role_name: "ReadOnlyRole",
       region: "us-east-1",
+    });
+    await profilesApi.discover("my-sso");
+    await ssoSessionsApi.list();
+    await ssoSessionsApi.create({
+      name: "my-sso",
+      sso_start_url: "https://example.awsapps.com/start",
+      sso_region: "us-east-1",
     });
     await profilesApi.refreshAll();
     await profilesApi.refresh("dev");

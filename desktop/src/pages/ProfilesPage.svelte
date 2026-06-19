@@ -3,15 +3,25 @@
   import { get } from "svelte/store";
   import {
     profilesApi,
+    ssoSessionsApi,
     type ProfileRecord,
     type IdentityRecord,
+    type SsoSessionRecord,
+    type DiscoveredAccount,
     ApiError,
   } from "../lib/api";
   import { ws, type WsMessage } from "../lib/ws";
   import { profilesCache } from "../lib/page-stores";
   import SearchInput from "../lib/SearchInput.svelte";
   import FormField from "../lib/FormField.svelte";
-  import { profileSchema, validate, type ProfileForm, type FieldErrors } from "../lib/forms";
+  import {
+    profileSchema,
+    ssoSessionSchema,
+    validate,
+    type ProfileForm,
+    type SsoSessionForm,
+    type FieldErrors,
+  } from "../lib/forms";
 
   const initialProfiles = (get(profilesCache) ?? []) as ProfileRecord[];
   let profiles: ProfileRecord[] = $state(initialProfiles);
@@ -29,48 +39,168 @@
   let ssoInProgress: string | null = $state(null);
   let query = $state("");
 
+  // ── Add Profile wizard state ───────────────────────────────────────────
   let showCreateModal = $state(false);
-  let creating = $state(false);
-  let form = $state<ProfileForm>({
+  let ssoSessions: SsoSessionRecord[] = $state([]);
+  let ssoSessionsLoading = $state(false);
+  let ssoSessionsError: string | null = $state(null);
+  let selectedSession = $state<string>("");
+  let newSessionMode = $state(false);
+  let newSessionForm = $state<SsoSessionForm>({
     name: "",
     sso_start_url: "",
     sso_region: "us-east-1",
+  });
+  let newSessionErrors: FieldErrors<SsoSessionForm> = $state({});
+  let creatingSession = $state(false);
+  let discoverInProgress = $state(false);
+  let discoverError: string | null = $state(null);
+  let discoveredAccounts: DiscoveredAccount[] = $state([]);
+  let selectedAccountId = $state<string>("");
+  let selectedRole = $state<string>("");
+  let profileForm = $state<ProfileForm>({
+    name: "",
+    sso_session: "",
     sso_account_id: "",
     sso_role_name: "",
     region: "us-east-1",
     output: "json",
   });
-  let formErrors: FieldErrors<ProfileForm> = $state({});
+  let profileFormErrors: FieldErrors<ProfileForm> = $state({});
+  let creatingProfile = $state(false);
 
-  function openCreate() {
-    form = {
+  const selectedAccount = $derived(
+    discoveredAccounts.find((a) => a.accountId === selectedAccountId) ?? null,
+  );
+  const availableRoles = $derived(selectedAccount?.roles ?? []);
+
+  async function openCreate() {
+    showCreateModal = true;
+    resetWizard();
+    await loadSsoSessions();
+  }
+
+  function resetWizard() {
+    selectedSession = ssoSessions[0]?.name ?? "";
+    newSessionMode = false;
+    newSessionForm = { name: "", sso_start_url: "", sso_region: "us-east-1" };
+    newSessionErrors = {};
+    discoverInProgress = false;
+    discoverError = null;
+    discoveredAccounts = [];
+    selectedAccountId = "";
+    selectedRole = "";
+    profileForm = {
       name: "",
-      sso_start_url: "",
-      sso_region: "us-east-1",
+      sso_session: selectedSession,
       sso_account_id: "",
       sso_role_name: "",
       region: "us-east-1",
       output: "json",
     };
-    formErrors = {};
+    profileFormErrors = {};
     actionError = null;
-    showCreateModal = true;
   }
 
-  async function createProfile() {
-    formErrors = {};
-    const v = validate(profileSchema, form);
+  async function loadSsoSessions() {
+    ssoSessionsLoading = true;
+    ssoSessionsError = null;
+    try {
+      ssoSessions = await ssoSessionsApi.list();
+      if (!selectedSession && ssoSessions[0]) {
+        selectedSession = ssoSessions[0].name;
+        profileForm.sso_session = selectedSession;
+      }
+    } catch (e) {
+      ssoSessionsError = e instanceof ApiError ? String(e.detail) : String(e);
+    } finally {
+      ssoSessionsLoading = false;
+    }
+  }
+
+  async function createSession() {
+    newSessionErrors = {};
+    const v = validate(ssoSessionSchema, newSessionForm);
     if (!v.success) {
-      formErrors = v.errors;
+      newSessionErrors = v.errors;
       return;
     }
-    actionError = null;
-    creating = true;
+    creatingSession = true;
+    ssoSessionsError = null;
     try {
-      await profilesApi.create({
+      const created = await ssoSessionsApi.create({
         name: v.data.name,
         sso_start_url: v.data.sso_start_url,
         sso_region: v.data.sso_region,
+      });
+      ssoSessions = [...ssoSessions, created].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      );
+      selectedSession = created.name;
+      newSessionMode = false;
+      profileForm.sso_session = created.name;
+    } catch (e) {
+      newSessionErrors = { name: e instanceof ApiError ? String(e.detail) : String(e) };
+    } finally {
+      creatingSession = false;
+    }
+  }
+
+  async function startDiscover() {
+    if (!selectedSession) return;
+    discoverInProgress = true;
+    discoverError = null;
+    discoveredAccounts = [];
+    selectedAccountId = "";
+    selectedRole = "";
+    profileForm.sso_account_id = "";
+    profileForm.sso_role_name = "";
+    try {
+      await profilesApi.discover(selectedSession);
+      // Result arrives via WS `sso.discover.completed`
+    } catch (e) {
+      discoverError = e instanceof ApiError ? String(e.detail) : String(e);
+      discoverInProgress = false;
+    }
+  }
+
+  function applyAccountSelection() {
+    profileForm.sso_account_id = selectedAccountId;
+    profileForm.sso_role_name = selectedRole;
+    if (selectedAccount) {
+      profileForm.sso_role_name = selectedRole;
+      // Auto-suggest a profile name if the user hasn't typed one yet.
+      if (!profileForm.name || profileForm.name === suggestedName) {
+        profileForm.name = suggestedName;
+      }
+    }
+  }
+
+  const suggestedName = $derived.by(() => {
+    if (!selectedAccount || !selectedRole) return profileForm.name;
+    const slug = selectedRole
+      .replace(/[^a-zA-Z0-9-]/g, "-")
+      .replace(/-+/g, "-")
+      .toLowerCase();
+    return `${selectedSession}-${selectedAccount.accountId.slice(0, 4)}-${slug}`;
+  });
+
+  async function submitProfile() {
+    profileFormErrors = {};
+    profileForm.sso_session = selectedSession;
+    profileForm.sso_account_id = selectedAccountId;
+    profileForm.sso_role_name = selectedRole;
+    const v = validate(profileSchema, profileForm);
+    if (!v.success) {
+      profileFormErrors = v.errors;
+      return;
+    }
+    creatingProfile = true;
+    actionError = null;
+    try {
+      await profilesApi.create({
+        name: v.data.name,
+        sso_session: v.data.sso_session,
         sso_account_id: v.data.sso_account_id,
         sso_role_name: v.data.sso_role_name,
         region: v.data.region,
@@ -81,7 +211,7 @@
     } catch (e) {
       actionError = e instanceof ApiError ? String(e.detail) : String(e);
     } finally {
-      creating = false;
+      creatingProfile = false;
     }
   }
 
@@ -200,10 +330,30 @@
 
   const offExpiring = ws.on("profile.expiring", () => load());
 
+  // WS: sidecar signals completion of the discovery pipeline started by
+  // the Add Profile wizard. Only acts when the modal is open so a stale
+  // late event from a previous attempt cannot mutate the form.
+  const offDiscoverStarting = ws.on("sso.discover.starting", () => {
+    if (showCreateModal) discoverInProgress = true;
+  });
+
+  const offDiscoverCompleted = ws.on("sso.discover.completed", (msg: WsMessage) => {
+    if (!showCreateModal) return;
+    discoverInProgress = false;
+    if (!msg.success) {
+      discoverError = (msg.error as string) ?? "SSO discovery failed";
+      return;
+    }
+    discoverError = null;
+    discoveredAccounts = (msg.accounts as DiscoveredAccount[]) ?? [];
+  });
+
   onDestroy(() => {
     offRefreshing();
     offRefreshed();
     offExpiring();
+    offDiscoverStarting();
+    offDiscoverCompleted();
   });
 
   onMount(load);
@@ -375,7 +525,7 @@
     onkeydown={() => (showCreateModal = false)}
   >
     <div
-      class="modal"
+      class="modal modal-wizard"
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-profile-title"
@@ -384,92 +534,202 @@
       onkeydown={onModalKeydown}
     >
       <h2 id="add-profile-title">New AWS Profile</h2>
-      <p class="modal-hint">
-        Adds a new entry to <code>~/.aws/config</code>. Click <span class="kbd">↻</span> on the
-        card after creating to start the SSO browser login.
-      </p>
 
       {#if actionError}
         <div class="alert-error">{actionError}</div>
       {/if}
 
-      <div class="form-grid">
-        <FormField label="Profile name" required error={formErrors.name}>
-          <input
-            bind:value={form.name}
-            placeholder="dev-account"
-            spellcheck="false"
-            autocomplete="off"
-          />
-        </FormField>
+      <!-- Step 1: SSO session -->
+      <section class="wizard-step">
+        <h3>
+          <span class="step-num">1</span> SSO session
+        </h3>
+        {#if ssoSessionsLoading}
+          <p class="muted-sm">Loading sessions…</p>
+        {:else if ssoSessionsError}
+          <div class="alert-error">{ssoSessionsError}</div>
+        {:else if ssoSessions.length === 0}
+          <p class="muted-sm">
+            No <code>[sso-session]</code> blocks in <code>~/.aws/config</code>. Create one to
+            continue, or run <code>aws configure sso</code> in a terminal.
+          </p>
+          <button class="btn-secondary btn-sm" onclick={() => (newSessionMode = true)}>
+            + New SSO session
+          </button>
+        {:else}
+          <FormField label="Session" required>
+            <select bind:value={selectedSession} onchange={() => (discoveredAccounts = [])}>
+              {#each ssoSessions as s (s.name)}
+                <option value={s.name}>
+                  {s.name} — {s.sso_start_url}
+                </option>
+              {/each}
+            </select>
+          </FormField>
+          <button
+            class="link-btn"
+            onclick={() => (newSessionMode = !newSessionMode)}
+            type="button"
+          >
+            {newSessionMode ? "Cancel" : "+ New SSO session"}
+          </button>
+        {/if}
 
-        <FormField
-          label="AWS region"
-          required
-          hint="Default region for this profile"
-          error={formErrors.region}
-        >
-          <input bind:value={form.region} placeholder="us-east-1" spellcheck="false" />
-        </FormField>
+        {#if newSessionMode}
+          <div class="new-session">
+            <FormField label="Session name" required error={newSessionErrors.name}>
+              <input
+                bind:value={newSessionForm.name}
+                placeholder="my-company"
+                spellcheck="false"
+                autocomplete="off"
+              />
+            </FormField>
+            <FormField
+              label="SSO start URL"
+              required
+              hint="From your AWS SSO portal (https://…awsapps.com/start)"
+              error={newSessionErrors.sso_start_url}
+            >
+              <input
+                bind:value={newSessionForm.sso_start_url}
+                placeholder="https://example.awsapps.com/start"
+                spellcheck="false"
+                autocomplete="off"
+              />
+            </FormField>
+            <FormField label="SSO region" required error={newSessionErrors.sso_region}>
+              <input
+                bind:value={newSessionForm.sso_region}
+                placeholder="us-east-1"
+                spellcheck="false"
+              />
+            </FormField>
+            <button
+              class="btn-secondary btn-sm"
+              onclick={createSession}
+              disabled={creatingSession}
+            >
+              {#if creatingSession}
+                <span class="spinner-sm"></span> Creating…
+              {:else}
+                Create session
+              {/if}
+            </button>
+          </div>
+        {/if}
+      </section>
 
-        <FormField
-          label="SSO start URL"
-          required
-          hint="e.g. https://my-company.awsapps.com/start"
-          error={formErrors.sso_start_url}
-        >
-          <input
-            bind:value={form.sso_start_url}
-            placeholder="https://example.awsapps.com/start"
-            spellcheck="false"
-            autocomplete="off"
-          />
-        </FormField>
+      <!-- Step 2: Account discovery -->
+      {#if !ssoSessionsLoading && ssoSessions.length > 0}
+        <section class="wizard-step">
+          <h3>
+            <span class="step-num">2</span> Account &amp; role
+          </h3>
+          {#if discoverInProgress}
+            <p class="muted-sm">
+              <span class="spinner-sm"></span> Approve the request in the browser window that
+              just opened. This may take up to 2 minutes.
+            </p>
+          {:else if discoverError}
+            <div class="alert-error">{discoverError}</div>
+            <button class="btn-secondary btn-sm" onclick={startDiscover}>Retry</button>
+          {:else if discoveredAccounts.length === 0}
+            <p class="muted-sm">
+              Sign in to <code>{selectedSession}</code> and fetch available accounts and roles.
+            </p>
+            <button class="btn-secondary btn-sm" onclick={startDiscover}>
+              Sign in &amp; discover
+            </button>
+          {:else}
+            <FormField label="Account" required>
+              <select
+                bind:value={selectedAccountId}
+                onchange={() => {
+                  selectedRole = "";
+                  applyAccountSelection();
+                }}
+              >
+                <option value="" disabled>Select an account…</option>
+                {#each discoveredAccounts as a (a.accountId)}
+                  <option value={a.accountId}>
+                    {a.accountName} ({a.accountId})
+                  </option>
+                {/each}
+              </select>
+            </FormField>
 
-        <FormField label="SSO region" required error={formErrors.sso_region}>
-          <input bind:value={form.sso_region} placeholder="us-east-1" spellcheck="false" />
-        </FormField>
+            {#if selectedAccountId}
+              <FormField label="Role" required error={profileFormErrors.sso_role_name}>
+                {#if availableRoles.length === 0}
+                  <p class="muted-sm">No roles available for this account.</p>
+                {:else}
+                  <select
+                    bind:value={selectedRole}
+                    onchange={applyAccountSelection}
+                    disabled={availableRoles.length === 0}
+                  >
+                    <option value="" disabled>Select a role…</option>
+                    {#each availableRoles as r (r.roleName)}
+                      <option value={r.roleName}>{r.roleName}</option>
+                    {/each}
+                  </select>
+                {/if}
+              </FormField>
+            {/if}
+          {/if}
+        </section>
+      {/if}
 
-        <FormField
-          label="Account ID"
-          required
-          hint="12-digit AWS account"
-          error={formErrors.sso_account_id}
-        >
-          <input
-            bind:value={form.sso_account_id}
-            placeholder="123456789012"
-            spellcheck="false"
-            inputmode="numeric"
-            maxlength="12"
-          />
-        </FormField>
-
-        <FormField
-          label="Role name"
-          required
-          hint="e.g. ReadOnlyRole"
-          error={formErrors.sso_role_name}
-        >
-          <input
-            bind:value={form.sso_role_name}
-            placeholder="ReadOnlyRole"
-            spellcheck="false"
-          />
-        </FormField>
-      </div>
+      <!-- Step 3: Profile details -->
+      {#if selectedAccountId && selectedRole}
+        <section class="wizard-step">
+          <h3>
+            <span class="step-num">3</span> Profile
+          </h3>
+          <div class="form-grid">
+            <FormField label="Profile name" required error={profileFormErrors.name}>
+              <input
+                bind:value={profileForm.name}
+                placeholder="dev-readonly"
+                spellcheck="false"
+                autocomplete="off"
+              />
+            </FormField>
+            <FormField
+              label="AWS region"
+              required
+              hint="Default region for this profile"
+              error={profileFormErrors.region}
+            >
+              <input
+                bind:value={profileForm.region}
+                placeholder="us-east-1"
+                spellcheck="false"
+              />
+            </FormField>
+          </div>
+        </section>
+      {/if}
 
       <div class="modal-actions">
         <button
           class="btn-secondary"
           onclick={() => (showCreateModal = false)}
-          disabled={creating}>Cancel</button
+          disabled={creatingProfile}>Cancel</button
         >
-        <button class="btn-primary" onclick={createProfile} disabled={creating}>
-          {#if creating}
+        <button
+          class="btn-primary"
+          onclick={submitProfile}
+          disabled={creatingProfile ||
+            !selectedAccountId ||
+            !selectedRole ||
+            discoveredAccounts.length === 0}
+        >
+          {#if creatingProfile}
             <span class="spinner-sm"></span> Creating…
           {:else}
-            Create
+            Create profile
           {/if}
         </button>
       </div>
@@ -502,15 +762,82 @@
     font-size: 0.78rem;
     color: var(--text-muted);
   }
-  .modal-hint code {
+
+  /* Wizard layout */
+  .modal-wizard {
+    gap: 1.1rem;
+  }
+  .wizard-step {
+    border-top: 1px solid var(--border);
+    padding-top: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+  .wizard-step h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0 0 0.2rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--bg-surface-2);
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+  .muted-sm {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin: 0;
+  }
+  .muted-sm code {
     background: var(--bg-surface-2);
     padding: 0.05rem 0.3rem;
     border-radius: 3px;
-    font-size: 0.78rem;
+    font-size: 0.75rem;
   }
-  .modal-hint .kbd {
-    font-family: "JetBrains Mono", monospace;
-    color: var(--text-secondary);
+  .new-session {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.7rem 0.85rem;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .new-session :global(.form-field) {
+    margin-bottom: 0.4rem;
+  }
+  .link-btn {
+    background: none;
+    border: none;
+    color: #6b9ef7;
+    font-size: 0.78rem;
+    cursor: pointer;
+    padding: 0.15rem 0;
+    text-align: left;
+    font-family: inherit;
+  }
+  .link-btn:hover {
+    color: #9bbcff;
+    text-decoration: underline;
+  }
+  .btn-sm {
+    padding: 0.35rem 0.7rem;
+    font-size: 0.78rem;
   }
 
   .cards {
