@@ -47,6 +47,7 @@ hidden_imports = [
     "cli_tool.core.utils",
     "cli_tool.core.utils.config_manager",
     # Third-party: web framework
+    "click",
     "fastapi",
     "uvicorn",
     "uvicorn.main",
@@ -115,7 +116,8 @@ a = Analysis(
         "matplotlib", "numpy", "pandas", "scipy", "PIL", "tkinter",
         "test", "unittest", "pydoc",
         # CLI-only dependencies not needed in the sidecar
-        "rich", "click", "strands_agents", "strands", "gitpython",
+        # (click is required by uvicorn.config — do NOT exclude it)
+        "rich", "strands_agents", "strands", "gitpython",
     ],
     noarchive=False,
 )
