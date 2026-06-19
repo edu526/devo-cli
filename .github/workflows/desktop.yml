@@ -65,12 +65,16 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add desktop/src-tauri/tauri.conf.json desktop/src-tauri/Cargo.toml
-            git commit -m "chore(desktop): bump to $NEXT_VERSION"
-            git push
+            if git diff --staged --quiet; then
+              echo "ℹ️  Files already at $NEXT_VERSION, no bump commit needed"
+            else
+              git commit -m "chore(desktop): bump to $NEXT_VERSION"
+              git push
+              echo "✅ Bumped to $NEXT_VERSION"
+            fi
 
             echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
             echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
-            echo "✅ Bumped to $NEXT_VERSION"
           else
             # PR or manual dispatch: keep current version, no commit
             CURRENT_VERSION=$(jq -r '.version' desktop/src-tauri/tauri.conf.json)
