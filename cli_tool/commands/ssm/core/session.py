@@ -73,33 +73,15 @@ class SSMSession:
             return False
 
     @staticmethod
-    def start_port_forwarding_to_remote(
+    def _build_port_forwarding_cmd(
         bastion: str,
         host: str,
         port: int,
         local_port: int,
         region: str = "us-east-1",
         profile: Optional[str] = None,
-        local_address: str = "127.0.0.1",
-    ) -> int:
-        """
-        Start port forwarding to a remote host through a bastion instance.
-        Used for connecting to RDS, ElastiCache, etc.
-
-        Args:
-          local_address: Local IP to bind to (e.g., '127.0.0.2' for loopback aliases)
-        """
-        # Note: AWS SSM Session Manager plugin doesn't support binding to specific IPs
-        # We need to use socat or similar tool to redirect from loopback alias to 127.0.0.1
-        # For now, we'll document this limitation and provide a workaround
-
-        # Check if Session Manager plugin is installed
-        if not SSMSession._check_session_manager_plugin():
-            SSMSession._show_plugin_installation_guide()
-            return 1
-
+    ) -> list:
         parameters = {"host": [host], "portNumber": [str(port)], "localPortNumber": [str(local_port)]}
-
         cmd = [
             "aws",
             "ssm",
@@ -113,28 +95,72 @@ class SSMSession:
             "--parameters",
             json.dumps(parameters),
         ]
-
         if profile:
             cmd.extend(["--profile", profile])
+        return cmd
 
-        # On Windows, use shell=True to find aws in PATH
-        result = subprocess.run(cmd, shell=platform.system() == "Windows", capture_output=True, text=True)
+    @staticmethod
+    def spawn_port_forwarding_to_remote(
+        bastion: str,
+        host: str,
+        port: int,
+        local_port: int,
+        region: str = "us-east-1",
+        profile: Optional[str] = None,
+        local_address: str = "127.0.0.1",
+    ) -> subprocess.Popen:
+        """Same as start_port_forwarding_to_remote but returns the live Popen handle.
 
-        # Check if Session Manager plugin is missing
-        if result.returncode != 0 and result.stderr:
-            error_lower = result.stderr.lower()
+        Caller is responsible for plugin preflight. Use stop_one() / proc.terminate()
+        to end the session without touching other active connections.
+        """
+        cmd = SSMSession._build_port_forwarding_cmd(bastion, host, port, local_port, region, profile)
+        return subprocess.Popen(
+            cmd,
+            shell=platform.system() == "Windows",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+    @staticmethod
+    def start_port_forwarding_to_remote(
+        bastion: str,
+        host: str,
+        port: int,
+        local_port: int,
+        region: str = "us-east-1",
+        profile: Optional[str] = None,
+        local_address: str = "127.0.0.1",
+    ) -> int:
+        """Start port forwarding to a remote host through a bastion instance.
+
+        Blocks until the session ends. local_address is documented but unused by
+        aws ssm start-session; socat/netsh redirection is handled by PortForwarder.
+        """
+        if not SSMSession._check_session_manager_plugin():
+            SSMSession._show_plugin_installation_guide()
+            return 1
+
+        proc = SSMSession.spawn_port_forwarding_to_remote(
+            bastion=bastion,
+            host=host,
+            port=port,
+            local_port=local_port,
+            region=region,
+            profile=profile,
+            local_address=local_address,
+        )
+        stdout, stderr = proc.communicate()
+
+        if proc.returncode != 0 and stderr:
+            error_lower = stderr.lower()
             if "sessionmanagerplugin is not found" in error_lower or "session-manager-plugin" in error_lower:
                 SSMSession._show_plugin_installation_guide()
                 return 1
+            console.print(stderr)
 
-        # If there was an error, print it and return
-        if result.returncode != 0:
-            if result.stderr:
-                console.print(result.stderr)
-            return result.returncode
-
-        # Success - this shouldn't happen as SSM sessions are blocking
-        return result.returncode
+        return proc.returncode
 
     @staticmethod
     def start_session(instance_id: str, region: str = "us-east-1", profile: Optional[str] = None) -> int:

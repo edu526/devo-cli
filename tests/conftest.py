@@ -16,6 +16,11 @@ from click.testing import CliRunner
 from moto import mock_aws
 from rich.console import Console
 
+# Marker for the sidecar rate_limit module — swaps the slowapi Limiter
+# for an enabled=False shim that doesn't try to mutate the WSGI response
+# (which fails under fastapi.testclient.TestClient).
+os.environ.setdefault("DEVO_TESTING", "1")
+
 # ============================================================================
 # Test Data Fixtures
 # ============================================================================

@@ -8,28 +8,31 @@ import click
 import pytest
 
 from cli_tool.commands.ssm.commands.database.connect import (
-    ForwarderRegistry,
     _connect_databases,
+    _is_windows_admin,
+    _maybe_run_auto_setup,
+    _show_database_selection,
+    connect_database,
+)
+from cli_tool.commands.ssm.core.connection_runner import (
+    ForwarderRegistry,
     _databases_needing_setup,
     _find_free_port,
     _is_port_bindable,
     _is_wildcard_bind_blocking,
-    _is_windows_admin,
-    _maybe_run_auto_setup,
     _process_db_for_table,
     _run_attempt,
     _run_connection_loop,
-    _show_database_selection,
     _validate_tokens,
     _wait_before_reconnect,
-    connect_database,
 )
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-_FIND_FREE_PORT = "cli_tool.commands.ssm.commands.database.connect._find_free_port"
+_RUNNER = "cli_tool.commands.ssm.core.connection_runner"
+_FIND_FREE_PORT = _RUNNER + "._find_free_port"
 _MODULE = "cli_tool.commands.ssm.commands.database.connect"
 
 
@@ -89,7 +92,7 @@ class TestForwarderRegistry:
 @pytest.mark.unit
 class TestIsPortBindable:
     def test_returns_true_when_port_is_free(self):
-        with patch(f"{_MODULE}.socket.socket") as mock_socket_cls:
+        with patch(f"{_RUNNER}.socket.socket") as mock_socket_cls:
             mock_sock = MagicMock()
             mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
             mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
@@ -97,7 +100,7 @@ class TestIsPortBindable:
             assert _is_port_bindable("127.0.0.2", 5432) is True
 
     def test_returns_false_when_port_is_occupied(self):
-        with patch(f"{_MODULE}.socket.socket") as mock_socket_cls:
+        with patch(f"{_RUNNER}.socket.socket") as mock_socket_cls:
             mock_sock = MagicMock()
             mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
             mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
@@ -113,7 +116,7 @@ class TestIsPortBindable:
 @pytest.mark.unit
 class TestFindFreePort:
     def test_returns_preferred_port_when_free(self):
-        with patch(f"{_MODULE}.socket.socket") as mock_socket_cls:
+        with patch(f"{_RUNNER}.socket.socket") as mock_socket_cls:
             mock_sock = MagicMock()
             mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
             mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
@@ -129,7 +132,7 @@ class TestFindFreePort:
             if addr[1] == 15432:
                 raise OSError("address already in use")
 
-        with patch(f"{_MODULE}.socket.socket") as mock_socket_cls:
+        with patch(f"{_RUNNER}.socket.socket") as mock_socket_cls:
             mock_sock = MagicMock()
             mock_sock.bind.side_effect = bind_side_effect
             mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
@@ -144,7 +147,7 @@ class TestFindFreePort:
             if addr[1] in (15432, 15433, 15434):
                 raise OSError("in use")
 
-        with patch(f"{_MODULE}.socket.socket") as mock_socket_cls:
+        with patch(f"{_RUNNER}.socket.socket") as mock_socket_cls:
             mock_sock = MagicMock()
             mock_sock.bind.side_effect = bind_side_effect
             mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
@@ -162,7 +165,7 @@ class TestFindFreePort:
 class TestIsWildcardBindBlocking:
     def test_returns_false_when_probes_can_bind(self):
         """No wildcard listener: probes succeed → False."""
-        with patch(f"{_MODULE}.socket.socket") as mock_socket_cls:
+        with patch(f"{_RUNNER}.socket.socket") as mock_socket_cls:
             mock_sock = MagicMock()
             mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
             mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
@@ -171,7 +174,7 @@ class TestIsWildcardBindBlocking:
 
     def test_returns_true_when_all_probes_fail(self):
         """Wildcard listener present: every loopback probe fails → True."""
-        with patch(f"{_MODULE}.socket.socket") as mock_socket_cls:
+        with patch(f"{_RUNNER}.socket.socket") as mock_socket_cls:
             mock_sock = MagicMock()
             mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
             mock_socket_cls.return_value.__exit__ = MagicMock(return_value=False)
@@ -189,7 +192,7 @@ class TestIsWildcardBindBlocking:
             # Second probe succeeds
             return None
 
-        with patch(f"{_MODULE}.socket.socket") as mock_socket_cls:
+        with patch(f"{_RUNNER}.socket.socket") as mock_socket_cls:
             mock_sock = MagicMock()
             mock_sock.bind.side_effect = bind_side_effect
             mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
@@ -369,7 +372,7 @@ class TestIsWindowsAdmin:
 class TestValidateTokens:
     def test_returns_true_when_all_tokens_valid(self):
         databases = {"db1": _make_db_config(profile="a"), "db2": _make_db_config(profile="b")}
-        with patch(f"{_MODULE}.SSMSession") as mock_session:
+        with patch(f"{_RUNNER}.SSMSession") as mock_session:
             mock_session._is_token_expired.return_value = False
             result = _validate_tokens(databases)
         assert result is True
@@ -377,9 +380,9 @@ class TestValidateTokens:
 
     def test_returns_false_and_prints_error_when_expired(self):
         databases = {"db1": _make_db_config()}
-        with patch(f"{_MODULE}.SSMSession") as mock_session:
+        with patch(f"{_RUNNER}.SSMSession") as mock_session:
             mock_session._is_token_expired.return_value = True
-            with patch(f"{_MODULE}.console") as mock_console:
+            with patch(f"{_RUNNER}.console") as mock_console:
                 result = _validate_tokens(databases)
         assert result is False
         output = " ".join(str(c) for c in mock_console.print.call_args_list)
@@ -392,7 +395,7 @@ class TestValidateTokens:
             "db2": _make_db_config(profile="a", region="us-east-1"),
             "db3": _make_db_config(profile="b", region="eu-west-1"),
         }
-        with patch(f"{_MODULE}.SSMSession") as mock_session:
+        with patch(f"{_RUNNER}.SSMSession") as mock_session:
             mock_session._is_token_expired.return_value = False
             _validate_tokens(databases)
         assert mock_session._is_token_expired.call_count == 2
@@ -407,8 +410,8 @@ class TestValidateTokens:
 class TestWaitBeforeReconnect:
     def test_returns_true_and_prints_reconnect_message(self):
         """Returns True and prints reconnecting message after sleep."""
-        with patch(f"{_MODULE}.time.sleep"):
-            with patch(f"{_MODULE}.console") as mock_console:
+        with patch(f"{_RUNNER}.time.sleep"):
+            with patch(f"{_RUNNER}.console") as mock_console:
                 result = _wait_before_reconnect("mydb")
         assert result is True
         output = " ".join(str(c) for c in mock_console.print.call_args_list)
@@ -416,7 +419,7 @@ class TestWaitBeforeReconnect:
 
     def test_returns_false_on_keyboard_interrupt(self):
         """Returns False when Ctrl+C is pressed during sleep."""
-        with patch(f"{_MODULE}.time.sleep", side_effect=KeyboardInterrupt):
+        with patch(f"{_RUNNER}.time.sleep", side_effect=KeyboardInterrupt):
             result = _wait_before_reconnect("mydb")
         assert result is False
 
@@ -430,17 +433,17 @@ class TestWaitBeforeReconnect:
 class TestRunAttempt:
     def test_returns_exit_code_from_ssm(self):
         db_config = _make_db_config()
-        with patch(f"{_MODULE}.SSMSession") as mock_session:
+        with patch(f"{_RUNNER}.SSMSession") as mock_session:
             mock_session.start_port_forwarding_to_remote.return_value = 0
             result = _run_attempt(db_config, 15432, use_hostname_forwarding=False)
         assert result == 0
 
     def test_starts_port_forwarder_when_hostname_forwarding(self):
         db_config = _make_db_config(local_address="127.0.0.2")
-        with patch(f"{_MODULE}.PortForwarder") as mock_pf_cls:
+        with patch(f"{_RUNNER}.PortForwarder") as mock_pf_cls:
             mock_pf = MagicMock()
             mock_pf_cls.return_value = mock_pf
-            with patch(f"{_MODULE}.SSMSession") as mock_session:
+            with patch(f"{_RUNNER}.SSMSession") as mock_session:
                 mock_session.start_port_forwarding_to_remote.return_value = 0
                 _run_attempt(db_config, 15432, use_hostname_forwarding=True)
         mock_pf.start_forward.assert_called_once_with("127.0.0.2", 5432, 15432)
@@ -448,8 +451,8 @@ class TestRunAttempt:
 
     def test_skips_port_forwarder_without_hostname_forwarding(self):
         db_config = _make_db_config()
-        with patch(f"{_MODULE}.PortForwarder") as mock_pf_cls:
-            with patch(f"{_MODULE}.SSMSession") as mock_session:
+        with patch(f"{_RUNNER}.PortForwarder") as mock_pf_cls:
+            with patch(f"{_RUNNER}.SSMSession") as mock_session:
                 mock_session.start_port_forwarding_to_remote.return_value = 0
                 _run_attempt(db_config, 15432, use_hostname_forwarding=False)
         mock_pf_cls.assert_not_called()
@@ -457,10 +460,10 @@ class TestRunAttempt:
     def test_stop_all_called_even_on_exception(self):
         """finally block ensures stop_all is called even when SSM raises."""
         db_config = _make_db_config(local_address="127.0.0.2")
-        with patch(f"{_MODULE}.PortForwarder") as mock_pf_cls:
+        with patch(f"{_RUNNER}.PortForwarder") as mock_pf_cls:
             mock_pf = MagicMock()
             mock_pf_cls.return_value = mock_pf
-            with patch(f"{_MODULE}.SSMSession") as mock_session:
+            with patch(f"{_RUNNER}.SSMSession") as mock_session:
                 mock_session.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt
                 with pytest.raises(KeyboardInterrupt):
                     _run_attempt(db_config, 15432, use_hostname_forwarding=True)
@@ -469,10 +472,10 @@ class TestRunAttempt:
     def test_registers_and_removes_forwarder_in_registry(self):
         db_config = _make_db_config(local_address="127.0.0.2")
         registry = ForwarderRegistry()
-        with patch(f"{_MODULE}.PortForwarder") as mock_pf_cls:
+        with patch(f"{_RUNNER}.PortForwarder") as mock_pf_cls:
             mock_pf = MagicMock()
             mock_pf_cls.return_value = mock_pf
-            with patch(f"{_MODULE}.SSMSession") as mock_session:
+            with patch(f"{_RUNNER}.SSMSession") as mock_session:
                 mock_session.start_port_forwarding_to_remote.return_value = 0
                 _run_attempt(db_config, 15432, use_hostname_forwarding=True, registry=registry)
         assert mock_pf not in registry._forwarders
@@ -518,7 +521,7 @@ class TestProcessDbForTable:
     def test_connected_returns_actual_port(self):
         db_config = _make_db_config(local_address="127.0.0.2", local_port=15432)
         managed = {"db.example.com"}
-        with patch(f"{_MODULE}._is_port_bindable", return_value=True):
+        with patch(f"{_RUNNER}._is_port_bindable", return_value=True):
             row, port, use_hf = _process_db_for_table("mydb", db_config, False, managed, lambda p: p)
         assert port == 15432
         assert use_hf is True
@@ -527,8 +530,8 @@ class TestProcessDbForTable:
     def test_port_conflict_shows_warning_status(self):
         db_config = _make_db_config(local_address="127.0.0.2", local_port=15432)
         managed = {"db.example.com"}
-        with patch(f"{_MODULE}._is_port_bindable", return_value=True):
-            with patch(f"{_MODULE}.console"):
+        with patch(f"{_RUNNER}._is_port_bindable", return_value=True):
+            with patch(f"{_RUNNER}.console"):
                 row, port, _ = _process_db_for_table("mydb", db_config, False, managed, lambda p: 15433)
         assert port == 15433
         assert "15433" in row[5]
@@ -537,9 +540,9 @@ class TestProcessDbForTable:
         """When local_address:port is bound by a non-wildcard service, returns error row."""
         db_config = _make_db_config(local_address="127.0.0.2", local_port=15432)
         managed = {"db.example.com"}
-        with patch(f"{_MODULE}._is_port_bindable", return_value=False):
-            with patch(f"{_MODULE}._is_wildcard_bind_blocking", return_value=False):
-                with patch(f"{_MODULE}.console") as mock_console:
+        with patch(f"{_RUNNER}._is_port_bindable", return_value=False):
+            with patch(f"{_RUNNER}._is_wildcard_bind_blocking", return_value=False):
+                with patch(f"{_RUNNER}.console") as mock_console:
                     row, port, _ = _process_db_for_table("mydb", db_config, False, managed, lambda p: p)
         assert port is None
         assert "occupied by a local service" in mock_console.print.call_args[0][0]
@@ -549,9 +552,9 @@ class TestProcessDbForTable:
         """When the port is held by a wildcard listener, surface a wildcard-specific hint."""
         db_config = _make_db_config(local_address="127.0.0.2", local_port=15432)
         managed = {"db.example.com"}
-        with patch(f"{_MODULE}._is_port_bindable", return_value=False):
-            with patch(f"{_MODULE}._is_wildcard_bind_blocking", return_value=True):
-                with patch(f"{_MODULE}.console") as mock_console:
+        with patch(f"{_RUNNER}._is_port_bindable", return_value=False):
+            with patch(f"{_RUNNER}._is_wildcard_bind_blocking", return_value=True):
+                with patch(f"{_RUNNER}.console") as mock_console:
                     row, port, _ = _process_db_for_table("mydb", db_config, False, managed, lambda p: p)
         assert port is None
         printed = mock_console.print.call_args[0][0]
@@ -571,53 +574,53 @@ class TestRunConnectionLoop:
         """Exit code 0 (session ended) should trigger reconnect, not stop."""
         db_config = _make_db_config()
         wait_calls = []
-        with patch(f"{_MODULE}._run_attempt", side_effect=[0, KeyboardInterrupt]):
-            with patch(f"{_MODULE}.SSMSession") as mock_session:
+        with patch(f"{_RUNNER}._run_attempt", side_effect=[0, KeyboardInterrupt]):
+            with patch(f"{_RUNNER}.SSMSession") as mock_session:
                 mock_session._is_token_expired.return_value = False
-                with patch(f"{_MODULE}._wait_before_reconnect", side_effect=lambda n, _ev=None: wait_calls.append(n) or True):
+                with patch(f"{_RUNNER}._wait_before_reconnect", side_effect=lambda n, _ev=None: wait_calls.append(n) or True):
                     _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False)
         assert len(wait_calls) == 1  # reconnect was attempted
 
     def test_keyboard_interrupt_returns_cleanly(self):
         db_config = _make_db_config()
-        with patch(f"{_MODULE}._run_attempt", side_effect=KeyboardInterrupt):
+        with patch(f"{_RUNNER}._run_attempt", side_effect=KeyboardInterrupt):
             _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False)
 
     def test_exception_prints_error_and_returns(self):
         db_config = _make_db_config()
-        with patch(f"{_MODULE}._run_attempt", side_effect=RuntimeError("refused")):
-            with patch(f"{_MODULE}.console") as mock_console:
+        with patch(f"{_RUNNER}._run_attempt", side_effect=RuntimeError("refused")):
+            with patch(f"{_RUNNER}.console") as mock_console:
                 _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False)
         output = " ".join(str(c) for c in mock_console.print.call_args_list)
         assert "refused" in output
 
     def test_expired_tokens_after_disconnect_stops_reconnect(self):
         db_config = _make_db_config()
-        with patch(f"{_MODULE}._run_attempt", return_value=1):
-            with patch(f"{_MODULE}.SSMSession") as mock_session:
+        with patch(f"{_RUNNER}._run_attempt", return_value=1):
+            with patch(f"{_RUNNER}.SSMSession") as mock_session:
                 mock_session._is_token_expired.return_value = True
-                with patch(f"{_MODULE}.console") as mock_console:
+                with patch(f"{_RUNNER}.console") as mock_console:
                     _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False)
         output = " ".join(str(c) for c in mock_console.print.call_args_list)
         assert "expired" in output.lower()
 
     def test_reconnects_when_tokens_valid(self):
         db_config = _make_db_config()
-        with patch(f"{_MODULE}._run_attempt", side_effect=[1, KeyboardInterrupt]):
-            with patch(f"{_MODULE}.SSMSession") as mock_session:
+        with patch(f"{_RUNNER}._run_attempt", side_effect=[1, KeyboardInterrupt]):
+            with patch(f"{_RUNNER}.SSMSession") as mock_session:
                 mock_session._is_token_expired.return_value = False
-                with patch(f"{_MODULE}._wait_before_reconnect", return_value=True):
-                    with patch(f"{_MODULE}.console") as mock_console:
+                with patch(f"{_RUNNER}._wait_before_reconnect", return_value=True):
+                    with patch(f"{_RUNNER}.console") as mock_console:
                         _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False)
         output = " ".join(str(c) for c in mock_console.print.call_args_list)
         assert "Reconnected to mydb" in output
 
     def test_ctrl_c_during_reconnect_delay_cancels(self):
         db_config = _make_db_config()
-        with patch(f"{_MODULE}._run_attempt", return_value=1):
-            with patch(f"{_MODULE}.SSMSession") as mock_session:
+        with patch(f"{_RUNNER}._run_attempt", return_value=1):
+            with patch(f"{_RUNNER}.SSMSession") as mock_session:
                 mock_session._is_token_expired.return_value = False
-                with patch(f"{_MODULE}._wait_before_reconnect", return_value=False):
+                with patch(f"{_RUNNER}._wait_before_reconnect", return_value=False):
                     _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False)
 
     def test_stop_event_set_after_attempt_skips_reconnect_path(self):
@@ -629,11 +632,11 @@ class TestRunConnectionLoop:
             registry.stop_event.set()
             return 0
 
-        with patch(f"{_MODULE}._run_attempt", side_effect=attempt_then_signal):
-            with patch(f"{_MODULE}.SSMSession") as mock_session:
+        with patch(f"{_RUNNER}._run_attempt", side_effect=attempt_then_signal):
+            with patch(f"{_RUNNER}.SSMSession") as mock_session:
                 mock_session._is_token_expired.return_value = False
-                with patch(f"{_MODULE}._wait_before_reconnect") as mock_wait:
-                    with patch(f"{_MODULE}.console") as mock_console:
+                with patch(f"{_RUNNER}._wait_before_reconnect") as mock_wait:
+                    with patch(f"{_RUNNER}.console") as mock_console:
                         _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False, registry=registry)
         mock_wait.assert_not_called()
         printed = " ".join(str(c) for c in mock_console.print.call_args_list)
@@ -645,7 +648,7 @@ class TestRunConnectionLoop:
         db_config = _make_db_config()
         registry = ForwarderRegistry()
         registry.stop_event.set()
-        with patch(f"{_MODULE}._run_attempt") as mock_attempt:
+        with patch(f"{_RUNNER}._run_attempt") as mock_attempt:
             _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False, registry=registry)
         mock_attempt.assert_not_called()
 
@@ -660,7 +663,7 @@ class TestWaitBeforeReconnectStopEvent:
     def test_returns_false_when_stop_event_set_before_call(self):
         ev = threading.Event()
         ev.set()
-        with patch(f"{_MODULE}.console"):
+        with patch(f"{_RUNNER}.console"):
             assert _wait_before_reconnect("mydb", ev) is False
 
     def test_returns_false_when_stop_event_set_during_wait(self):
@@ -671,8 +674,8 @@ class TestWaitBeforeReconnectStopEvent:
             ev.set()
 
         threading.Thread(target=set_soon, daemon=True).start()
-        with patch(f"{_MODULE}.console"):
-            with patch(f"{_MODULE}._RECONNECT_DELAY", 5):
+        with patch(f"{_RUNNER}.console"):
+            with patch(f"{_RUNNER}._RECONNECT_DELAY", 5):
                 start = time.time()
                 result = _wait_before_reconnect("mydb", ev)
                 elapsed = time.time() - start
@@ -691,7 +694,7 @@ class TestConnectDatabases:
         databases = {"db1": _make_db_config()}
         with patch(f"{_MODULE}._validate_tokens", return_value=False):
             with patch(f"{_MODULE}.HostsManager"):
-                with patch(f"{_MODULE}.threading.Thread") as mock_thread:
+                with patch(f"{_RUNNER}.threading.Thread") as mock_thread:
                     _connect_databases(databases, no_hosts=False)
         mock_thread.assert_not_called()
 
@@ -723,10 +726,10 @@ class TestConnectDatabases:
         with patch(f"{_MODULE}._validate_tokens", return_value=True):
             with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
                 mock_hm_cls.return_value.get_managed_entries.return_value = [("127.0.0.2", "db.example.com")]
-                with patch(f"{_MODULE}._is_port_bindable", return_value=True):
-                    with patch(f"{_MODULE}.threading.Thread", return_value=mock_thread):
+                with patch(f"{_RUNNER}._is_port_bindable", return_value=True):
+                    with patch(f"{_RUNNER}.threading.Thread", return_value=mock_thread):
                         with patch(_FIND_FREE_PORT, return_value=15432):
-                            with patch(f"{_MODULE}.time.sleep"):
+                            with patch(f"{_RUNNER}.time.sleep"):
                                 _connect_databases(databases, no_hosts=False)
 
         mock_thread.start.assert_called_once()
@@ -740,11 +743,11 @@ class TestConnectDatabases:
         with patch(f"{_MODULE}._validate_tokens", return_value=True):
             with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
                 mock_hm_cls.return_value.get_managed_entries.return_value = [("127.0.0.2", "db.example.com")]
-                with patch(f"{_MODULE}._is_port_bindable", return_value=True):
-                    with patch(f"{_MODULE}.threading.Thread", return_value=mock_thread):
+                with patch(f"{_RUNNER}._is_port_bindable", return_value=True):
+                    with patch(f"{_RUNNER}.threading.Thread", return_value=mock_thread):
                         with patch(_FIND_FREE_PORT, return_value=15432):
                             with patch(f"{_MODULE}.ForwarderRegistry", return_value=mock_registry):
-                                with patch(f"{_MODULE}.time.sleep", side_effect=[None, KeyboardInterrupt]):
+                                with patch(f"{_RUNNER}.time.sleep", side_effect=[None, KeyboardInterrupt]):
                                     _connect_databases(databases, no_hosts=False)
 
         mock_registry.stop_all.assert_called_once()
@@ -759,11 +762,11 @@ class TestConnectDatabases:
         with patch(f"{_MODULE}._validate_tokens", return_value=True):
             with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
                 mock_hm_cls.return_value.get_managed_entries.return_value = [("127.0.0.2", "db.example.com")]
-                with patch(f"{_MODULE}._is_port_bindable", return_value=True):
-                    with patch(f"{_MODULE}.threading.Thread", return_value=mock_thread):
+                with patch(f"{_RUNNER}._is_port_bindable", return_value=True):
+                    with patch(f"{_RUNNER}.threading.Thread", return_value=mock_thread):
                         with patch(_FIND_FREE_PORT, return_value=15432):
                             with patch(f"{_MODULE}.ForwarderRegistry", return_value=mock_registry):
-                                with patch(f"{_MODULE}.time.sleep", side_effect=[None, KeyboardInterrupt]):
+                                with patch(f"{_RUNNER}.time.sleep", side_effect=[None, KeyboardInterrupt]):
                                     _connect_databases(databases, no_hosts=False)
 
         mock_registry.stop_event.set.assert_called_once()
@@ -780,11 +783,11 @@ class TestConnectDatabases:
         with patch(f"{_MODULE}._validate_tokens", return_value=True):
             with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
                 mock_hm_cls.return_value.get_managed_entries.return_value = [("127.0.0.2", "db.example.com")]
-                with patch(f"{_MODULE}._is_port_bindable", return_value=True):
-                    with patch(f"{_MODULE}.threading.Thread", return_value=mock_thread):
+                with patch(f"{_RUNNER}._is_port_bindable", return_value=True):
+                    with patch(f"{_RUNNER}.threading.Thread", return_value=mock_thread):
                         with patch(_FIND_FREE_PORT, return_value=15432):
                             with patch(f"{_MODULE}.ForwarderRegistry", return_value=mock_registry):
-                                with patch(f"{_MODULE}.time.sleep", side_effect=[None, KeyboardInterrupt]):
+                                with patch(f"{_RUNNER}.time.sleep", side_effect=[None, KeyboardInterrupt]):
                                     # Should not raise — the inner KeyboardInterrupt is swallowed
                                     _connect_databases(databases, no_hosts=False)
 
@@ -810,10 +813,10 @@ class TestConnectDatabases:
                     ("127.0.0.2", "db.example.com"),
                     ("127.0.0.3", "other.com"),
                 ]
-                with patch(f"{_MODULE}._is_port_bindable", return_value=True):
-                    with patch(f"{_MODULE}.threading.Thread", side_effect=capture_thread):
+                with patch(f"{_RUNNER}._is_port_bindable", return_value=True):
+                    with patch(f"{_RUNNER}.threading.Thread", side_effect=capture_thread):
                         with patch(_FIND_FREE_PORT, side_effect=lambda p: p):
-                            with patch(f"{_MODULE}.time.sleep"):
+                            with patch(f"{_RUNNER}.time.sleep"):
                                 _connect_databases(databases, no_hosts=False)
 
         assert len(thread_args) == 2
@@ -830,15 +833,15 @@ class TestConnectDatabases:
                     ("127.0.0.2", "db.example.com"),
                     ("127.0.0.3", "other.com"),
                 ]
-                with patch(f"{_MODULE}._is_port_bindable", return_value=True):
-                    with patch(f"{_MODULE}.threading.Thread") as mock_thread_cls:
+                with patch(f"{_RUNNER}._is_port_bindable", return_value=True):
+                    with patch(f"{_RUNNER}.threading.Thread") as mock_thread_cls:
                         mock_thread_cls.return_value.is_alive.return_value = False
                         with patch(_FIND_FREE_PORT, side_effect=lambda p: p):
                             with patch(f"{_MODULE}.time.sleep"):
-                                with patch(f"{_MODULE}.console") as mock_console:
+                                with patch(f"{_RUNNER}.console") as runner_console:
                                     _connect_databases(databases, no_hosts=False)
 
-        output = " ".join(str(c) for c in mock_console.print.call_args_list)
+        output = " ".join(str(c) for c in runner_console.print.call_args_list)
         assert "in use" in output.lower()
 
 

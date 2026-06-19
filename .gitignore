@@ -14,7 +14,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
 lib64/
 parts/
 sdist/
@@ -121,7 +121,12 @@ venv.bak/
 
 # Local configuration
 config.local.json
-~/.devo/config.json
+~/.devo/
+# The whole ~/.devo tree is local state (config.json, audit logs, sidecar
+# logs, AWS SSO cache). Only config.json is mentioned by name in
+# `devo config` docs; the rest is never meant to be committed.
+.devo/
+/.devo/
 
 # Spyder project settings
 .spyderproject

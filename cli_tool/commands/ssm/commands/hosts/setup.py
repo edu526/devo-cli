@@ -5,8 +5,8 @@ from typing import Optional
 import click
 from rich.console import Console
 
-from cli_tool.commands.ssm.commands.database.connect import _find_free_port
 from cli_tool.commands.ssm.core import SSMConfigManager
+from cli_tool.commands.ssm.core.connection_runner import _find_free_port
 from cli_tool.commands.ssm.utils import HostsManager
 
 console = Console()

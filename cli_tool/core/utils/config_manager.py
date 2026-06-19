@@ -47,6 +47,7 @@ def get_default_config():
         "aws_login": {"set_env_profile": False},
         "ssm": {"databases": {}, "instances": {}},
         "dynamodb": {"export_templates": {}},
+        "onboarded": False,
     }
 
 

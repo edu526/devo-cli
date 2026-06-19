@@ -32,6 +32,24 @@ irm https://devo.heyedu.dev/install.ps1 | iex
 | `devo codeartifact-login` | Authenticate npm/pip against AWS CodeArtifact |
 | `devo upgrade` | Self-update to the latest release |
 
+## Devo Desktop
+
+In addition to the CLI, there is a **Tauri 2.x desktop app** that bundles
+the same workflows with a Svelte UI, a system tray icon, and live
+tunnel metrics. The desktop app embeds the CLI as a Python sidecar
+(FastAPI + WebSocket) so all backend code is shared 1:1 with the
+terminal.
+
+| Platform | Bundle | Notes |
+|---|---|---|
+| Linux | `.AppImage` | x86_64, WebKitGTK 4.1 + glibc 2.31+ |
+| macOS | `.dmg` (aarch64 + x86_64) | Apple Silicon + Intel |
+| Windows | `.msi` + NSIS `.exe` | x86_64, WebView2 runtime required |
+
+See the user guide for install + auto-update details:
+[`docs/guides/desktop-installation.md`](docs/guides/desktop-installation.md)
+and [`docs/guides/desktop-auto-update.md`](docs/guides/desktop-auto-update.md).
+
 ## Quick start
 
 ```bash

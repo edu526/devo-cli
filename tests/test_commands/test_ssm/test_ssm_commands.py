@@ -183,7 +183,7 @@ def test_connect_database_without_hostname_forwarding(cli_runner, mock_ssm_confi
     mock_ssm_config["ssm"]["databases"] = sample_database_config
 
     # Mock SSMSession to raise KeyboardInterrupt (simulate user stopping)
-    mock_ssm_session = mocker.patch("cli_tool.commands.ssm.commands.database.connect.SSMSession")
+    mock_ssm_session = mocker.patch("cli_tool.commands.ssm.core.connection_runner.SSMSession")
     mock_ssm_session._is_token_expired.return_value = False
     mock_ssm_session.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
 
@@ -204,7 +204,7 @@ def test_connect_database_ssm_session_failure_expired_tokens(cli_runner, mock_ss
     """Test handling SSM session failure caused by expired tokens."""
     mock_ssm_config["ssm"]["databases"] = sample_database_config
 
-    mock_ssm_session = mocker.patch("cli_tool.commands.ssm.commands.database.connect.SSMSession")
+    mock_ssm_session = mocker.patch("cli_tool.commands.ssm.core.connection_runner.SSMSession")
     mock_ssm_session.start_port_forwarding_to_remote.return_value = 1
     mock_ssm_session._is_token_expired.return_value = True
 

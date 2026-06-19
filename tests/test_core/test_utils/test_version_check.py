@@ -431,6 +431,8 @@ def test_show_update_notification_prints_when_update_available(mocker, capsys):
         "cli_tool.core.utils.version_check.check_for_updates",
         return_value=(True, "3.0.0", "3.5.0"),
     )
+    mocker.patch("cli_tool.core.utils.version_check._was_notified_today", return_value=False)
+    mocker.patch("cli_tool.core.utils.version_check._mark_notified")
 
     show_update_notification()
 
@@ -550,3 +552,112 @@ def test_parse_version_none_returns_zeros():
     """parse_version(None) triggers the except path and returns (0, 0, 0) (lines 86-87)."""
     result = parse_version(None)
     assert result == (0, 0, 0)
+
+
+# ============================================================================
+# _was_notified_today / _mark_notified — daily banner throttle
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_was_notified_today_false_when_no_cache(tmp_path, mocker):
+    """_was_notified_today returns False when the cache file does not exist."""
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+
+    from cli_tool.core.utils.version_check import _was_notified_today
+
+    assert _was_notified_today() is False
+
+
+@pytest.mark.unit
+def test_was_notified_today_false_without_notified_at(tmp_path, mocker):
+    """_was_notified_today returns False when cache exists but lacks notified_at."""
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+
+    from cli_tool.core.utils.version_check import _was_notified_today, write_cache
+
+    write_cache("3.5.0")
+    assert _was_notified_today() is False
+
+
+@pytest.mark.unit
+def test_was_notified_today_true_after_mark_notified(tmp_path, mocker):
+    """_was_notified_today returns True immediately after _mark_notified."""
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+
+    from cli_tool.core.utils.version_check import _mark_notified, _was_notified_today
+
+    _mark_notified()
+    assert _was_notified_today() is True
+
+
+@pytest.mark.unit
+def test_was_notified_today_false_after_24h(tmp_path, mocker):
+    """_was_notified_today returns False when notified_at is older than 24h."""
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+
+    import json
+    from datetime import datetime, timedelta
+
+    from cli_tool.core.utils.version_check import _mark_notified, _was_notified_today, get_cache_file
+
+    _mark_notified()
+    cache = get_cache_file()
+    data = json.loads(cache.read_text())
+    data["notified_at"] = (datetime.now() - timedelta(hours=25)).isoformat()
+    cache.write_text(json.dumps(data))
+
+    assert _was_notified_today() is False
+
+
+@pytest.mark.unit
+def test_was_notified_today_false_on_invalid_date(tmp_path, mocker):
+    """_was_notified_today returns False when notified_at is malformed."""
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+
+    from cli_tool.core.utils.version_check import _was_notified_today, get_cache_file
+
+    cache = get_cache_file()
+    cache.write_text('{"notified_at": "not-a-date"}')
+
+    assert _was_notified_today() is False
+
+
+@pytest.mark.unit
+def test_show_update_notification_silent_when_already_notified_today(tmp_path, mocker, capsys):
+    """show_update_notification prints nothing when already shown in the last 24h."""
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+    mocker.patch(
+        "cli_tool.core.utils.version_check.check_for_updates",
+        return_value=(True, "3.0.0", "3.5.0"),
+    )
+
+    from cli_tool.core.utils.version_check import _mark_notified, show_update_notification
+
+    _mark_notified()
+    show_update_notification()
+
+    captured = capsys.readouterr()
+    assert "Update available" not in captured.out
+
+
+@pytest.mark.unit
+def test_show_update_notification_prints_then_marks_notified(tmp_path, mocker, capsys):
+    """show_update_notification prints the banner and records notified_at."""
+    mocker.patch("pathlib.Path.home", return_value=tmp_path)
+    mocker.patch(
+        "cli_tool.core.utils.version_check.check_for_updates",
+        return_value=(True, "3.0.0", "3.5.0"),
+    )
+
+    import json
+
+    from cli_tool.core.utils.version_check import _was_notified_today, get_cache_file, show_update_notification
+
+    show_update_notification()
+
+    captured = capsys.readouterr()
+    assert "3.5.0" in captured.out
+    cache = json.loads(get_cache_file().read_text())
+    assert "notified_at" in cache
+    assert _was_notified_today() is True

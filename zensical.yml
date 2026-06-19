@@ -86,6 +86,10 @@ nav:
           - CodeArtifact Login: guides/codeartifact-login.md
           - DynamoDB Export: guides/dynamodb-export.md
           - SSM Port Forwarding: guides/ssm-port-forwarding.md
+      - Desktop:
+          - Installation: guides/desktop-installation.md
+          - Auto Update: guides/desktop-auto-update.md
+          - Security: guides/desktop-security.md
   - Development:
       - Setup: development/setup.md
       - Contributing: development/contributing.md

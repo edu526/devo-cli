@@ -142,11 +142,14 @@ def check_for_updates():
 
 
 def show_update_notification():
-    """Show update notification if available"""
+    """Show update notification if available (max once per day)"""
     try:
         has_update, current_version, latest_version = check_for_updates()
 
         if has_update and latest_version:
+            if _was_notified_today():
+                return
+
             from rich.console import Console
             from rich.panel import Panel
 
@@ -158,6 +161,31 @@ def show_update_notification():
                     padding=(0, 2),
                 )
             )
+            _mark_notified()
     except Exception:
         # Silently fail - don't interrupt user's workflow
+        pass
+
+
+def _was_notified_today() -> bool:
+    """True if the update banner was already shown in the last 24h."""
+    cache_data = read_cache()
+    if not cache_data or "notified_at" not in cache_data:
+        return False
+    try:
+        notified_at = datetime.fromisoformat(cache_data["notified_at"])
+        return datetime.now() - notified_at < timedelta(hours=24)
+    except Exception:
+        return False
+
+
+def _mark_notified():
+    """Record that the update banner was shown."""
+    cache_data = read_cache() or {}
+    cache_data["notified_at"] = datetime.now().isoformat()
+    cache_file = get_cache_file()
+    try:
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(cache_data, f)
+    except Exception:
         pass

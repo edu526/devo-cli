@@ -101,10 +101,10 @@ def test_start_port_forwarding_plugin_not_installed(mocker):
 def test_start_port_forwarding_success(mocker):
     """Returns 0 when AWS SSM session completes successfully."""
     mocker.patch.object(SSMSession, "_check_session_manager_plugin", return_value=True)
-    mock_result = MagicMock()
-    mock_result.returncode = 0
-    mock_result.stderr = ""
-    mocker.patch("subprocess.run", return_value=mock_result)
+    mock_proc = MagicMock()
+    mock_proc.communicate.return_value = ("", "")
+    mock_proc.returncode = 0
+    mocker.patch("subprocess.Popen", return_value=mock_proc)
 
     result = SSMSession.start_port_forwarding_to_remote(
         bastion="i-abc123",
@@ -121,10 +121,10 @@ def test_start_port_forwarding_success(mocker):
 def test_start_port_forwarding_with_profile(mocker):
     """Includes --profile in the command when profile is provided."""
     mocker.patch.object(SSMSession, "_check_session_manager_plugin", return_value=True)
-    mock_result = MagicMock()
-    mock_result.returncode = 0
-    mock_result.stderr = ""
-    mock_run = mocker.patch("subprocess.run", return_value=mock_result)
+    mock_proc = MagicMock()
+    mock_proc.communicate.return_value = ("", "")
+    mock_proc.returncode = 0
+    mock_popen = mocker.patch("subprocess.Popen", return_value=mock_proc)
 
     SSMSession.start_port_forwarding_to_remote(
         bastion="i-abc123",
@@ -134,7 +134,7 @@ def test_start_port_forwarding_with_profile(mocker):
         profile="my-profile",
     )
 
-    cmd = mock_run.call_args[0][0]
+    cmd = mock_popen.call_args[0][0]
     assert "--profile" in cmd
     assert "my-profile" in cmd
 
@@ -143,11 +143,11 @@ def test_start_port_forwarding_with_profile(mocker):
 def test_start_port_forwarding_plugin_missing_error_in_stderr(mocker):
     """Returns 1 when stderr indicates session-manager-plugin is missing."""
     mocker.patch.object(SSMSession, "_check_session_manager_plugin", return_value=True)
-    mock_result = MagicMock()
-    mock_result.returncode = 1
-    mock_result.stderr = "SessionManagerPlugin is not found"
+    mock_proc = MagicMock()
+    mock_proc.communicate.return_value = ("", "SessionManagerPlugin is not found")
+    mock_proc.returncode = 1
     mock_guide = mocker.patch.object(SSMSession, "_show_plugin_installation_guide")
-    mocker.patch("subprocess.run", return_value=mock_result)
+    mocker.patch("subprocess.Popen", return_value=mock_proc)
 
     result = SSMSession.start_port_forwarding_to_remote(
         bastion="i-abc123",
@@ -164,10 +164,10 @@ def test_start_port_forwarding_plugin_missing_error_in_stderr(mocker):
 def test_start_port_forwarding_non_zero_exit_code_prints_stderr(mocker):
     """Prints stderr and returns non-zero code on failure."""
     mocker.patch.object(SSMSession, "_check_session_manager_plugin", return_value=True)
-    mock_result = MagicMock()
-    mock_result.returncode = 2
-    mock_result.stderr = "Some AWS error"
-    mocker.patch("subprocess.run", return_value=mock_result)
+    mock_proc = MagicMock()
+    mock_proc.communicate.return_value = ("", "Some AWS error")
+    mock_proc.returncode = 2
+    mocker.patch("subprocess.Popen", return_value=mock_proc)
 
     with patch("cli_tool.commands.ssm.core.session.console") as mock_console:
         result = SSMSession.start_port_forwarding_to_remote(
@@ -185,10 +185,10 @@ def test_start_port_forwarding_non_zero_exit_code_prints_stderr(mocker):
 def test_start_port_forwarding_no_profile_no_profile_flag(mocker):
     """Does not include --profile when profile is None."""
     mocker.patch.object(SSMSession, "_check_session_manager_plugin", return_value=True)
-    mock_result = MagicMock()
-    mock_result.returncode = 0
-    mock_result.stderr = ""
-    mock_run = mocker.patch("subprocess.run", return_value=mock_result)
+    mock_proc = MagicMock()
+    mock_proc.communicate.return_value = ("", "")
+    mock_proc.returncode = 0
+    mock_popen = mocker.patch("subprocess.Popen", return_value=mock_proc)
 
     SSMSession.start_port_forwarding_to_remote(
         bastion="i-abc123",
@@ -198,7 +198,7 @@ def test_start_port_forwarding_no_profile_no_profile_flag(mocker):
         profile=None,
     )
 
-    cmd = mock_run.call_args[0][0]
+    cmd = mock_popen.call_args[0][0]
     assert "--profile" not in cmd
 
 

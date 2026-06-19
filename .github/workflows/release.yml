@@ -62,6 +62,10 @@ jobs:
         run: |
           echo "🔍 Checking if new release is needed..."
 
+          # The conventional-monorepo parser with path_filters excludes
+          # desktop/, cli_tool/sidecar/, tests/, docs/ from bumping.
+          # Commits that only touch those paths return ParseError → no release.
+
           # Dry-run to get next version without creating anything
           NEXT_VERSION=$(semantic-release version --print 2>/dev/null || echo "")
 

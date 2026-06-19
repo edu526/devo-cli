@@ -1,0 +1,266 @@
+/* Shared page layout styles */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.page-header h1 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: #f0f0f0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Buttons */
+
+.btn-primary,
+.btn-secondary,
+.btn-danger,
+.btn-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition:
+    opacity 0.15s,
+    background 0.15s;
+  font-weight: 500;
+}
+
+.btn-primary {
+  background: #4f8ef7;
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) {
+  background: #3a7de8;
+}
+
+.btn-secondary {
+  background: #2a2a2a;
+  color: #c0c0c0;
+  border: 1px solid #3a3a3a;
+}
+.btn-secondary:hover:not(:disabled) {
+  background: #333;
+}
+
+.btn-danger {
+  background: #3a1a1a;
+  color: #f87171;
+  border: 1px solid #5a2a2a;
+}
+.btn-danger:hover:not(:disabled) {
+  background: #4a2020;
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Inline spinner for buttons */
+.spinner-sm {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin-sm 0.6s linear infinite;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+@keyframes spin-sm {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.btn-sm {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+}
+
+/* Table */
+
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  min-width: 500px;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+th {
+  text-align: left;
+  color: #6a6a6a;
+  font-weight: 500;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #2a2a2a;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid #1e1e1e;
+  vertical-align: middle;
+}
+
+tr:hover td {
+  background: #181818;
+}
+tr:hover td.actions-cell {
+  background: #181818;
+}
+
+td.name {
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
+td code {
+  white-space: nowrap;
+}
+
+th.actions-col,
+td.actions-cell {
+  width: 1%;
+  white-space: nowrap;
+  position: sticky;
+  right: 0;
+  background: #0f0f0f;
+  box-shadow: -4px 0 8px rgba(0, 0, 0, 0.4);
+}
+
+tr:hover td.actions-cell {
+  background: #181818;
+}
+
+.actions-cell .actions-wrap {
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
+code {
+  font-family: "JetBrains Mono", "Cascadia Code", monospace;
+  font-size: 0.82em;
+  color: #9cb6f7;
+}
+
+/* Badge */
+
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-green {
+  background: #14301a;
+  color: #4ade80;
+}
+.badge-yellow {
+  background: #2a2000;
+  color: #fbbf24;
+}
+.badge-red {
+  background: #2a1010;
+  color: #f87171;
+}
+.badge-gray {
+  background: #222;
+  color: #8a8a8a;
+}
+
+/* Alerts */
+
+.alert-error {
+  background: #2a1010;
+  border: 1px solid #5a2020;
+  border-radius: 6px;
+  padding: 0.6rem 1rem;
+  color: #f87171;
+  font-size: 0.85rem;
+}
+
+/* Background refresh indicator */
+.refreshing-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4f8ef7;
+  opacity: 0.7;
+  animation: pulse-dot 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+/* Empty / misc */
+
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: #8a8a8a;
+}
+
+.empty-state p:first-child {
+  font-size: 1rem;
+  color: #c0c0c0;
+  margin-bottom: 0.4rem;
+}
+
+.muted {
+  color: #6a6a6a;
+  font-size: 0.85rem;
+}
+
+.optional {
+  color: #555;
+  font-size: 0.78rem;
+  font-weight: 400;
+}

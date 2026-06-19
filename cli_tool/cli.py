@@ -10,6 +10,7 @@ from cli_tool.commands.commit import commit
 from cli_tool.commands.config_cmd import register_config_commands
 from cli_tool.commands.dynamodb import dynamodb
 from cli_tool.commands.eventbridge import register_eventbridge_commands
+from cli_tool.commands.sidecar.command import sidecar
 from cli_tool.commands.ssm import ssm
 from cli_tool.commands.upgrade import upgrade
 
@@ -17,7 +18,7 @@ from cli_tool.commands.upgrade import upgrade
 _COMMAND_GROUPS = {
     "Git": ["commit", "code-reviewer"],
     "AWS": ["aws-login", "codeartifact-login", "dynamodb", "eventbridge", "ssm"],
-    "Tools": ["autocomplete", "config", "upgrade"],
+    "Tools": ["autocomplete", "config", "sidecar", "upgrade"],
 }
 
 # Known aliases: actual command name → list of aliases
@@ -139,6 +140,7 @@ cli.add_command(register_config_commands())
 cli.add_command(dynamodb)
 cli.add_command(register_eventbridge_commands())
 cli.add_command(ssm)
+cli.add_command(sidecar)
 
 
 def _collect_command_names(group: click.Group) -> set:

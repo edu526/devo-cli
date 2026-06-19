@@ -59,3 +59,40 @@ repos:
         pass_filenames: false
         stages: [pre-push]
 
+      - id: desktop-lint
+        name: Desktop ESLint
+        entry: bash
+        args:
+          - -c
+          - |
+            cd desktop && pnpm lint
+        language: system
+        pass_filenames: false
+        files: ^desktop/src/.*\.(ts|svelte)$
+        stages: [pre-commit]
+        additional_dependencies: []
+
+      - id: desktop-typecheck
+        name: Desktop svelte-check
+        entry: bash
+        args:
+          - -c
+          - |
+            cd desktop && pnpm typecheck
+        language: system
+        pass_filenames: false
+        files: ^desktop/src/.*\.(ts|svelte)$
+        stages: [pre-commit]
+
+      - id: desktop-test
+        name: Desktop Vitest
+        entry: bash
+        args:
+          - -c
+          - |
+            cd desktop && pnpm test
+        language: system
+        pass_filenames: false
+        files: ^desktop/src/.*\.(ts|svelte)$
+        stages: [pre-push]
+
