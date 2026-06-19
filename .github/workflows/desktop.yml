@@ -147,11 +147,17 @@ jobs:
           echo "✅ sidecar binary OK"
 
       - name: Copy sidecar into Tauri binaries dir
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p desktop/src-tauri/binaries
           TRIPLE="${{ matrix.rust_target }}"
-          cp dist-sidecar/devo-sidecar "desktop/src-tauri/binaries/devo-sidecar-${TRIPLE}"
-          chmod +x "desktop/src-tauri/binaries/devo-sidecar-${TRIPLE}"
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            cp dist-sidecar/devo-sidecar.exe "desktop/src-tauri/binaries/devo-sidecar-${TRIPLE}.exe"
+          else
+            cp dist-sidecar/devo-sidecar "desktop/src-tauri/binaries/devo-sidecar-${TRIPLE}"
+            chmod +x "desktop/src-tauri/binaries/devo-sidecar-${TRIPLE}"
+          fi
           echo "✅ Placed at desktop/src-tauri/binaries/devo-sidecar-${TRIPLE}"
 
       # ── Node + frontend ───────────────────────────────────────────────────────

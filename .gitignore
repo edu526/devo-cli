@@ -168,3 +168,5 @@ config.*.json
 .claude
 .mcp.json
 .playwright-mcp
+build-sidecar
+dist-sidecar

@@ -49,7 +49,7 @@ dev = [
 ]
 
 sidecar = [
-    "fastapi>=0.115.0,<1.0.0",
+    "fastapi==0.137.2",
     "uvicorn[standard]>=0.30.0,<1.0.0",
     "watchdog>=4.0.0,<7.0.0",
     "websockets>=12.0,<15.0",
