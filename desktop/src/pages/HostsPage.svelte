@@ -182,7 +182,9 @@
 
   {#if setupResult && setupResult.length > 0}
     <div class="alert-success">
-      <p>✓ Setup complete — {setupResult.length} host{setupResult.length > 1 ? "s" : ""} configured:</p>
+      <p>
+        ✓ Setup complete — {setupResult.length} host{setupResult.length > 1 ? "s" : ""} configured:
+      </p>
       <ul>
         {#each setupResult as r (r.name)}
           <li>
@@ -217,8 +219,8 @@
         <tbody>
           {#each filtered as h (h.hostname)}
             <tr>
-              <td><code>{h.ip}</code></td>
-              <td><code>{h.hostname}</code></td>
+              <td class="ip-cell truncate"><code>{h.ip}</code></td>
+              <td class="hostname-cell truncate"><code>{h.hostname}</code></td>
               <td class="actions-cell">
                 <div class="actions-wrap">
                   <button
@@ -263,7 +265,12 @@
         <div class="alert-error">{actionError}</div>
       {/if}
 
-      <FormField label="IP Address" required error={formErrors.ip} hint="IPv4 address, e.g. 127.0.0.1">
+      <FormField
+        label="IP Address"
+        required
+        error={formErrors.ip}
+        hint="IPv4 address, e.g. 127.0.0.1"
+      >
         <input bind:value={form.ip} placeholder="127.0.0.1" />
       </FormField>
       <FormField label="Hostname" required error={formErrors.hostname}>
@@ -295,6 +302,13 @@
     display: flex;
     align-items: center;
     gap: 0.6rem;
+  }
+
+  .ip-cell {
+    max-width: 140px;
+  }
+  .hostname-cell {
+    max-width: 200px;
   }
 
   .alert-elevation {

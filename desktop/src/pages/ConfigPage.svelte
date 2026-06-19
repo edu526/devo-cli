@@ -6,8 +6,6 @@
   import { EditorState } from "@codemirror/state";
   import { keymap } from "@codemirror/view";
   import { configApi, ApiError } from "../lib/api";
-  import { theme, type Theme } from "../lib/theme";
-  import { locale, type Locale } from "../lib/i18n";
 
   let config: Record<string, unknown> = $state({});
   let loading = $state(true);
@@ -134,33 +132,6 @@
     <div class="alert-error">{parseError}</div>
   {/if}
 
-  <div class="preferences">
-    <section>
-      <h2>Appearance</h2>
-      <label class="pref-row">
-        <span>Theme</span>
-        <select
-          value={$theme}
-          onchange={(e) => theme.set((e.currentTarget as HTMLSelectElement).value as Theme)}
-        >
-          <option value="dark">Dark</option>
-          <option value="light">Light</option>
-          <option value="system">Follow system</option>
-        </select>
-      </label>
-      <label class="pref-row">
-        <span>Language</span>
-        <select
-          value={$locale}
-          onchange={(e) => locale.set((e.currentTarget as HTMLSelectElement).value as Locale)}
-        >
-          <option value="en">English</option>
-          <option value="es">Español</option>
-        </select>
-      </label>
-    </section>
-  </div>
-
   {#if loading}
     <p class="muted">Loading…</p>
   {:else}
@@ -182,50 +153,6 @@
     margin-left: 0.75rem;
     color: var(--text-faint);
     font-size: 0.75rem;
-  }
-
-  .preferences {
-    margin-bottom: 1rem;
-  }
-
-  .preferences h2 {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin-bottom: 0.5rem;
-  }
-
-  .pref-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .pref-row span {
-    font-size: 0.85rem;
-    color: var(--text-primary);
-  }
-
-  .pref-row select {
-    -webkit-appearance: none;
-    appearance: none;
-    background: var(--bg-surface-2);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-primary);
-    font-size: 0.82rem;
-    padding: 0.25rem 1.8rem 0.25rem 0.5rem;
-    cursor: pointer;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='none' stroke='%2394a3b8' stroke-width='1.5' d='M1 1l4 4 4-4'/></svg>");
-    background-repeat: no-repeat;
-    background-position: right 0.55rem center;
-  }
-
-  .pref-row select option {
-    background: var(--bg-surface);
-    color: var(--text-primary);
   }
 
   .editor-wrap {
