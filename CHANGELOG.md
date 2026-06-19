@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v3.10.0 (2026-06-19)
+
+### Bug Fixes
+
+- **ci**: Install pnpm+node in lint-reusable for desktop pre-commit hooks
+  ([`d91f935`](https://github.com/edu526/devo-cli/commit/d91f9351e256f0721ab05e64b716514cce258cd7))
+
+- **ci**: Install sidecar deps in test/lint workflows
+  ([`365fe79`](https://github.com/edu526/devo-cli/commit/365fe79cafd1bda1c2ad88f0863289bf0584c0f4))
+
+### Features
+
+- **desktop**: Devo Desktop — Tauri 2 app with FastAPI sidecar
+  ([`01f002d`](https://github.com/edu526/devo-cli/commit/01f002d7507a1dc7c739f1cdfd64f61892332ec6))
+
+
 ## v3.9.0 (2026-06-12)
 
 ### Bug Fixes
