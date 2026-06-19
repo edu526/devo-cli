@@ -1,6 +1,6 @@
 [package]
 name = "devo"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 edition = "2021"
 description = "Devo Desktop"
 authors = ["HeyEdu.dev"]
