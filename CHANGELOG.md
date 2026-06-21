@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v3.11.0 (2026-06-21)
+
+### Chores
+
+- WIP checkpoint across desktop, sidecar, ssm and tests
+  ([`4ad0e0b`](https://github.com/edu526/devo-cli/commit/4ad0e0bfef1de5bb8a41542cfaa18da2475dad06))
+
+### Features
+
+- **profiles**: Add "Add Profile" UI and POST /api/v1/profiles endpoint
+  ([`a5efe03`](https://github.com/edu526/devo-cli/commit/a5efe03b962c473750db1f4275f745cdee8add9c))
+
+- **profiles**: SSO-discovery wizard for "Add Profile" (matches devo aws-login flow)
+  ([`89d3ce6`](https://github.com/edu526/devo-cli/commit/89d3ce6d4b3fb38af3ed96a6e62fa672d7501acb))
+
+
 ## v3.10.0 (2026-06-19)
 
 ### Bug Fixes
