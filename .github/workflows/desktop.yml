@@ -40,12 +40,10 @@ jobs:
           fetch-tags: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Bump alpha version
+      - name: Compute next version
         id: bump
         run: |
           if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            # ponytail: sequential alpha bump from git tags. Race if two pushes
-            # land simultaneously — worst case a duplicate tag, fix with retry.
             LAST_TAG=$(git tag -l 'app-v*' | sort -V | tail -1)
             if [ -n "$LAST_TAG" ]; then
               N=$(echo "$LAST_TAG" | grep -oE 'alpha\.[0-9]+' | cut -d. -f2)
@@ -53,39 +51,21 @@ jobs:
               N=0
             fi
             NEXT_VERSION="0.1.0-alpha.$(( N + 1 ))"
-
-            echo "Last tag: ${LAST_TAG:-none}"
-            echo "Next version: $NEXT_VERSION"
-
-            # Update version in both files
-            jq --arg v "$NEXT_VERSION" '.version = $v' \
-              desktop/src-tauri/tauri.conf.json > tmp && mv tmp desktop/src-tauri/tauri.conf.json
-            sed -i 's/^version = .*/version = "'"$NEXT_VERSION"'"/' \
-              desktop/src-tauri/Cargo.toml
-
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add desktop/src-tauri/tauri.conf.json desktop/src-tauri/Cargo.toml
-            BUMPED=false
-            if git diff --staged --quiet; then
-              echo "ℹ️  Files already at $NEXT_VERSION, no bump commit needed"
+            CURRENT_VERSION=$(jq -r '.version' desktop/src-tauri/tauri.conf.json)
+            if [ "$NEXT_VERSION" = "$CURRENT_VERSION" ]; then
+              BUMPED=false
+              echo "ℹ️  tauri.conf.json already at $NEXT_VERSION, no new release"
             else
-              git commit -m "chore(desktop): bump to $NEXT_VERSION"
-              git push
-              echo "✅ Bumped to $NEXT_VERSION"
               BUMPED=true
+              echo "Last tag: ${LAST_TAG:-none}, current: $CURRENT_VERSION, next: $NEXT_VERSION"
             fi
-
             echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
-            echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
             echo "bumped=$BUMPED" >> $GITHUB_OUTPUT
           else
-            # PR or manual dispatch: keep current version, no commit
             CURRENT_VERSION=$(jq -r '.version' desktop/src-tauri/tauri.conf.json)
             echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-            echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
             echo "bumped=false" >> $GITHUB_OUTPUT
-            echo "ℹ️  No bump (event: ${{ github.event_name }}) — keeping $CURRENT_VERSION"
+            echo "ℹ️  Event: ${{ github.event_name }} — using current $CURRENT_VERSION, no bump"
           fi
 
   create-release:
@@ -101,7 +81,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ needs.bump-version.outputs.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           fetch-tags: true
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -113,7 +93,7 @@ jobs:
         run: |
           VERSION="${{ needs.bump-version.outputs.version }}"
           TAG="app-v${VERSION}"
-          SHA="${{ needs.bump-version.outputs.sha }}"
+          SHA="${{ github.sha }}"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -183,7 +163,16 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-          ref: ${{ needs.bump-version.outputs.sha }}
+          ref: ${{ github.sha }}
+
+      - name: Apply version to build files
+        run: |
+          VERSION="${{ needs.bump-version.outputs.version }}"
+          jq --arg v "$VERSION" '.version = $v' \
+            desktop/src-tauri/tauri.conf.json > tmp && mv tmp desktop/src-tauri/tauri.conf.json
+          sed -i 's/^version = .*/version = "'"$VERSION"'"/' \
+            desktop/src-tauri/Cargo.toml
+          echo "✅ Version set to $VERSION for build"
 
       # ── Python + sidecar binary ───────────────────────────────────────────────
       - name: Set up Python
