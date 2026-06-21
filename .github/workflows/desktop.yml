@@ -170,8 +170,10 @@ jobs:
           VERSION="${{ needs.bump-version.outputs.version }}"
           jq --arg v "$VERSION" '.version = $v' \
             desktop/src-tauri/tauri.conf.json > tmp && mv tmp desktop/src-tauri/tauri.conf.json
-          sed -i 's/^version = .*/version = "'"$VERSION"'"/' \
-            desktop/src-tauri/Cargo.toml
+          # ponytail: -i.bak is portable across GNU sed (linux) and BSD sed (macos);
+          # plain -i fails on macos which requires an explicit backup extension arg.
+          sed -i.bak 's/^version = .*/version = "'"$VERSION"'"/' \
+            desktop/src-tauri/Cargo.toml && rm -f desktop/src-tauri/Cargo.toml.bak
           echo "✅ Version set to $VERSION for build"
 
       # ── Python + sidecar binary ───────────────────────────────────────────────
