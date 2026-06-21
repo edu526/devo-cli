@@ -166,6 +166,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Apply version to build files
+        shell: bash
         run: |
           VERSION="${{ needs.bump-version.outputs.version }}"
           jq --arg v "$VERSION" '.version = $v' \
