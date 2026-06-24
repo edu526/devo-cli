@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.12.0 (2026-06-24)
+
+### Features
+
+- Implement doctor command to diagnose environment health and configuration status
+  ([`20423b5`](https://github.com/edu526/devo-cli/commit/20423b5aa361b2a899be8a924f389031bef9bb53))
+
+
 ## v3.11.0 (2026-06-21)
 
 ### Chores
