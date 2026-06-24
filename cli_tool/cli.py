@@ -8,6 +8,7 @@ from cli_tool.commands.code_reviewer.commands.analyze import code_reviewer
 from cli_tool.commands.codeartifact import codeartifact_login
 from cli_tool.commands.commit import commit
 from cli_tool.commands.config_cmd import register_config_commands
+from cli_tool.commands.doctor import doctor
 from cli_tool.commands.dynamodb import dynamodb
 from cli_tool.commands.eventbridge import register_eventbridge_commands
 from cli_tool.commands.sidecar.command import sidecar
@@ -18,7 +19,7 @@ from cli_tool.commands.upgrade import upgrade
 _COMMAND_GROUPS = {
     "Git": ["commit", "code-reviewer"],
     "AWS": ["aws-login", "codeartifact-login", "dynamodb", "eventbridge", "ssm"],
-    "Tools": ["autocomplete", "config", "sidecar", "upgrade"],
+    "Tools": ["autocomplete", "config", "doctor", "sidecar", "upgrade"],
 }
 
 # Known aliases: actual command name → list of aliases
@@ -135,6 +136,7 @@ cli.add_command(upgrade)
 cli.add_command(aws_login)
 cli.add_command(codeartifact_login)
 cli.add_command(autocomplete)
+cli.add_command(doctor)
 cli.add_command(code_reviewer)
 cli.add_command(register_config_commands())
 cli.add_command(dynamodb)

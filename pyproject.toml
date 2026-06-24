@@ -76,6 +76,9 @@ cli_tool = ["templates/*.j2", "commands/*.py", "utils/*.py", "config.py"]
 
 [tool.setuptools_scm]
 write_to = "cli_tool/_version.py"
+# ponytail: git describe skips desktop alpha tags (app-v*) — only v* are CLI releases
+git_describe_command = "git describe --tags --dirty --match 'v*' --exclude 'app-v*' --exclude 'desktop-v*'"
+tag_regex = "^v(?P<version>[^+]+)$"
 
 [tool.semantic_release]
 major_on_zero = true
