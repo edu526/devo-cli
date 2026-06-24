@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import cli_tool.core.utils.aws as aws_module
 from cli_tool.core.utils.aws import (
     _get_credentials_from_cli,
     check_aws_cli,
@@ -14,6 +15,15 @@ from cli_tool.core.utils.aws import (
     select_profile,
     verify_aws_credentials,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_aws_path_cache():
+    """Clear the cached AWS CLI path so tests don't leak state."""
+    aws_module._aws_path_cache = None
+    yield
+    aws_module._aws_path_cache = None
+
 
 # ---------------------------------------------------------------------------
 # check_aws_cli
