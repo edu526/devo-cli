@@ -1,6 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { logError } from "./error-log";
 
+// ponytail: structured hint returned by the sidecar when a hosts action needs
+// UAC. The frontend uses `action` + `params` to drive `run_elevated` instead of
+// asking the user to paste a command into a terminal. `command` is kept for
+// copy-to-clipboard fallback.
+export interface ElevationHint {
+  message: string;
+  command: string;
+  action: string;
+  params: Record<string, unknown>;
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface SidecarInfo {

@@ -1,18 +1,31 @@
-<script lang="ts">
+  <script lang="ts">
   import { onMount } from "svelte";
   import { get } from "svelte/store";
-  import { hostsApi, type HostRecord, type HostSetupEntry, ApiError } from "../lib/api";
+  import { invoke } from "@tauri-apps/api/core";
+  import {
+    hostsApi,
+    type HostRecord,
+    type HostSetupEntry,
+    type ElevationHint,
+    ApiError,
+  } from "../lib/api";
   import { hostsCache } from "../lib/page-stores";
   import SearchInput from "../lib/SearchInput.svelte";
   import FormField from "../lib/FormField.svelte";
   import { hostSchema, validate, type HostForm, type FieldErrors } from "../lib/forms";
 
   const initialHosts = (get(hostsCache) ?? []) as HostRecord[];
+  // ponytail: Windows is the only platform with a different hosts path. All
+  // Unix-like (Linux/macOS) share /etc/hosts.
+  const isWindows =
+    typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
+  const hostsPath = isWindows ? "C:\\Windows\\System32\\drivers\\etc\\hosts" : "/etc/hosts";
+  const adminAction = isWindows ? "admin approval (UAC prompt)" : "admin password (sudo prompt)";
   let hosts: HostRecord[] = $state(initialHosts);
   let loading = $state(initialHosts.length === 0);
   let refreshing = $state(false);
   let actionError: string | null = $state(null);
-  let elevationCommand: string | null = $state(null);
+  let elevationHint: ElevationHint | null = $state(null);
   let adding = $state(false);
   let deleting: Set<string> = $state(new Set());
 
@@ -22,6 +35,9 @@
   let formErrors: FieldErrors<HostForm> = $state({});
   let settingUp = $state(false);
   let setupResult: HostSetupEntry[] | null = $state(null);
+  // ponytail: custom modal for the remove confirmation — window.confirm() renders
+  // as a native WebView dialog ("localhost:5173 dice…") and breaks the visual.
+  let confirmRemove: string | null = $state(null);
 
   const filtered = $derived(
     query.trim()
@@ -37,7 +53,61 @@
     form = { ip: "", hostname: "" };
     formErrors = {};
     actionError = null;
-    elevationCommand = null;
+    elevationHint = null;
+  }
+
+  function argsFor(hint: ElevationHint): string[] {
+    const a = hint.action;
+    const p = hint.params as Record<string, string | string[] | undefined>;
+    if (a === "hosts-add") {
+      // Manual add: no db name, use the bypass-config subcommand.
+      return ["ssm", "hosts", "add-manual", String(p.ip ?? ""), String(p.hostname ?? "")];
+    }
+    if (a === "hosts-remove") {
+      // If the host came from a configured db, pass the db name (the CLI
+      // resolves <name> against ~/.devo/config.json, not /etc/hosts).
+      // Otherwise fall back to the bypass-config remove by hostname.
+      const dbName = String(p.db_name ?? "");
+      if (dbName) {
+        return ["ssm", "hosts", "remove", dbName];
+      }
+      return ["ssm", "hosts", "remove-manual", String(p.hostname ?? "")];
+    }
+    if (a === "hosts-setup") {
+      const dbs = Array.isArray(p.db_names) ? p.db_names : [];
+      return dbs.length > 0 ? ["ssm", "hosts", "setup", "--db-name", ...dbs] : ["ssm", "hosts", "setup"];
+    }
+    return [];
+  }
+
+  // ponytail: trigger the UAC prompt via Tauri, then refresh the list.
+  // The elevated devo already performed the mutation, so we MUST NOT
+  // re-call the sidecar mutating endpoint — the sidecar has no admin
+  // rights and would re-fail with 401 (and in the old code, the retry
+  // also re-triggered the confirm() in a loop). `load()` is a read
+  // and works fine non-elevated.
+  async function elevateAndRefresh(hint: ElevationHint): Promise<void> {
+    if (!hint.action) {
+      elevationHint = hint;
+      return;
+    }
+    actionError = null;
+    elevationHint = null;
+    try {
+      const exit = await invoke<number>("run_elevated", { args: argsFor(hint) });
+      if (exit === 0) {
+        await load();
+      } else {
+        actionError = `Elevated command failed (exit ${exit})`;
+      }
+    } catch (e) {
+      const msg = String(e);
+      if (msg.toLowerCase().includes("cancel") || msg.toLowerCase().includes("access")) {
+        actionError = "Elevation cancelled. Try again or right-click Devo and 'Run as administrator'.";
+      } else {
+        actionError = msg;
+      }
+    }
   }
 
   async function load() {
@@ -62,7 +132,7 @@
       return;
     }
     actionError = null;
-    elevationCommand = null;
+    elevationHint = null;
     adding = true;
     try {
       await hostsApi.add(v.data.ip, v.data.hostname);
@@ -71,9 +141,14 @@
       await load();
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
-        const detail = e.detail as { command?: string; message?: string };
-        elevationCommand = detail?.command ?? null;
-        actionError = detail?.message ?? "Elevated privileges required";
+        const detail = e.detail as Partial<ElevationHint>;
+        const hint: ElevationHint = {
+          message: detail.message ?? "Elevated privileges required",
+          command: detail.command ?? "",
+          action: detail.action ?? "",
+          params: (detail.params ?? {}) as Record<string, unknown>,
+        };
+        await elevateAndRefresh(hint);
       } else {
         actionError = String(e);
       }
@@ -82,19 +157,23 @@
     }
   }
 
-  async function remove(hostname: string) {
-    if (!confirm(`Remove "${hostname}" from /etc/hosts?`)) return;
+  async function doRemove(hostname: string) {
     actionError = null;
-    elevationCommand = null;
+    elevationHint = null;
     deleting = new Set([...deleting, hostname]);
     try {
       await hostsApi.remove(hostname);
       await load();
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
-        const detail = e.detail as { command?: string; message?: string };
-        elevationCommand = detail?.command ?? null;
-        actionError = detail?.message ?? "Elevated privileges required";
+        const detail = e.detail as Partial<ElevationHint>;
+        const hint: ElevationHint = {
+          message: detail.message ?? "Elevated privileges required",
+          command: detail.command ?? "",
+          action: detail.action ?? "",
+          params: (detail.params ?? {}) as Record<string, unknown>,
+        };
+        await elevateAndRefresh(hint);
       } else {
         actionError = String(e);
       }
@@ -103,15 +182,29 @@
     }
   }
 
+  async function remove(hostname: string) {
+    confirmRemove = hostname;
+  }
+
+  async function cancelConfirmRemove() {
+    confirmRemove = null;
+  }
+
+  async function confirmConfirmRemove() {
+    const hostname = confirmRemove;
+    confirmRemove = null;
+    if (hostname) await doRemove(hostname);
+  }
+
   async function copyCommand() {
-    if (elevationCommand) {
-      await navigator.clipboard.writeText(elevationCommand);
+    if (elevationHint?.command) {
+      await navigator.clipboard.writeText(elevationHint.command);
     }
   }
 
   async function runSetup() {
     actionError = null;
-    elevationCommand = null;
+    elevationHint = null;
     setupResult = null;
     settingUp = true;
     try {
@@ -126,9 +219,14 @@
       await load();
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
-        const detail = e.detail as { command?: string; message?: string };
-        elevationCommand = detail?.command ?? null;
-        actionError = detail?.message ?? "Elevated privileges required";
+        const detail = e.detail as Partial<ElevationHint>;
+        const hint: ElevationHint = {
+          message: detail.message ?? "Elevated privileges required",
+          command: detail.command ?? "",
+          action: detail.action ?? "",
+          params: (detail.params ?? {}) as Record<string, unknown>,
+        };
+        await elevateAndRefresh(hint);
       } else {
         actionError = String(e);
       }
@@ -168,11 +266,20 @@
     </div>
   </div>
 
-  {#if elevationCommand}
+  {#if elevationHint && elevationHint.action}
     <div class="alert-elevation">
-      <p>⚠️ {actionError} — run this command in your terminal:</p>
+      <p>⚠️ {elevationHint.message}</p>
+      <p class="muted">Devo tried to elevate automatically but the action hint was missing. Run this in an admin terminal:</p>
       <div class="elevation-cmd">
-        <code>{elevationCommand}</code>
+        <code>{elevationHint.command}</code>
+        <button class="btn-sm btn-secondary" onclick={copyCommand}>Copy</button>
+      </div>
+    </div>
+  {:else if elevationHint}
+    <div class="alert-elevation">
+      <p>⚠️ {elevationHint.message} — run this command in your terminal:</p>
+      <div class="elevation-cmd">
+        <code>{elevationHint.command}</code>
         <button class="btn-sm btn-secondary" onclick={copyCommand}>Copy</button>
       </div>
     </div>
@@ -201,7 +308,7 @@
     <p class="muted">Loading…</p>
   {:else if hosts.length === 0}
     <div class="empty-state">
-      <p>No managed /etc/hosts entries.</p>
+      <p>No managed {hostsPath} entries.</p>
       <p class="muted">Add entries to enable hostname-based port forwarding.</p>
     </div>
   {:else if filtered.length === 0}
@@ -261,7 +368,7 @@
     >
       <h2>Add Host Entry</h2>
 
-      {#if actionError && !elevationCommand}
+      {#if actionError && !elevationHint}
         <div class="alert-error">{actionError}</div>
       {/if}
 
@@ -297,6 +404,46 @@
   </div>
 {/if}
 
+{#if confirmRemove}
+  <div
+    class="modal-backdrop"
+    role="presentation"
+    onclick={cancelConfirmRemove}
+    onkeydown={cancelConfirmRemove}
+  >
+    <div
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm-remove-title"
+      tabindex="-1"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => {
+        if (e.key === "Escape") cancelConfirmRemove();
+        e.stopPropagation();
+      }}
+    >
+      <div class="confirm-header">
+        <span class="confirm-icon" aria-hidden="true">⚠️</span>
+        <h2 id="confirm-remove-title">Remove host entry</h2>
+      </div>
+      <p class="confirm-lead">This will remove the following entry:</p>
+      <div class="confirm-host">
+        <code>{confirmRemove}</code>
+      </div>
+      <p class="confirm-path muted">from <code>{hostsPath}</code></p>
+      <div class="confirm-notice">
+        <span class="confirm-lock" aria-hidden="true">🔐</span>
+        <span>This action requires {adminAction}.</span>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick={cancelConfirmRemove}>Cancel</button>
+        <button class="btn-danger" onclick={confirmConfirmRemove}>Remove</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
   .header-actions {
     display: flex;
@@ -309,6 +456,54 @@
   }
   .hostname-cell {
     max-width: 200px;
+  }
+
+  /* Remove-confirmation modal */
+  .confirm-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.1rem;
+  }
+  .confirm-icon {
+    font-size: 1.4rem;
+    line-height: 1;
+  }
+  .confirm-lead {
+    color: #b0b0b0;
+    font-size: 0.88rem;
+    margin: 0;
+  }
+  .confirm-host {
+    background: #111;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    padding: 0.6rem 0.85rem;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+  }
+  .confirm-host code {
+    color: #f87171;
+    font-size: 0.85rem;
+  }
+  .confirm-path {
+    margin: 0;
+    font-size: 0.8rem;
+  }
+  .confirm-notice {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    background: #2a1a00;
+    border: 1px solid #5a3a10;
+    border-radius: 6px;
+    padding: 0.55rem 0.8rem;
+    color: #fbbf24;
+    font-size: 0.82rem;
+  }
+  .confirm-lock {
+    font-size: 1rem;
+    line-height: 1;
   }
 
   .alert-elevation {

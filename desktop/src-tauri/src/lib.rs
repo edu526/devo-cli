@@ -7,6 +7,9 @@ mod updater;
 
 use sidecar::SidecarInfo;
 
+#[cfg(windows)]
+mod elevated;
+
 pub const MIN_DEVO_CLI_VERSION: &str = env!("DEVO_CLI_MIN_VERSION");
 const DEVO_CLI_VERSION: &str = env!("DEVO_CLI_VERSION");
 
@@ -54,6 +57,19 @@ async fn get_sidecar_info(state: State<'_, SidecarState>) -> Result<SidecarInfo,
 #[tauri::command]
 fn get_boot_status(state: State<'_, BootState>) -> BootStatus {
     state.0.lock().unwrap().clone()
+}
+
+#[tauri::command]
+fn run_elevated(args: Vec<String>) -> Result<u32, String> {
+    #[cfg(windows)]
+    {
+        elevated::run_elevated(&args).map_err(|e| e.to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = args;
+        Err("run_elevated: only implemented on Windows".to_string())
+    }
 }
 
 async fn setup_sidecar(app: AppHandle) {
@@ -117,7 +133,8 @@ pub fn run() {
             get_boot_status,
             updater::fetch_update,
             updater::install_update,
-            tray::hide_to_tray
+            tray::hide_to_tray,
+            run_elevated
         ])
         .run(tauri::generate_context!())
         .expect("error while running Devo");
