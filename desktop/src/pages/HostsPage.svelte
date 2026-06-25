@@ -1,4 +1,4 @@
-  <script lang="ts">
+<script lang="ts">
   import { onMount } from "svelte";
   import { get } from "svelte/store";
   import { invoke } from "@tauri-apps/api/core";
@@ -10,9 +10,13 @@
     ApiError,
   } from "../lib/api";
   import { hostsCache } from "../lib/page-stores";
+  import { viewModes } from "../lib/stores";
   import SearchInput from "../lib/SearchInput.svelte";
+  import ViewToggle from "../lib/ViewToggle.svelte";
   import FormField from "../lib/FormField.svelte";
   import { hostSchema, validate, type HostForm, type FieldErrors } from "../lib/forms";
+  
+  const viewMode = viewModes.hosts;
 
   const initialHosts = (get(hostsCache) ?? []) as HostRecord[];
   // ponytail: Windows is the only platform with a different hosts path. All
@@ -249,6 +253,7 @@
       Hosts {#if refreshing && !loading}<span class="refreshing-dot"></span>{/if}
     </h1>
     <div class="header-actions">
+      <ViewToggle page="hosts" />
       <SearchInput bind:value={query} placeholder="Filter hosts…" />
       <button class="btn-secondary" onclick={runSetup} disabled={settingUp}>
         {#if settingUp}<span class="spinner-sm"></span>{/if}
@@ -314,40 +319,68 @@
   {:else if filtered.length === 0}
     <p class="muted">No hosts match "{query}".</p>
   {:else}
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>IP</th>
-            <th>Hostname</th>
-            <th class="actions-col">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each filtered as h (h.hostname)}
+    {#if $viewMode === 'table'}
+      <div class="table-wrap">
+        <table>
+          <thead>
             <tr>
-              <td class="ip-cell truncate"><code>{h.ip}</code></td>
-              <td class="hostname-cell truncate"><code>{h.hostname}</code></td>
-              <td class="actions-cell">
-                <div class="actions-wrap">
-                  <button
-                    class="btn-sm btn-danger"
-                    onclick={() => remove(h.hostname)}
-                    disabled={deleting.has(h.hostname)}
-                  >
-                    {#if deleting.has(h.hostname)}
-                      <span class="spinner-sm"></span> Removing…
-                    {:else}
-                      Remove
-                    {/if}
-                  </button>
-                </div>
-              </td>
+              <th>IP</th>
+              <th>Hostname</th>
+              <th class="actions-col">Actions</th>
             </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {#each filtered as h (h.hostname)}
+              <tr>
+                <td class="ip-cell truncate"><code>{h.ip}</code></td>
+                <td class="hostname-cell truncate"><code>{h.hostname}</code></td>
+                <td class="actions-cell">
+                  <div class="actions-wrap">
+                    <button
+                      class="btn-sm btn-danger"
+                      onclick={() => remove(h.hostname)}
+                      disabled={deleting.has(h.hostname)}
+                    >
+                      {#if deleting.has(h.hostname)}
+                        <span class="spinner-sm"></span> Removing…
+                      {:else}
+                        Remove
+                      {/if}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {:else}
+      <div class="list-cards">
+        {#each filtered as h (h.hostname)}
+          <div class="list-card">
+            <div class="lc-main">
+              <div class="lc-header">
+                <span class="lc-title"><code>{h.ip}</code></span>
+              </div>
+              <div class="lc-meta">
+                <span class="lc-meta-item">
+                  <span class="muted">Hostname:</span> <code>{h.hostname}</code>
+                </span>
+              </div>
+            </div>
+            <div class="lc-actions">
+              <button
+                class="btn-danger"
+                onclick={() => remove(h.hostname)}
+                disabled={deleting.has(h.hostname)}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -556,5 +589,75 @@
 
   .alert-success .muted {
     color: #6b7280;
+  }
+
+  /* List Cards */
+  .list-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .list-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    transition: all 0.2s ease;
+  }
+  
+  .list-card:hover {
+    background: var(--bg-surface-2);
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+  
+  .lc-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    overflow: hidden;
+  }
+  
+  .lc-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  
+  .lc-title {
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--text-primary);
+  }
+  
+  .lc-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    flex-wrap: wrap;
+    color: var(--text-secondary);
+  }
+  
+  .lc-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  
+  .lc-meta-sep {
+    color: var(--border-strong);
+  }
+  
+  .lc-actions {
+    flex-shrink: 0;
+    margin-left: 1rem;
+    display: flex;
+    gap: 0.5rem;
   }
 </style>

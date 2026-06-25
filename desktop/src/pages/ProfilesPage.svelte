@@ -15,9 +15,13 @@
   import { ws, type WsMessage } from "../lib/ws";
   import { profilesCache } from "../lib/page-stores";
   import SearchInput from "../lib/SearchInput.svelte";
+  import ViewToggle from "../lib/ViewToggle.svelte";
+  import { viewModes } from "../lib/stores";
   import FormField from "../lib/FormField.svelte";
   import SearchableSelect from "../lib/SearchableSelect.svelte";
   import { retryNetworkErrors } from "../lib/retry";
+  
+  const viewMode = viewModes.profiles;
   import {
     profileSchema,
     ssoSessionSchema,
@@ -33,13 +37,11 @@
   let defaultProfile: string | null = $state(
     initialProfiles.find((p) => p.is_default)?.name ?? null,
   );
-  let identities: Record<string, IdentityRecord> = $state({});
   let loading = $state(initialProfiles.length === 0);
   let bgRefreshing = $state(false); // silent background refresh indicator
   let refreshing = $state(false); // "Refresh All" / SSO refresh in progress
   let actionError: string | null = $state(null);
   let busySet: Set<string> = $state(new Set());
-  let busyIdentity: Set<string> = $state(new Set());
   let busyRefresh: Set<string> = $state(new Set());
   let busyRefreshSso: Set<string> = $state(new Set());
   let ssoInProgress: string | null = $state(null);
@@ -278,9 +280,11 @@
     const base = query.trim()
       ? profiles.filter((p) => p.name.toLowerCase().includes(query.toLowerCase()))
       : profiles;
-    return [...base].sort(
-      (a, b) => (statusPriority[a.status] ?? 9) - (statusPriority[b.status] ?? 9),
-    );
+    return [...base].sort((a, b) => {
+      const diff = (statusPriority[a.status] ?? 9) - (statusPriority[b.status] ?? 9);
+      if (diff !== 0) return diff;
+      return a.name.localeCompare(b.name);
+    });
   });
 
   async function load() {
@@ -346,17 +350,7 @@
     }
   }
 
-  async function refreshSsoSession(session: SsoSessionInfo) {
-    if (session.profiles.length === 0) return;
-    // Si la sesión está expirada o falta por completo, el token de refresco interno 
-    // no servirá. Necesitamos lanzar el flujo de navegador completo usando el primer perfil.
-    if (session.status === "expired" || session.status === "missing") {
-      await refreshOne(session.profiles[0]!);
-    } else {
-      // Si solo está a punto de expirar ("expiring"), intentamos el refresco ligero sin navegador.
-      await refreshSsoToken(session.profiles[0]!);
-    }
-  }
+
 
   async function setDefault(name: string) {
     actionError = null;
@@ -372,18 +366,7 @@
     }
   }
 
-  async function checkIdentity(name: string) {
-    actionError = null;
-    busyIdentity = new Set([...busyIdentity, name]);
-    try {
-      const id = await profilesApi.getIdentity(name);
-      identities = { ...identities, [name]: id };
-    } catch (e) {
-      actionError = e instanceof ApiError ? e.message : String(e);
-    } finally {
-      busyIdentity = new Set([...busyIdentity].filter((n) => n !== name));
-    }
-  }
+
 
   let busyDelete: Set<string> = $state(new Set());
   let confirmDelete: string | null = $state(null);
@@ -495,6 +478,7 @@
         AWS Profiles {#if bgRefreshing && !loading}<span class="refreshing-dot"></span>{/if}
       </h1>
       <div class="header-actions">
+        <ViewToggle page="profiles" />
         <SearchInput bind:value={query} placeholder="Filter profiles…" />
         <button class="btn-secondary" onclick={openCreate}>
           <span class="btn-glyph">+</span>
@@ -545,49 +529,75 @@
       <p class="muted">Configure AWS SSO profiles in <code>~/.aws/config</code>.</p>
     </div>
   {:else}
-    {#if ssoSessionsInfo.length > 0}
-      <div class="sso-sessions">
-        <div class="sso-header">SSO Sessions</div>
-        <div class="sso-list">
-          {#each ssoSessionsInfo as s (s.session)}
-            <div class="sso-card">
-              <div class="sso-card-main">
-                <div class="sso-name-row">
-                  <strong class="sso-name">{s.session}</strong>
-                  <span class="badge-count">{s.profile_count} profile{s.profile_count === 1 ? "" : "s"}</span>
-                </div>
-                <div class="sso-meta">
-                  <span class="status-dot status-{s.status}"></span>
-                  <span class="muted">{s.status}</span>
-                  {#if s.seconds_remaining != null}
-                    <span class="meta-sep">·</span>
-                    <span class="muted">{formatSeconds(s.seconds_remaining)}</span>
-                  {/if}
-                  {#if s.region}
-                    <span class="meta-sep">·</span>
-                    <span class="muted">{s.region}</span>
-                  {/if}
-                </div>
-              </div>
-              {#if s.status === "expired" || s.status === "expiring" || s.status === "missing"}
-                <button
-                  class="action-icon icon-only"
-                  aria-label="Refresh SSO session"
-                  title="Refresh SSO session (no browser flow)"
-                  disabled={busyRefreshSso.size > 0}
-                  onclick={() => refreshSsoSession(s)}
-                >
-                  <span class="action-glyph">↻</span>
-                </button>
-              {/if}
-            </div>
-          {/each}
-        </div>
-      </div>
-    {/if}
 
-    <div class="cards">
-      {#each filtered as p (p.name)}
+
+    {#if $viewMode === 'table'}
+      <div class="table-wrap" style="margin-top: 1rem">
+        <table>
+          <thead>
+            <tr>
+              <th>Profile</th>
+              <th>Status</th>
+              <th>Time Left</th>
+              <th class="actions-col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each filtered as p (p.name)}
+              <tr>
+                <td class="name">
+                  {p.name}
+                  {#if defaultProfile === p.name}
+                    <span class="badge badge-green" style="margin-left: 8px">Default</span>
+                  {/if}
+                </td>
+                <td>
+                  <span class="status-dot status-{p.status}"></span>
+                  <span class="status-text">{p.status}</span>
+                </td>
+                <td>{formatSeconds(p.seconds_remaining)}</td>
+
+                <td class="actions-cell">
+                  <div class="actions-wrap">
+                    {#if defaultProfile !== p.name}
+                      <button
+                        class="btn-sm btn-secondary"
+                        onclick={() => setDefault(p.name)}
+                        disabled={busySet.has(p.name)}
+                      >
+                        {busySet.has(p.name) ? "Setting…" : "Set Default"}
+                      </button>
+                    {/if}
+                    <button
+                      class="btn-sm btn-primary"
+                      disabled={busyRefresh.has(p.name) || anyBusyRefresh}
+                      onclick={() => refreshOne(p.name)}
+                    >
+                      {#if busyRefresh.has(p.name)}
+                        {ssoInProgress === p.name ? "Approving…" : "Refreshing…"}
+                      {:else}
+                        Refresh
+                      {/if}
+                    </button>
+
+                    <button
+                      class="btn-sm btn-danger"
+                      disabled={busyDelete.has(p.name)}
+                      onclick={() => removeProfile(p.name)}
+                      title="Delete profile from ~/.aws/config"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {:else}
+      <div class="cards">
+        {#each filtered as p (p.name)}
         <div
           class="card"
           class:is-default={defaultProfile === p.name}
@@ -608,11 +618,7 @@
             <span class="expiry">{formatSeconds(p.seconds_remaining)}</span>
           </p>
 
-          {#if identities[p.name]}
-            <p class="card-meta identity">
-              {identities[p.name]!.account_id} · {identities[p.name]!.arn.split("/").pop()}
-            </p>
-          {/if}
+
 
           {#if busyRefresh.has(p.name)}
             <p class="card-meta refresh-hint">
@@ -652,31 +658,7 @@
                   {/if}
                 </span>
               </button>
-              <button
-                class="action-icon"
-                aria-label="Check identity"
-                disabled={busyIdentity.has(p.name)}
-                onclick={() => checkIdentity(p.name)}
-              >
-                <svg
-                  class="action-glyph"
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-                <span class="action-label">
-                  {busyIdentity.has(p.name) ? "Checking…" : "Identity"}
-                </span>
-              </button>
+
               <span class="footer-sep" aria-hidden="true"></span>
               <button
                 class="action-icon action-danger"
@@ -711,6 +693,7 @@
         </div>
       {/each}
     </div>
+  {/if}
   {/if}
 </div>
 
@@ -1146,12 +1129,16 @@
   .card {
     width: 300px;
     flex-shrink: 0;
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
     border-radius: 8px;
     display: flex;
     flex-direction: column;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .card:hover {
+    background: var(--bg-surface-2);
+    border-color: var(--border-strong);
   }
 
   .default-bar {
@@ -1434,8 +1421,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    background: var(--bg-card, #1e1e1e);
-    border: 1px solid var(--border-color, #333);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
     border-radius: 6px;
     padding: 0.6rem 0.8rem;
   }

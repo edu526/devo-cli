@@ -9,7 +9,11 @@
   } from "../lib/api";
   import { ws } from "../lib/ws";
   import FormField from "../lib/FormField.svelte";
+  import ViewToggle from "../lib/ViewToggle.svelte";
+  import { viewModes } from "../lib/stores";
   import { codeartifactDomainSchema, validate, type CodeArtifactDomainForm, type FieldErrors } from "../lib/forms";
+  
+  const viewMode = viewModes.registry;
 
   const configExample = `{ "domain": "my-domain", "repository": "npm", "namespace": "@scope", "account_id": "123456789012", "profile": "my-profile", "region": "us-east-1" }`;
 
@@ -232,6 +236,7 @@
   <div class="page-header">
     <h1>Registry</h1>
     <div class="header-actions">
+      <ViewToggle page="registry" />
       <button class="btn-secondary" onclick={load} disabled={loading}>Refresh</button>
       <button class="btn-primary" onclick={openCreate}>New Registry</button>
     </div>
@@ -271,7 +276,74 @@
       </p>
     </div>
   {:else}
-    <div class="domain-list">
+    {#if $viewMode === 'table'}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Domain</th>
+              <th>Repository</th>
+              <th>Status</th>
+              <th>Account / Region</th>
+              <th class="actions-col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each domains as domain (domain.domain)}
+              {@const tool = toolFor(domain)}
+              {@const token = tokenFor(domain.domain, tool)}
+              {@const isLoggedIn = !!token}
+              <tr>
+                <td class="name">
+                  {domain.domain}
+                  {#if domain.namespace}<code class="namespace" style="margin-left:8px">{domain.namespace}</code>{/if}
+                </td>
+                <td><span class="badge">{domain.repository}</span></td>
+                <td>
+                  {#if isLoggedIn}
+                    <span class="status-dot" aria-hidden="true">●</span>
+                    <span class="status-text">Connected</span>
+                  {:else}
+                    <span class="status-dot dim" aria-hidden="true">○</span>
+                    <span class="status-text muted">Not connected</span>
+                  {/if}
+                </td>
+                <td><span class="muted">{domain.account_id || "auto"} · {domain.region}</span></td>
+                <td class="actions-cell">
+                  <div class="actions-wrap">
+                    <select bind:value={toolSelections[domain.domain]} class="btn-sm" style="background:var(--bg-input); color:var(--text-normal); border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:0.2rem">
+                      <option value="npm">npm</option>
+                      <option value="pip">pip</option>
+                      <option value="twine">twine</option>
+                    </select>
+                    <button
+                      class="btn-sm btn-primary"
+                      onclick={() => doLogin(domain)}
+                      disabled={busyDomain === domain.domain}
+                    >
+                      {#if busyDomain === domain.domain}
+                        <span class="spinner-sm"></span>
+                      {:else}
+                        {isLoggedIn ? "Refresh Token" : "Login"}
+                      {/if}
+                    </button>
+                    <button class="btn-sm btn-secondary" onclick={() => openEdit(domain)}>Edit</button>
+                    <button
+                      class="btn-sm btn-danger"
+                      onclick={() => removeDomain(domain)}
+                      disabled={deleting[domain.domain]}
+                    >
+                      {deleting[domain.domain] ? "…" : "Delete"}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {:else}
+      <div class="domain-list">
       {#each domains as domain (domain.domain)}
         {@const tool = toolFor(domain)}
         {@const token = tokenFor(domain.domain, tool)}
@@ -377,7 +449,8 @@
           </div>
         </div>
       {/each}
-    </div>
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -441,10 +514,17 @@
     gap: 1rem;
   }
   .domain-card {
-    background: var(--bg-card, #1e1e1e);
-    border: 1px solid var(--border-color, #333);
-    border-radius: 8px;
-    padding: 1rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    transition: all 0.2s ease;
+  }
+  .domain-card:hover {
+    background: var(--bg-surface-2);
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   }
   .card-header {
     display: grid;

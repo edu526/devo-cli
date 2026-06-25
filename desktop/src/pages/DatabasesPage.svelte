@@ -4,8 +4,12 @@
   import { databasesApi, type DatabaseRecord, type DatabaseIn, ApiError } from "../lib/api";
   import { databasesCache } from "../lib/page-stores";
   import SearchInput from "../lib/SearchInput.svelte";
+  import ViewToggle from "../lib/ViewToggle.svelte";
   import FormField from "../lib/FormField.svelte";
   import { databaseSchema, validate, type DatabaseForm, type FieldErrors } from "../lib/forms";
+  import { viewModes } from "../lib/stores";
+
+  const viewMode = viewModes.databases;
 
   const initialDatabases = Object.entries(get(databasesCache) ?? {}) as [string, DatabaseRecord][];
   let databases: [string, DatabaseRecord][] = $state(initialDatabases);
@@ -142,6 +146,7 @@
       Databases {#if refreshing && !loading}<span class="refreshing-dot"></span>{/if}
     </h1>
     <div class="header-actions">
+      <ViewToggle page="databases" />
       <SearchInput bind:value={query} placeholder="Filter databases…" />
       <button class="btn-primary" onclick={openCreate}>New Database</button>
     </div>
@@ -161,51 +166,89 @@
   {:else if filtered.length === 0}
     <p class="muted">No databases match "{query}".</p>
   {:else}
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Bastion</th>
-            <th>Host</th>
-            <th>Port</th>
-            <th>Local Port</th>
-            <th>Region</th>
-            <th class="actions-col">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each filtered as [name, rec] (name)}
+    {#if $viewMode === 'table'}
+      <div class="table-wrap">
+        <table>
+          <thead>
             <tr>
-              <td class="name">{name}</td>
-              <td>{rec.bastion}</td>
-              <td class="host-cell truncate"><code>{rec.host}</code></td>
-              <td>{rec.port}</td>
-              <td>{rec.local_port ?? "auto"}</td>
-              <td>{rec.region}</td>
-              <td class="actions-cell">
-                <div class="actions-wrap">
-                  <button class="btn-sm btn-secondary" onclick={() => openEdit(name, rec)}
-                    >Edit</button
-                  >
-                  <button
-                    class="btn-sm btn-danger"
-                    onclick={() => remove(name)}
-                    disabled={deleting.has(name)}
-                  >
-                    {#if deleting.has(name)}
-                      <span class="spinner-sm"></span> Deleting…
-                    {:else}
-                      Delete
-                    {/if}
-                  </button>
-                </div>
-              </td>
+              <th>Name</th>
+              <th>Bastion</th>
+              <th>Host</th>
+              <th>Port</th>
+              <th>Local Port</th>
+              <th>Region</th>
+              <th class="actions-col">Actions</th>
             </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {#each filtered as [name, rec] (name)}
+              <tr>
+                <td class="name">{name}</td>
+                <td>{rec.bastion}</td>
+                <td class="host-cell truncate"><code>{rec.host}</code></td>
+                <td>{rec.port}</td>
+                <td>{rec.local_port ?? "auto"}</td>
+                <td>{rec.region}</td>
+                <td class="actions-cell">
+                  <div class="actions-wrap">
+                    <button class="btn-sm btn-secondary" onclick={() => openEdit(name, rec)}
+                      >Edit</button
+                    >
+                    <button
+                      class="btn-sm btn-danger"
+                      onclick={() => remove(name)}
+                      disabled={deleting.has(name)}
+                    >
+                      {#if deleting.has(name)}
+                        <span class="spinner-sm"></span> Deleting…
+                      {:else}
+                        Delete
+                      {/if}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {:else}
+      <div class="list-cards">
+        {#each filtered as [name, rec] (name)}
+          <div class="list-card">
+            <div class="lc-main">
+              <div class="lc-header">
+                <span class="lc-title">{name}</span>
+                <span class="badge badge-gray">{rec.region}</span>
+              </div>
+              <div class="lc-meta">
+                <span class="lc-meta-item">
+                  <span class="muted">Host:</span> <code>{rec.host}</code>
+                </span>
+                <span class="lc-meta-sep">·</span>
+                <span class="lc-meta-item">
+                  <span class="muted">Bastion:</span> <code>{rec.bastion}</code>
+                </span>
+                <span class="lc-meta-sep">·</span>
+                <span class="lc-meta-item">
+                  <span class="muted">Ports:</span> <code>{rec.port} → {rec.local_port ?? "auto"}</code>
+                </span>
+              </div>
+            </div>
+            <div class="lc-actions">
+              <button class="btn-secondary" onclick={() => openEdit(name, rec)}>Edit</button>
+              <button
+                class="btn-danger"
+                onclick={() => remove(name)}
+                disabled={deleting.has(name)}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -290,5 +333,75 @@
   }
   .host-cell {
     max-width: 220px;
+  }
+  
+  /* List Cards */
+  .list-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .list-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    transition: all 0.2s ease;
+  }
+  
+  .list-card:hover {
+    background: var(--bg-surface-2);
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+  
+  .lc-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    overflow: hidden;
+  }
+  
+  .lc-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  
+  .lc-title {
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--text-primary);
+  }
+  
+  .lc-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    flex-wrap: wrap;
+    color: var(--text-secondary);
+  }
+  
+  .lc-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  
+  .lc-meta-sep {
+    color: var(--border-strong);
+  }
+  
+  .lc-actions {
+    flex-shrink: 0;
+    margin-left: 1rem;
+    display: flex;
+    gap: 0.5rem;
   }
 </style>

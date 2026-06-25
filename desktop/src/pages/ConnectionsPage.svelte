@@ -9,8 +9,12 @@
     ApiError,
   } from "../lib/api";
   import { connectionsCache, databasesCache } from "../lib/page-stores";
+  import { viewModes } from "../lib/stores";
   import { ws, type WsMessage } from "../lib/ws";
   import SearchInput from "../lib/SearchInput.svelte";
+  import ViewToggle from "../lib/ViewToggle.svelte";
+
+  const viewMode = viewModes.connections;
 
   interface Row {
     name: string;
@@ -73,7 +77,6 @@
     busyConns = new Set([...busyConns, name]);
     try {
       const result = await connectionsApi.start(name);
-      // Optimistic: show "starting" immediately; WS will push the real state
       connections = [...connections.filter((c) => c.name !== name), result];
     } catch (e) {
       actionError = e instanceof ApiError ? e.message : String(e);
@@ -87,7 +90,6 @@
     busyConns = new Set([...busyConns, name]);
     try {
       await connectionsApi.stop(name);
-      // Optimistic: remove from active connections; WS will confirm
       connections = connections.filter((c) => c.name !== name);
     } catch (e) {
       actionError = e instanceof ApiError ? e.message : String(e);
@@ -122,7 +124,6 @@
     }
   }
 
-  // WS: update individual connection state in-place without a full reload
   const offState = ws.on("connection.state_changed", (msg: WsMessage) => {
     const name = msg.name as string;
     const state = msg.state as ConnectionRecord["state"];
@@ -144,7 +145,6 @@
     connectionsCache.set(connections);
   });
 
-  // WS: live metrics (uptime, attempts, last error timestamp)
   const offMetrics = ws.on("connection.metrics", (msg: WsMessage) => {
     const name = msg.name as string;
     const existing = connections.find((c) => c.name === name);
@@ -200,6 +200,7 @@
       Connections {#if refreshing && !loading}<span class="refreshing-dot"></span>{/if}
     </h1>
     <div class="header-actions">
+      <ViewToggle page="connections" />
       <SearchInput bind:value={query} placeholder="Filter connections…" />
       <div class="actions">
         {#if anyConnected}
@@ -230,70 +231,120 @@
   {:else if rows.length === 0}
     <p class="muted">No connections match "{query}".</p>
   {:else}
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>State</th>
-            <th>Host</th>
-            <th>Local Port</th>
-            <th>Uptime</th>
-            <th>Error</th>
-            <th class="actions-col">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each rows as row (row.name)}
+    {#if $viewMode === "table"}
+      <div class="table-wrap">
+        <table>
+          <thead>
             <tr>
-              <td class="name">{row.name}</td>
-              <td><span class="badge {stateClass(connState(row))}">{connState(row)}</span></td>
-              <td class="host-cell truncate"><code>{row.db.host}</code></td>
-              <td>{row.conn?.local_port ?? row.db.local_port ?? "auto"}</td>
-              <td class="uptime-cell">{formatUptime(row.conn?.uptime_seconds)}</td>
-              <td class="error-cell truncate">{row.conn?.error ?? ""}</td>
-              <td class="actions-cell">
-                <div class="actions-wrap">
-                  {#if canStart(row)}
-                    <button
-                      class="btn-sm btn-primary"
-                      onclick={() => startOne(row.name)}
-                      disabled={busyConns.has(row.name) || busyAll}
-                    >
-                      {#if busyConns.has(row.name)}
-                        <span class="spinner-sm"></span> Starting…
-                      {:else}
-                        Start
-                      {/if}
-                    </button>
-                  {:else}
-                    <button
-                      class="btn-sm btn-secondary"
-                      onclick={() => stopOne(row.name)}
-                      disabled={busyConns.has(row.name) || busyAll}
-                    >
-                      {#if busyConns.has(row.name)}
-                        <span class="spinner-sm"></span> Stopping…
-                      {:else}
-                        Stop
-                      {/if}
-                    </button>
-                    <button
-                      class="btn-sm btn-secondary"
-                      onclick={() => startOne(row.name)}
-                      disabled={busyConns.has(row.name) || busyAll}
-                      title="Restart"
-                    >
-                      ↻
-                    </button>
-                  {/if}
-                </div>
-              </td>
+              <th>Name</th>
+              <th>State</th>
+              <th>Host</th>
+              <th>Local Port</th>
+              <th>Uptime</th>
+              <th>Error</th>
+              <th class="actions-col">Actions</th>
             </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {#each rows as row (row.name)}
+              <tr>
+                <td class="name">{row.name}</td>
+                <td><span class="badge {stateClass(connState(row))}">{connState(row)}</span></td>
+                <td class="host-cell truncate"><code>{row.db.host}</code></td>
+                <td>{row.conn?.local_port ?? row.db.local_port ?? "auto"}</td>
+                <td class="uptime-cell">{formatUptime(row.conn?.uptime_seconds)}</td>
+                <td class="error-cell truncate">{row.conn?.error ?? ""}</td>
+                <td class="actions-cell">
+                  <div class="actions-wrap">
+                    {#if canStart(row)}
+                      <button
+                        class="btn-sm btn-primary"
+                        onclick={() => startOne(row.name)}
+                        disabled={busyConns.has(row.name) || busyAll}
+                      >
+                        {#if busyConns.has(row.name)}
+                          <span class="spinner-sm"></span> Starting…
+                        {:else}
+                          Start
+                        {/if}
+                      </button>
+                    {:else}
+                      <button
+                        class="btn-sm btn-secondary"
+                        onclick={() => stopOne(row.name)}
+                        disabled={busyConns.has(row.name) || busyAll}
+                      >
+                        {#if busyConns.has(row.name)}
+                          <span class="spinner-sm"></span> Stopping…
+                        {:else}
+                          Stop
+                        {/if}
+                      </button>
+                      <button
+                        class="btn-sm btn-secondary"
+                        onclick={() => startOne(row.name)}
+                        disabled={busyConns.has(row.name) || busyAll}
+                        title="Restart"
+                      >
+                        ↻
+                      </button>
+                    {/if}
+                  </div>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {:else}
+      <div class="list-cards">
+        {#each rows as row (row.name)}
+          <div class="list-card">
+            <div class="lc-main">
+              <div class="lc-header">
+                <span class="lc-title">{row.name}</span>
+                <span class="badge {stateClass(connState(row))}">{connState(row)}</span>
+              </div>
+              <div class="lc-meta">
+                <span class="lc-meta-item">
+                  <span class="muted">Host:</span> <code>{row.db.host}</code>
+                </span>
+                <span class="lc-meta-sep">·</span>
+                <span class="lc-meta-item">
+                  <span class="muted">Port:</span> <code>{row.conn?.local_port ?? row.db.local_port ?? "auto"}</code>
+                </span>
+                <span class="lc-meta-sep">·</span>
+                <span class="lc-meta-item">
+                  <span class="muted">Uptime:</span> {formatUptime(row.conn?.uptime_seconds)}
+                </span>
+              </div>
+              {#if row.conn?.error}
+                <div class="lc-error">{row.conn.error}</div>
+              {/if}
+            </div>
+            <div class="lc-actions">
+              {#if canStart(row)}
+                <button
+                  class="btn-primary"
+                  onclick={() => startOne(row.name)}
+                  disabled={busyConns.has(row.name) || busyAll}
+                >
+                  Start
+                </button>
+              {:else}
+                <button
+                  class="btn-secondary"
+                  onclick={() => stopOne(row.name)}
+                  disabled={busyConns.has(row.name) || busyAll}
+                >
+                  Stop
+                </button>
+              {/if}
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -318,5 +369,83 @@
     font-size: 0.78rem;
     color: #94a3b8;
     white-space: nowrap;
+  }
+
+  /* List Cards */
+  .list-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .list-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    transition: all 0.2s ease;
+  }
+  
+  .list-card:hover {
+    background: var(--bg-surface-2);
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+  
+  .lc-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    overflow: hidden;
+  }
+  
+  .lc-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  
+  .lc-title {
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--text-primary);
+  }
+  
+  .lc-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    flex-wrap: wrap;
+    color: var(--text-secondary);
+  }
+  
+  .lc-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  
+  .lc-meta-sep {
+    color: var(--border-strong);
+  }
+  
+  .lc-error {
+    color: var(--danger);
+    font-size: 0.85rem;
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    display: inline-block;
+    margin-top: 0.25rem;
+  }
+  
+  .lc-actions {
+    flex-shrink: 0;
+    margin-left: 1rem;
   }
 </style>
