@@ -24,6 +24,7 @@ class CodeArtifactAuthenticator:
         repository: str,
         namespace: str,
         profile: Optional[str] = None,
+        region: Optional[str] = None,
         timeout: int = 30,
     ) -> Tuple[bool, Optional[str]]:
         """Authenticate with a single CodeArtifact domain.
@@ -33,6 +34,7 @@ class CodeArtifactAuthenticator:
           repository: Repository name
           namespace: Package namespace
           profile: AWS profile to use
+          region: AWS region override (falls back to self.region)
           timeout: Command timeout in seconds
 
         Returns:
@@ -51,7 +53,7 @@ class CodeArtifactAuthenticator:
             "--namespace",
             namespace,
             "--region",
-            self.region,
+            region or self.region,
         ]
 
         if profile:
@@ -70,6 +72,7 @@ class CodeArtifactAuthenticator:
         domain: str,
         repository: str,
         profile: Optional[str] = None,
+        region: Optional[str] = None,
         timeout: int = 10,
     ) -> List[Tuple[str, str]]:
         """List packages in a CodeArtifact repository.
@@ -78,6 +81,7 @@ class CodeArtifactAuthenticator:
           domain: CodeArtifact domain name
           repository: Repository name
           profile: AWS profile to use
+          region: AWS region override (falls back to self.region)
           timeout: Command timeout in seconds
 
         Returns:
@@ -92,7 +96,7 @@ class CodeArtifactAuthenticator:
             "--repository",
             repository,
             "--region",
-            self.region,
+            region or self.region,
             "--format",
             "npm",
             "--query",
@@ -124,6 +128,7 @@ class CodeArtifactAuthenticator:
         package: str,
         namespace: str,
         profile: Optional[str] = None,
+        region: Optional[str] = None,
         timeout: int = 5,
     ) -> Optional[str]:
         """Get the latest version of a package.
@@ -134,6 +139,7 @@ class CodeArtifactAuthenticator:
           package: Package name
           namespace: Package namespace
           profile: AWS profile to use
+          region: AWS region override (falls back to self.region)
           timeout: Command timeout in seconds
 
         Returns:
@@ -154,7 +160,7 @@ class CodeArtifactAuthenticator:
             "--namespace",
             namespace.lstrip("@"),
             "--region",
-            self.region,
+            region or self.region,
             "--sort-by",
             "PUBLISHED_TIME",
             "--query",
@@ -181,6 +187,7 @@ class CodeArtifactAuthenticator:
         repository: str,
         namespace: str,
         profile: Optional[str] = None,
+        region: Optional[str] = None,
         max_workers: int = 10,
     ) -> Dict[str, Optional[str]]:
         """List packages with their latest versions in parallel.
@@ -190,12 +197,13 @@ class CodeArtifactAuthenticator:
           repository: Repository name
           namespace: Package namespace
           profile: AWS profile to use
+          region: AWS region override (falls back to self.region)
           max_workers: Max parallel threads for version fetching
 
         Returns:
           Dict mapping package name to latest version (or None)
         """
-        packages = self.list_packages(domain, repository, profile)
+        packages = self.list_packages(domain, repository, profile, region)
         if not packages:
             return {}
 
@@ -203,7 +211,7 @@ class CodeArtifactAuthenticator:
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_pkg = {
-                executor.submit(self.get_package_version, domain, repository, pkg_name, pkg_ns, profile): (pkg_ns, pkg_name)
+                executor.submit(self.get_package_version, domain, repository, pkg_name, pkg_ns, profile, region): (pkg_ns, pkg_name)
                 for pkg_ns, pkg_name in packages
             }
             for future in as_completed(future_to_pkg):

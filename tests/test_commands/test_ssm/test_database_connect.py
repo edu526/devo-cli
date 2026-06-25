@@ -264,13 +264,14 @@ class TestMaybeRunAutoSetup:
         databases = {"db1": _make_db_config(local_address="127.0.0.1", host="db.example.com")}
         refreshed_db = _make_db_config(local_address="127.0.0.2", host="db.example.com")
         with patch(f"{_MODULE}.sys.stdin.isatty", return_value=True):
-            with patch(f"{_MODULE}.click.confirm", return_value=True):
-                with patch("cli_tool.commands.ssm.commands.hosts.setup.setup_databases", return_value=(["db1"], [])) as mock_setup:
-                    with patch(f"{_MODULE}.SSMConfigManager") as mock_cm_cls:
-                        mock_cm_cls.return_value.list_databases.return_value = {"db1": refreshed_db}
-                        with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
-                            mock_hm_cls.return_value.get_managed_entries.return_value = [("127.0.0.2", "db.example.com")]
-                            result = _maybe_run_auto_setup(databases, set(), no_auto_setup=False)
+            with patch(f"{_MODULE}._is_windows_admin", return_value=True):
+                with patch(f"{_MODULE}.click.confirm", return_value=True):
+                    with patch("cli_tool.commands.ssm.commands.hosts.setup.setup_databases", return_value=(["db1"], [])) as mock_setup:
+                        with patch(f"{_MODULE}.SSMConfigManager") as mock_cm_cls:
+                            mock_cm_cls.return_value.list_databases.return_value = {"db1": refreshed_db}
+                            with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
+                                mock_hm_cls.return_value.get_managed_entries.return_value = [("127.0.0.2", "db.example.com")]
+                                result = _maybe_run_auto_setup(databases, set(), no_auto_setup=False)
         mock_setup.assert_called_once_with(["db1"])
         assert result == {"db.example.com"}
         # Caller's db_config dict was updated in place with refreshed values
@@ -279,9 +280,10 @@ class TestMaybeRunAutoSetup:
     def test_skips_setup_when_user_declines(self):
         databases = {"db1": _make_db_config(local_address="127.0.0.1", host="db.example.com")}
         with patch(f"{_MODULE}.sys.stdin.isatty", return_value=True):
-            with patch(f"{_MODULE}.click.confirm", return_value=False):
-                with patch("cli_tool.commands.ssm.commands.hosts.setup.setup_databases") as mock_setup:
-                    result = _maybe_run_auto_setup(databases, set(), no_auto_setup=False)
+            with patch(f"{_MODULE}._is_windows_admin", return_value=True):
+                with patch(f"{_MODULE}.click.confirm", return_value=False):
+                    with patch("cli_tool.commands.ssm.commands.hosts.setup.setup_databases") as mock_setup:
+                        result = _maybe_run_auto_setup(databases, set(), no_auto_setup=False)
         mock_setup.assert_not_called()
         assert result == set()
 

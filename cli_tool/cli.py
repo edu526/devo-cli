@@ -1,5 +1,19 @@
 import os
+import sys
 
+# Force UTF-8 encoding for standard output and error to prevent UnicodeEncodeError
+# on Windows when printing symbols like '✓' (especially in non-TTY environments)
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
+try:
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 import click
 
 from cli_tool.commands.autocomplete import autocomplete

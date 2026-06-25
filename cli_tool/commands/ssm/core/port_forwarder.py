@@ -32,7 +32,8 @@ class PortForwarder:
             self.stop_all()
             signal.raise_signal(signum)
 
-        for sig in (signal.SIGTERM, signal.SIGHUP):
+        signals = [getattr(signal, "SIGTERM", None), getattr(signal, "SIGHUP", None)]
+        for sig in [s for s in signals if s is not None]:
             try:
                 signal.signal(sig, _cleanup_handler)
             except (OSError, ValueError):

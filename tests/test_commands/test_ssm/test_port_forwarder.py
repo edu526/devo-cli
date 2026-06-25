@@ -612,8 +612,9 @@ def test_register_signal_handlers_registered_on_linux(mocker):
         PortForwarder()
 
     registered_signals = [call[0][0] for call in mock_signal.call_args_list]
-    assert signal_module.SIGTERM in registered_signals
-    assert signal_module.SIGHUP in registered_signals
+    assert getattr(signal_module, "SIGTERM", None) in registered_signals
+    if hasattr(signal_module, "SIGHUP"):
+        assert signal_module.SIGHUP in registered_signals
 
 
 @pytest.mark.unit

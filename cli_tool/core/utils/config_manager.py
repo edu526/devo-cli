@@ -37,9 +37,7 @@ def get_default_config():
         },
         "codeartifact": {
             "region": "us-east-1",
-            "account_id": "123456789012",
-            "sso_url": "https://my-org.awsapps.com/start",
-            "required_role": "Developer",
+            "account_id": "",
             "domains": [],
         },
         "version_check": {"enabled": True},
