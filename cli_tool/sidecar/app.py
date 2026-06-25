@@ -16,6 +16,7 @@ from cli_tool.sidecar.rate_limit import limiter
 from cli_tool.sidecar.routers import (
     audit,
     auth,
+    codeartifact,
     config,
     connections,
     databases,
@@ -139,6 +140,7 @@ def create_app(app_state: AppState) -> FastAPI:
     app.include_router(connections.router, prefix=api_prefix)
     app.include_router(ws.router, prefix=api_prefix)
     app.include_router(log_router.router, prefix=api_prefix)
+    app.include_router(codeartifact.router, prefix=api_prefix)
 
     @app.get("/healthz", include_in_schema=False)
     def healthz():

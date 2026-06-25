@@ -22,6 +22,7 @@ from cli_tool.sidecar.services.profile_service import (
     get_profile_info,
     get_profiles_info,
     list_sso_sessions,
+    list_sso_sessions_info,
     start_discover,
 )
 from cli_tool.sidecar.state import AppState, EventHub
@@ -48,6 +49,12 @@ def list_sso_sessions_endpoint() -> list[dict[str, Any]]:
     Declared BEFORE the `/{name}` routes so it doesn't get shadowed.
     """
     return list_sso_sessions()
+
+
+@router.get("/sessions/info")
+def list_sso_sessions_info_endpoint() -> list[dict[str, Any]]:
+    """Return one entry per unique SSO session with token status + profile count."""
+    return list_sso_sessions_info()
 
 
 @router.post("/sessions", status_code=status.HTTP_201_CREATED)
@@ -199,45 +206,23 @@ def _do_refresh_one(hub: EventHub, name: str) -> None:
     helper so the unit tests can patch them out without standing up
     the FastAPI request context.
     """
-    import subprocess
-
     from cli_tool.commands.aws_login.core.config import get_profile_config
-    from cli_tool.commands.aws_login.core.credentials import verify_credentials
+    from cli_tool.sidecar.services.sso_service import run_sso_login_sync
 
-    logger.info("Starting SSO refresh for profile '%s'", name)
     hub.publish("profile.refreshing", {"name": name})
 
-    try:
-        profile_config = get_profile_config(name)
-        if not profile_config:
-            msg = f"Profile '{name}' not found"
-            logger.error(msg)
-            hub.publish("profile.refreshed", {"names": [], "success": False, "error": msg})
-            return
-
-        login_cmd = ["aws", "sso", "login", "--profile", name]
-        logger.info("Running: %s", " ".join(login_cmd))
-        result = subprocess.run(login_cmd, timeout=120)
-        if result.returncode != 0:
-            msg = f"SSO login failed for '{name}' (exit {result.returncode})"
-            logger.error(msg)
-            hub.publish("profile.refreshed", {"names": [], "success": False, "error": msg})
-            return
-
-        if verify_credentials(name):
-            logger.info("Refresh successful for '%s'", name)
-            hub.publish("profile.refreshed", {"names": [name], "success": True})
-        else:
-            msg = f"Credential verification failed for '{name}'"
-            logger.error(msg)
-            hub.publish("profile.refreshed", {"names": [], "success": False, "error": msg})
-    except subprocess.TimeoutExpired:
-        msg = "SSO login timed out after 120 seconds"
+    profile_config = get_profile_config(name)
+    if not profile_config:
+        msg = f"Profile '{name}' not found"
         logger.error(msg)
         hub.publish("profile.refreshed", {"names": [], "success": False, "error": msg})
-    except Exception as exc:
-        logger.exception("Unexpected error refreshing profile '%s'", name)
-        hub.publish("profile.refreshed", {"names": [], "success": False, "error": str(exc)})
+        return
+
+    success = run_sso_login_sync(hub, name, source="profile")
+    if success:
+        hub.publish("profile.refreshed", {"names": [name], "success": True})
+    else:
+        hub.publish("profile.refreshed", {"names": [], "success": False, "error": f"Refresh failed for {name}"})
 
 
 @router.post("/{name}:refresh", status_code=status.HTTP_202_ACCEPTED)
@@ -248,6 +233,25 @@ def refresh_profile(name: str, request: Request) -> dict[str, Any]:
 
     threading.Thread(target=_do_refresh_one, args=(hub, name), daemon=True).start()
     return {"status": "accepted", "message": f"Refresh started for '{name}' — watch WS for profile.refreshed"}
+
+
+@router.post("/{name}:refresh_sso_token")
+def refresh_sso_token(name: str) -> dict[str, Any]:
+    """Lightweight refresh: force boto3 to use the cached SSO refresh token.
+
+    No browser flow — just calls STS to trigger a refresh. Fails if the SSO
+    refresh token is also expired (caller should then run the full browser login).
+    """
+    from cli_tool.commands.aws_login.core.credentials import verify_credentials
+
+    identity = verify_credentials(name)
+    if not identity:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail="SSO refresh token expired. Run full SSO login (browser flow).",
+        )
+    logger.info("SSO token refreshed for '%s'", name)
+    return {"name": name, "account": identity.get("account"), "refreshed": True}
 
 
 @router.post("/{name}:set_default")
