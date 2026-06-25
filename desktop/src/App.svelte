@@ -5,6 +5,7 @@
   import { sidecar, appStatus, appError, currentPage, wsConnected, type Page } from "./lib/stores";
   import { logError } from "./lib/error-log";
   import { theme, applyTheme } from "./lib/theme";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import TitleBar from "./lib/TitleBar.svelte";
   import UpdateBanner from "./lib/UpdateBanner.svelte";
   import LogsPage from "./pages/LogsPage.svelte";
@@ -26,7 +27,13 @@
         { id: "hosts", label: "Hosts", icon: "🌐" },
       ],
     },
-    { title: "AWS", items: [{ id: "profiles", label: "Profiles", icon: "🔑" }, { id: "registry", label: "Registry", icon: "📦" }] },
+    {
+      title: "AWS",
+      items: [
+        { id: "profiles", label: "Profiles", icon: "🔑" },
+        { id: "registry", label: "Registry", icon: "📦" },
+      ],
+    },
     {
       title: "System",
       items: [
@@ -164,7 +171,11 @@
     });
     window.addEventListener("unhandledrejection", (e) => {
       const reason = e.reason instanceof Error ? e.reason.message : String(e.reason);
-      logError("unhandledrejection", reason, e.reason instanceof Error ? e.reason.stack : undefined);
+      logError(
+        "unhandledrejection",
+        reason,
+        e.reason instanceof Error ? e.reason.stack : undefined,
+      );
     });
     // Poll the Rust boot status. The version check happens in setup()
     // before the sidecar is spawned, so a stale bundle never produces
@@ -183,6 +194,7 @@
     if (!boot || boot.status === "loading") {
       appStatus.set("error");
       appError.set("Sidecar failed to start after 30 seconds.");
+      setTimeout(() => getCurrentWindow().show(), 50);
       return;
     }
 
@@ -192,6 +204,7 @@
       appError.set(
         `Devo Desktop requires devo-cli ${boot.required} or newer (found ${boot.found}).`,
       );
+      setTimeout(() => getCurrentWindow().show(), 50);
       return;
     }
 
@@ -222,6 +235,9 @@
       // user can still use the app via the regular pages.
       onboardingChecked = true;
     }
+
+    // Unhide the window now that the UI is fully set up
+    setTimeout(() => getCurrentWindow().show(), 50);
   });
 
   onDestroy(() => {
@@ -261,8 +277,8 @@
               class="err-copy"
               type="button"
               onclick={copyUpgrade}
-              aria-label="Copy upgrade command"
-            >{copyLabel}</button>
+              aria-label="Copy upgrade command">{copyLabel}</button
+            >
           </div>
           <p class="err-tray">Or quit via the system tray menu.</p>
         {:else}
@@ -302,7 +318,9 @@
           <span class="ws-version" title="devo CLI v{sidecarInfo.sidecar_version}">
             {formatSidecarVersion(sidecarInfo.sidecar_version)}
             {#if sidecarInfo.update_available}
-              <span class="ws-update" title="A newer version is available — run: devo upgrade">↑</span>
+              <span class="ws-update" title="A newer version is available — run: devo upgrade"
+                >↑</span
+              >
             {/if}
           </span>
         {/if}
