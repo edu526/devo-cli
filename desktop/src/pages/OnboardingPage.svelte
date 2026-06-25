@@ -105,15 +105,19 @@
           <h2>Preflight check</h2>
           <p class="muted">Verifying required CLI tools are installed.</p>
         </div>
-        {#if preflightLoading}
-          <div class="loading-state">
-             <div class="spinner"></div>
-             <p class="muted">Running checks…</p>
-          </div>
-        {:else if preflight}
-          {@const checks = checksFrom(preflight)}
-          {@const allOk = checks.every((c) => c.present)}
-          <ul class="checks">
+        <ul class="checks">
+          {#if preflightLoading}
+            {#each ["aws", "session-manager-plugin", "socat"] as tool}
+              <li class="check-item loading">
+                <div class="check-icon spinner-container"><div class="spinner-small"></div></div>
+                <div class="check-info">
+                  <span class="name">{tool}</span>
+                  <span class="detail muted">Verifying installation...</span>
+                </div>
+              </li>
+            {/each}
+          {:else if preflight}
+            {@const checks = checksFrom(preflight)}
             {#each checks as check (check.name)}
               <li class="check-item" class:fail={!check.present}>
                 <div class="check-icon">{check.present ? "✓" : "✗"}</div>
@@ -123,13 +127,14 @@
                 </div>
               </li>
             {/each}
-          </ul>
-          {#if !allOk}
-            <div class="alert-warn" in:slide>
-              <span class="warn-icon">!</span>
-              <p>One or more tools are missing. Devo will still launch but some features will not work until you install them.</p>
-            </div>
           {/if}
+        </ul>
+
+        {#if preflight && !checksFrom(preflight).every(c => c.present)}
+          <div class="alert-warn" in:slide>
+            <span class="warn-icon">!</span>
+            <p>One or more tools are missing. Devo will still launch but some features will not work until you install them.</p>
+          </div>
         {/if}
         <div class="actions">
           <button class="btn-secondary" onclick={runPreflight} disabled={preflightLoading}>
@@ -276,22 +281,17 @@
     font-size: 0.8rem;
   }
 
-  .loading-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 3rem 0;
-    gap: 1rem;
-  }
-
-  .spinner {
-    width: 24px;
-    height: 24px;
+  .spinner-small {
+    width: 14px;
+    height: 14px;
     border: 2px solid rgba(79, 142, 247, 0.2);
     border-top-color: #4f8ef7;
     border-radius: 50%;
     animation: spin 1s linear infinite;
+  }
+
+  .check-item.loading .check-icon {
+    background: rgba(255, 255, 255, 0.05);
   }
 
   @keyframes spin {
