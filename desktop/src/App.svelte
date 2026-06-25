@@ -7,7 +7,6 @@
   import { theme, applyTheme } from "./lib/theme";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import TitleBar from "./lib/TitleBar.svelte";
-  import UpdateBanner from "./lib/UpdateBanner.svelte";
   import LogsPage from "./pages/LogsPage.svelte";
 
   import ConnectionsPage from "./pages/ConnectionsPage.svelte";
@@ -250,7 +249,6 @@
 </script>
 
 <TitleBar />
-<UpdateBanner />
 
 {#if $appStatus === "loading"}
   <div class="splash">

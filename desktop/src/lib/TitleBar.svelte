@@ -150,12 +150,12 @@
 
   .tb-brand {
     display: flex;
-    align-items: baseline;
-    gap: 0.45rem;
+    align-items: center;
+    gap: 0.5rem;
     padding: 0 0.75rem 0 0.9rem;
-    width: 230px;
     flex-shrink: 0;
     cursor: grab;
+    white-space: nowrap;
   }
 
   .tb-icon {
@@ -180,6 +180,7 @@
     font-family: "JetBrains Mono", monospace;
     font-weight: 500;
     white-space: nowrap;
+    margin-top: 2px;
   }
 
   .tb-drag {
@@ -235,6 +236,10 @@
     margin-left: 0.3rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 2px;
   }
   .update-badge:hover {
     background: #fcd34d;
