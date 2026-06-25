@@ -12,9 +12,7 @@ use std::time::Duration;
 use thiserror::Error;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
-use windows::Win32::System::Threading::{
-    GetExitCodeProcess, WaitForSingleObject,
-};
+use windows::Win32::System::Threading::{GetExitCodeProcess, WaitForSingleObject};
 use windows::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW};
 
 const ELEVATION_TIMEOUT_MS: u32 = 120_000;
@@ -81,7 +79,9 @@ pub fn run_elevated(args: &[String]) -> Result<u32, ElevationError> {
     let proc: HANDLE = info.hProcess;
     let wait = unsafe { WaitForSingleObject(proc, ELEVATION_TIMEOUT_MS) };
     if wait.0 != 0 {
-        return Err(ElevationError::Timeout(Duration::from_millis(ELEVATION_TIMEOUT_MS as u64)));
+        return Err(ElevationError::Timeout(Duration::from_millis(
+            ELEVATION_TIMEOUT_MS as u64,
+        )));
     }
 
     let mut exit_code: u32 = 1;

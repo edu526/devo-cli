@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capabilities for the Devo desktop app. Only the permissions strictly required by the sidecar flow and the updater are exposed to the webview.",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-minimize",
@@ -14,6 +16,7 @@
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "shell:allow-spawn",
-    "updater:default"
+    "updater:default",
+    "notification:default"
   ]
 }

@@ -1,7 +1,7 @@
 use std::time::Duration;
 use tauri::AppHandle;
-use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::CommandEvent;
+use tauri_plugin_shell::ShellExt;
 use tokio::time::timeout;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]

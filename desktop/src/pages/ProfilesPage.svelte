@@ -1,14 +1,17 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
+  import {
+    isPermissionGranted,
+    requestPermission,
+    sendNotification,
+  } from "@tauri-apps/plugin-notification";
   import { get } from "svelte/store";
   import {
     profilesApi,
     ssoSessionsApi,
     getLastErrorDiagnostics,
     type ProfileRecord,
-    type IdentityRecord,
     type SsoSessionRecord,
-    type SsoSessionInfo,
     type DiscoveredAccount,
     ApiError,
   } from "../lib/api";
@@ -20,7 +23,7 @@
   import FormField from "../lib/FormField.svelte";
   import SearchableSelect from "../lib/SearchableSelect.svelte";
   import { retryNetworkErrors } from "../lib/retry";
-  
+
   const viewMode = viewModes.profiles;
   import {
     profileSchema,
@@ -33,7 +36,6 @@
 
   const initialProfiles = (get(profilesCache) ?? []) as ProfileRecord[];
   let profiles: ProfileRecord[] = $state(initialProfiles);
-  let ssoSessionsInfo: SsoSessionInfo[] = $state([]);
   let defaultProfile: string | null = $state(
     initialProfiles.find((p) => p.is_default)?.name ?? null,
   );
@@ -43,7 +45,6 @@
   let actionError: string | null = $state(null);
   let busySet: Set<string> = $state(new Set());
   let busyRefresh: Set<string> = $state(new Set());
-  let busyRefreshSso: Set<string> = $state(new Set());
   let ssoInProgress: string | null = $state(null);
   let ssoManualUrl: { url: string; code: string } | null = $state(null);
   let query = $state("");
@@ -189,9 +190,7 @@
         sso_start_url: v.data.sso_start_url,
         sso_region: v.data.sso_region,
       });
-      ssoSessions = [...ssoSessions, created].sort((a, b) =>
-        a.name.localeCompare(b.name),
-      );
+      ssoSessions = [...ssoSessions, created].sort((a, b) => a.name.localeCompare(b.name));
       selectedSession = created.name;
       newSessionMode = false;
       profileForm.sso_session = created.name;
@@ -290,9 +289,8 @@
   async function load() {
     bgRefreshing = true;
     try {
-      const [data, sessions] = await Promise.all([profilesApi.list(), ssoSessionsApi.info()]);
+      const data = await profilesApi.list();
       profiles = data;
-      ssoSessionsInfo = sessions;
       defaultProfile = data.find((p) => p.is_default)?.name ?? null;
       profilesCache.set(data);
     } catch (e) {
@@ -334,22 +332,6 @@
     }
   }
 
-  async function refreshSsoToken(name: string) {
-    actionError = null;
-    busyRefreshSso = new Set([...busyRefreshSso, name]);
-    try {
-      await profilesApi.refreshSsoToken(name);
-      const [data, sessions] = await Promise.all([profilesApi.list(), ssoSessionsApi.info()]);
-      profiles = data;
-      ssoSessionsInfo = sessions;
-      profilesCache.set(data);
-    } catch (e) {
-      actionError = e instanceof ApiError ? e.message : String(e);
-    } finally {
-      busyRefreshSso = new Set([...busyRefreshSso].filter((n) => n !== name));
-    }
-  }
-
 
 
   async function setDefault(name: string) {
@@ -365,8 +347,6 @@
       busySet = new Set([...busySet].filter((n) => n !== name));
     }
   }
-
-
 
   let busyDelete: Set<string> = $state(new Set());
   let confirmDelete: string | null = $state(null);
@@ -422,7 +402,27 @@
     updateProfiles(names);
   });
 
-  const offExpiring = ws.on("profile.expiring", () => load());
+  const offExpiring = ws.on("profile.expiring", async (msg: WsMessage) => {
+    load();
+    const payload = msg as any;
+    if (payload.type === "sso") {
+      try {
+        let permissionGranted = await isPermissionGranted();
+        if (!permissionGranted) {
+          const permission = await requestPermission();
+          permissionGranted = permission === "granted";
+        }
+        if (permissionGranted) {
+          sendNotification({
+            title: "AWS SSO Expiring",
+            body: `Your SSO session for '${payload.name}' is expiring. Click Refresh in Devo to renew it.`,
+          });
+        }
+      } catch (err) {
+        console.error("Failed to send desktop notification:", err);
+      }
+    }
+  });
 
   const offUrlReady = ws.on("sso.login.url_ready", (msg: WsMessage) => {
     const m = msg as { profile?: string; source?: string; url?: string; code?: string };
@@ -472,27 +472,27 @@
   const anyBusyRefresh = $derived(busyRefresh.size > 0 || refreshing);
 </script>
 
-  <div class="page">
-    <div class="page-header">
-      <h1>
-        AWS Profiles {#if bgRefreshing && !loading}<span class="refreshing-dot"></span>{/if}
-      </h1>
-      <div class="header-actions">
-        <ViewToggle page="profiles" />
-        <SearchInput bind:value={query} placeholder="Filter profiles…" />
-        <button class="btn-secondary" onclick={openCreate}>
-          <span class="btn-glyph">+</span>
-          <span>Add Profile</span>
-        </button>
-        <button class="btn-primary" onclick={refreshAll} disabled={anyBusyRefresh}>
-          {#if refreshing}
-            <span class="spinner-sm"></span> Refreshing…
-          {:else}
-            Refresh All
-          {/if}
-        </button>
-      </div>
+<div class="page">
+  <div class="page-header">
+    <h1>
+      AWS Profiles {#if bgRefreshing && !loading}<span class="refreshing-dot"></span>{/if}
+    </h1>
+    <div class="header-actions">
+      <ViewToggle page="profiles" />
+      <SearchInput bind:value={query} placeholder="Filter profiles…" />
+      <button class="btn-secondary" onclick={openCreate}>
+        <span class="btn-glyph">+</span>
+        <span>Add Profile</span>
+      </button>
+      <button class="btn-primary" onclick={refreshAll} disabled={anyBusyRefresh}>
+        {#if refreshing}
+          <span class="spinner-sm"></span> Refreshing…
+        {:else}
+          Refresh All
+        {/if}
+      </button>
     </div>
+  </div>
 
   {#if ssoInProgress}
     <div class="alert-sso">
@@ -501,13 +501,14 @@
         <strong>Browser SSO login in progress</strong> for <code>{ssoInProgress}</code>
         {#if ssoManualUrl}
           <p>
-            Your browser could not be opened automatically. Please open 
-            <a href={ssoManualUrl.url} target="_blank" rel="noreferrer">{ssoManualUrl.url}</a> 
+            Your browser could not be opened automatically. Please open
+            <a href={ssoManualUrl.url} target="_blank" rel="noreferrer">{ssoManualUrl.url}</a>
             and enter the code <strong>{ssoManualUrl.code}</strong>.
           </p>
         {:else}
           <p>
-            Approve the request in the browser window that just opened. This may take up to 2 minutes.
+            Approve the request in the browser window that just opened. This may take up to 2
+            minutes.
           </p>
         {/if}
       </div>
@@ -528,76 +529,73 @@
       <p>No SSO profiles found.</p>
       <p class="muted">Configure AWS SSO profiles in <code>~/.aws/config</code>.</p>
     </div>
-  {:else}
-
-
-    {#if $viewMode === 'table'}
-      <div class="table-wrap" style="margin-top: 1rem">
-        <table>
-          <thead>
+  {:else if $viewMode === "table"}
+    <div class="table-wrap" style="margin-top: 1rem">
+      <table>
+        <thead>
+          <tr>
+            <th>Profile</th>
+            <th>Status</th>
+            <th>Time Left</th>
+            <th class="actions-col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each filtered as p (p.name)}
             <tr>
-              <th>Profile</th>
-              <th>Status</th>
-              <th>Time Left</th>
-              <th class="actions-col">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each filtered as p (p.name)}
-              <tr>
-                <td class="name">
-                  {p.name}
-                  {#if defaultProfile === p.name}
-                    <span class="badge badge-green" style="margin-left: 8px">Default</span>
+              <td class="name">
+                {p.name}
+                {#if defaultProfile === p.name}
+                  <span class="badge badge-green" style="margin-left: 8px">Default</span>
+                {/if}
+              </td>
+              <td>
+                <span class="status-dot status-{p.status}"></span>
+                <span class="status-text">{p.status}</span>
+              </td>
+              <td>{formatSeconds(p.seconds_remaining)}</td>
+
+              <td class="actions-cell">
+                <div class="actions-wrap">
+                  {#if defaultProfile !== p.name}
+                    <button
+                      class="btn-sm btn-secondary"
+                      onclick={() => setDefault(p.name)}
+                      disabled={busySet.has(p.name)}
+                    >
+                      {busySet.has(p.name) ? "Setting…" : "Set Default"}
+                    </button>
                   {/if}
-                </td>
-                <td>
-                  <span class="status-dot status-{p.status}"></span>
-                  <span class="status-text">{p.status}</span>
-                </td>
-                <td>{formatSeconds(p.seconds_remaining)}</td>
-
-                <td class="actions-cell">
-                  <div class="actions-wrap">
-                    {#if defaultProfile !== p.name}
-                      <button
-                        class="btn-sm btn-secondary"
-                        onclick={() => setDefault(p.name)}
-                        disabled={busySet.has(p.name)}
-                      >
-                        {busySet.has(p.name) ? "Setting…" : "Set Default"}
-                      </button>
+                  <button
+                    class="btn-sm btn-primary"
+                    disabled={busyRefresh.has(p.name) || anyBusyRefresh}
+                    onclick={() => refreshOne(p.name)}
+                  >
+                    {#if busyRefresh.has(p.name)}
+                      {ssoInProgress === p.name ? "Approving…" : "Refreshing…"}
+                    {:else}
+                      Refresh
                     {/if}
-                    <button
-                      class="btn-sm btn-primary"
-                      disabled={busyRefresh.has(p.name) || anyBusyRefresh}
-                      onclick={() => refreshOne(p.name)}
-                    >
-                      {#if busyRefresh.has(p.name)}
-                        {ssoInProgress === p.name ? "Approving…" : "Refreshing…"}
-                      {:else}
-                        Refresh
-                      {/if}
-                    </button>
+                  </button>
 
-                    <button
-                      class="btn-sm btn-danger"
-                      disabled={busyDelete.has(p.name)}
-                      onclick={() => removeProfile(p.name)}
-                      title="Delete profile from ~/.aws/config"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    {:else}
-      <div class="cards">
-        {#each filtered as p (p.name)}
+                  <button
+                    class="btn-sm btn-danger"
+                    disabled={busyDelete.has(p.name)}
+                    onclick={() => askDelete(p.name)}
+                    title="Delete profile from ~/.aws/config"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  {:else}
+    <div class="cards">
+      {#each filtered as p (p.name)}
         <div
           class="card"
           class:is-default={defaultProfile === p.name}
@@ -617,8 +615,6 @@
             <span class="meta-sep">·</span>
             <span class="expiry">{formatSeconds(p.seconds_remaining)}</span>
           </p>
-
-
 
           {#if busyRefresh.has(p.name)}
             <p class="card-meta refresh-hint">
@@ -694,7 +690,6 @@
       {/each}
     </div>
   {/if}
-  {/if}
 </div>
 
 {#if showCreateModal}
@@ -746,11 +741,7 @@
               {/each}
             </select>
           </FormField>
-          <button
-            class="link-btn"
-            onclick={() => (newSessionMode = !newSessionMode)}
-            type="button"
-          >
+          <button class="link-btn" onclick={() => (newSessionMode = !newSessionMode)} type="button">
             {newSessionMode ? "Cancel" : "+ New SSO session"}
           </button>
         {/if}
@@ -785,11 +776,7 @@
                 spellcheck="false"
               />
             </FormField>
-            <button
-              class="btn-secondary btn-sm"
-              onclick={createSession}
-              disabled={creatingSession}
-            >
+            <button class="btn-secondary btn-sm" onclick={createSession} disabled={creatingSession}>
               {#if creatingSession}
                 <span class="spinner-sm"></span> Creating…
               {:else}
@@ -812,7 +799,8 @@
               {#if discoverAttempt > 1}
                 Retrying… (attempt {discoverAttempt} of 3)
               {:else}
-                Approve the request in the browser window that just opened. This may take up to 2 minutes.
+                Approve the request in the browser window that just opened. This may take up to 2
+                minutes.
               {/if}
             </p>
           {:else if discoverError}
@@ -891,11 +879,7 @@
               hint="Default region for this profile"
               error={profileFormErrors.region}
             >
-              <input
-                bind:value={profileForm.region}
-                placeholder="us-east-1"
-                spellcheck="false"
-              />
+              <input bind:value={profileForm.region} placeholder="us-east-1" spellcheck="false" />
             </FormField>
           </div>
         </section>
@@ -927,12 +911,7 @@
 {/if}
 
 {#if confirmDelete}
-  <div
-    class="modal-backdrop"
-    role="presentation"
-    onclick={cancelDelete}
-    onkeydown={cancelDelete}
-  >
+  <div class="modal-backdrop" role="presentation" onclick={cancelDelete} onkeydown={cancelDelete}>
     <div
       class="modal modal-confirm"
       role="alertdialog"
@@ -1134,7 +1113,9 @@
     border-radius: 8px;
     display: flex;
     flex-direction: column;
-    transition: border-color 0.2s, background 0.2s;
+    transition:
+      border-color 0.2s,
+      background 0.2s;
   }
   .card:hover {
     background: var(--bg-surface-2);
@@ -1452,9 +1433,5 @@
     align-items: center;
     gap: 0.3rem;
     font-size: 0.8rem;
-  }
-  .sso-meta .status-dot {
-    width: 6px;
-    height: 6px;
   }
 </style>

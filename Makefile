@@ -67,6 +67,8 @@ endif
 install:
 	@echo "Installing package with all dependencies (dev + docs)..."
 	pip install -e ".[dev,docs]"
+	@echo "Installing pre-commit hooks..."
+	pre-commit install && pre-commit install --hook-type pre-push
 	@echo "✓ Package and all dependencies installed"
 
 # Run tests

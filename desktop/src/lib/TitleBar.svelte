@@ -140,13 +140,6 @@
     white-space: nowrap;
   }
 
-  .tb-icon {
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
-    align-self: center;
-  }
-
   .tb-name {
     font-size: 0.82rem;
     font-weight: 700;

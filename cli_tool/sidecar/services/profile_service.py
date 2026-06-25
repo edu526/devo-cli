@@ -233,16 +233,18 @@ def list_sso_sessions_info() -> list[dict[str, Any]]:
             seconds_remaining = None
             status = "missing"
 
-        sessions.append({
-            "session": session_key,
-            "start_url": start_url,
-            "region": region,
-            "status": status,
-            "expiration": expires.isoformat() if expires else None,
-            "seconds_remaining": seconds_remaining,
-            "profile_count": len(profile_names),
-            "profiles": profile_names,
-        })
+        sessions.append(
+            {
+                "session": session_key,
+                "start_url": start_url,
+                "region": region,
+                "status": status,
+                "expiration": expires.isoformat() if expires else None,
+                "seconds_remaining": seconds_remaining,
+                "profile_count": len(profile_names),
+                "profiles": profile_names,
+            }
+        )
 
     return sorted(sessions, key=lambda s: s["session"].lower())
 
@@ -411,23 +413,51 @@ async def watch_profiles(hub: EventHub) -> None:
 
 def _tick(hub: EventHub, warned: set[str]) -> None:
     """Single iteration of the watch loop. Exposed for unit tests."""
+    from cli_tool.commands.aws_login.core.credentials import write_default_credentials
+
     try:
         profiles = get_profiles_info()
     except Exception:
         return
+
+    # Group profiles by SSO session to emit one notification per session
+    sso_sessions: dict[str, dict] = {}  # session_name -> {sso_secs, profile_names}
+
     for p in profiles:
         name = p["name"]
-        secs = p.get("seconds_remaining")
-        if secs is None:
+        sts_secs = p.get("seconds_remaining")
+        sso_info = p.get("sso_token") or {}
+        sso_secs = sso_info.get("seconds_remaining")
+        sso_session = p.get("sso_session") or name  # fallback to profile name for legacy
+
+        # 1. Check STS Auto-Refresh for Default Profile
+        is_default = p.get("is_default")
+        if is_default and sts_secs is not None and sso_secs is not None:
+            if sts_secs <= _WARN_SECONDS and sso_secs > _WARN_SECONDS:
+                logger.info("Auto-refreshing default credentials for '%s' (STS: %ss left)", name, sts_secs)
+                try:
+                    write_default_credentials(name)
+                except Exception as e:
+                    logger.error("Auto-refresh failed: %s", e)
+
+        # 2. Accumulate SSO session info (one entry per unique session)
+        if sso_secs is None:
             continue
-        if secs <= _WARN_SECONDS and name not in warned:
-            warned.add(name)
+        if sso_session not in sso_sessions or sso_sessions[sso_session]["sso_secs"] > sso_secs:
+            sso_sessions[sso_session] = {"sso_secs": sso_secs}
+
+    # 3. Emit/clear notifications per SSO session
+    for session_name, info in sso_sessions.items():
+        sso_secs = info["sso_secs"]
+        if sso_secs <= _WARN_SECONDS and session_name not in warned:
+            warned.add(session_name)
             hub.publish(
                 "profile.expiring",
                 {
-                    "name": name,
-                    "seconds_remaining": secs,
+                    "name": session_name,
+                    "seconds_remaining": sso_secs,
+                    "type": "sso",
                 },
             )
-        elif secs > _WARN_SECONDS and name in warned:
-            warned.discard(name)
+        elif sso_secs > _WARN_SECONDS and session_name in warned:
+            warned.discard(session_name)

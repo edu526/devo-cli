@@ -51,7 +51,9 @@ fn is_at_least(version: &str, min: &str) -> bool {
 #[tauri::command]
 async fn get_sidecar_info(state: State<'_, SidecarState>) -> Result<SidecarInfo, String> {
     let guard = state.0.lock().map_err(|e| e.to_string())?;
-    guard.clone().ok_or_else(|| "sidecar not ready yet".to_string())
+    guard
+        .clone()
+        .ok_or_else(|| "sidecar not ready yet".to_string())
 }
 
 #[tauri::command]
@@ -109,6 +111,7 @@ async fn setup_sidecar(app: AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(SidecarState(Mutex::new(None)))

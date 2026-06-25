@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { viewModes, type Page } from "./stores";
-  
+  import { viewModes } from "./stores";
+
   let { page }: { page: keyof typeof viewModes } = $props();
   const currentViewMode = $derived(viewModes[page]);
 </script>
 
 <div class="view-toggle">
-  <button 
-    class="vt-btn" 
-    class:active={$currentViewMode === 'card'} 
+  <button
+    class="vt-btn"
+    class:active={$currentViewMode === 'card'}
     onclick={() => currentViewMode.set('card')}
     title="Card View"
     aria-label="Card View"
@@ -19,9 +19,9 @@
       <rect x="3" y="16" width="18" height="4" rx="1"></rect>
     </svg>
   </button>
-  <button 
-    class="vt-btn" 
-    class:active={$currentViewMode === 'table'} 
+  <button
+    class="vt-btn"
+    class:active={$currentViewMode === 'table'}
     onclick={() => currentViewMode.set('table')}
     title="Table View"
     aria-label="Table View"
@@ -43,7 +43,7 @@
     padding: 2px;
     gap: 2px;
   }
-  
+
   .vt-btn {
     background: transparent;
     border: none;
@@ -56,12 +56,12 @@
     justify-content: center;
     transition: all 0.2s;
   }
-  
+
   .vt-btn:hover {
     color: var(--text-normal, #e0e0e0);
     background: rgba(255, 255, 255, 0.05);
   }
-  
+
   .vt-btn.active {
     color: #4f8ef7;
     background: rgba(79, 142, 247, 0.1);

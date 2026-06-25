@@ -163,7 +163,7 @@ class TestTick:
     def test_emits_event_first_time_threshold_crossed(self, mocker):
         mocker.patch(
             "cli_tool.sidecar.services.profile_service.get_profiles_info",
-            return_value=[{"name": "dev", "seconds_remaining": 60}],
+            return_value=[{"name": "dev", "sso_session": "my-sso", "sso_token": {"seconds_remaining": 60}}],
         )
         hub = EventHub()
         q = hub.subscribe()
@@ -172,17 +172,39 @@ class TestTick:
         profile_service._tick(hub, warned)
 
         msg = q.get_nowait()
-        assert msg == {"event": "profile.expiring", "name": "dev", "seconds_remaining": 60}
-        assert "dev" in warned
+        assert msg == {"event": "profile.expiring", "name": "my-sso", "seconds_remaining": 60, "type": "sso"}
+        assert "my-sso" in warned
 
-    def test_does_not_emit_again_for_same_profile(self, mocker):
+    def test_does_not_emit_again_for_same_session(self, mocker):
+        """Two profiles sharing the same SSO session only emit one notification."""
         mocker.patch(
             "cli_tool.sidecar.services.profile_service.get_profiles_info",
-            return_value=[{"name": "dev", "seconds_remaining": 60}],
+            return_value=[
+                {"name": "dev-a", "sso_session": "shared-sso", "sso_token": {"seconds_remaining": 60}},
+                {"name": "dev-b", "sso_session": "shared-sso", "sso_token": {"seconds_remaining": 60}},
+            ],
         )
         hub = EventHub()
         q = hub.subscribe()
-        warned = {"dev"}  # already warned
+        warned: set[str] = set()
+
+        profile_service._tick(hub, warned)
+
+        # Only one event should have been emitted
+        events = []
+        while not q.empty():
+            events.append(q.get_nowait())
+        assert len(events) == 1
+        assert events[0]["name"] == "shared-sso"
+
+    def test_does_not_emit_again_when_already_warned(self, mocker):
+        mocker.patch(
+            "cli_tool.sidecar.services.profile_service.get_profiles_info",
+            return_value=[{"name": "dev", "sso_session": "my-sso", "sso_token": {"seconds_remaining": 60}}],
+        )
+        hub = EventHub()
+        q = hub.subscribe()
+        warned = {"my-sso"}  # already warned
 
         profile_service._tick(hub, warned)
 
@@ -191,7 +213,7 @@ class TestTick:
     def test_does_not_emit_for_none_seconds(self, mocker):
         mocker.patch(
             "cli_tool.sidecar.services.profile_service.get_profiles_info",
-            return_value=[{"name": "dev", "seconds_remaining": None}],
+            return_value=[{"name": "dev", "sso_session": "my-sso", "sso_token": {"seconds_remaining": None}}],
         )
         hub = EventHub()
         q = hub.subscribe()
@@ -205,12 +227,12 @@ class TestTick:
     def test_clears_warned_set_after_recovery(self, mocker):
         mocker.patch(
             "cli_tool.sidecar.services.profile_service.get_profiles_info",
-            return_value=[{"name": "dev", "seconds_remaining": 3600}],
+            return_value=[{"name": "dev", "sso_session": "my-sso", "sso_token": {"seconds_remaining": 3600}}],
         )
         hub = EventHub()
-        warned = {"dev"}  # previously warned
+        warned = {"my-sso"}  # previously warned
         profile_service._tick(hub, warned)
-        assert "dev" not in warned
+        assert "my-sso" not in warned
 
     def test_swallows_exception_in_get_profiles_info(self, mocker):
         mocker.patch(
@@ -227,10 +249,10 @@ class TestTick:
         mocker.patch(
             "cli_tool.sidecar.services.profile_service.get_profiles_info",
             return_value=[
-                {"name": "expired", "seconds_remaining": 0},
-                {"name": "expiring", "seconds_remaining": 60},
-                {"name": "valid", "seconds_remaining": 7200},
-                {"name": "unknown", "seconds_remaining": None},
+                {"name": "p1", "sso_session": "expired-sso", "sso_token": {"seconds_remaining": 0}},
+                {"name": "p2", "sso_session": "expiring-sso", "sso_token": {"seconds_remaining": 60}},
+                {"name": "p3", "sso_session": "valid-sso", "sso_token": {"seconds_remaining": 7200}},
+                {"name": "p4", "sso_session": "unknown-sso", "sso_token": {"seconds_remaining": None}},
             ],
         )
         hub = EventHub()
@@ -243,7 +265,28 @@ class TestTick:
         while not q.empty():
             events.append(q.get_nowait())
         names = [e["name"] for e in events]
-        assert "expired" in names
-        assert "expiring" in names
-        assert "valid" not in names
-        assert "unknown" not in names
+        assert "expired-sso" in names
+        assert "expiring-sso" in names
+        assert "valid-sso" not in names
+        assert "unknown-sso" not in names
+
+    def test_silent_sts_auto_refresh(self, mocker):
+        mocker.patch(
+            "cli_tool.sidecar.services.profile_service.get_profiles_info",
+            return_value=[
+                {
+                    "name": "dev",
+                    "sso_session": "my-sso",
+                    "is_default": True,
+                    "seconds_remaining": 60,  # STS is dying
+                    "sso_token": {"seconds_remaining": 7200},  # SSO is healthy
+                }
+            ],
+        )
+        write_mock = mocker.patch("cli_tool.commands.aws_login.core.credentials.write_default_credentials")
+        hub = EventHub()
+        warned: set[str] = set()
+
+        profile_service._tick(hub, warned)
+
+        write_mock.assert_called_once_with("dev")

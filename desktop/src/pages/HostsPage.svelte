@@ -15,14 +15,13 @@
   import ViewToggle from "../lib/ViewToggle.svelte";
   import FormField from "../lib/FormField.svelte";
   import { hostSchema, validate, type HostForm, type FieldErrors } from "../lib/forms";
-  
+
   const viewMode = viewModes.hosts;
 
   const initialHosts = (get(hostsCache) ?? []) as HostRecord[];
   // ponytail: Windows is the only platform with a different hosts path. All
   // Unix-like (Linux/macOS) share /etc/hosts.
-  const isWindows =
-    typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
+  const isWindows = typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
   const hostsPath = isWindows ? "C:\\Windows\\System32\\drivers\\etc\\hosts" : "/etc/hosts";
   const adminAction = isWindows ? "admin approval (UAC prompt)" : "admin password (sudo prompt)";
   let hosts: HostRecord[] = $state(initialHosts);
@@ -79,7 +78,9 @@
     }
     if (a === "hosts-setup") {
       const dbs = Array.isArray(p.db_names) ? p.db_names : [];
-      return dbs.length > 0 ? ["ssm", "hosts", "setup", "--db-name", ...dbs] : ["ssm", "hosts", "setup"];
+      return dbs.length > 0
+        ? ["ssm", "hosts", "setup", "--db-name", ...dbs]
+        : ["ssm", "hosts", "setup"];
     }
     return [];
   }
@@ -107,7 +108,8 @@
     } catch (e) {
       const msg = String(e);
       if (msg.toLowerCase().includes("cancel") || msg.toLowerCase().includes("access")) {
-        actionError = "Elevation cancelled. Try again or right-click Devo and 'Run as administrator'.";
+        actionError =
+          "Elevation cancelled. Try again or right-click Devo and 'Run as administrator'.";
       } else {
         actionError = msg;
       }
@@ -274,7 +276,10 @@
   {#if elevationHint && elevationHint.action}
     <div class="alert-elevation">
       <p>⚠️ {elevationHint.message}</p>
-      <p class="muted">Devo tried to elevate automatically but the action hint was missing. Run this in an admin terminal:</p>
+      <p class="muted">
+        Devo tried to elevate automatically but the action hint was missing. Run this in an admin
+        terminal:
+      </p>
       <div class="elevation-cmd">
         <code>{elevationHint.command}</code>
         <button class="btn-sm btn-secondary" onclick={copyCommand}>Copy</button>
@@ -318,69 +323,67 @@
     </div>
   {:else if filtered.length === 0}
     <p class="muted">No hosts match "{query}".</p>
-  {:else}
-    {#if $viewMode === 'table'}
-      <div class="table-wrap">
-        <table>
-          <thead>
+  {:else if $viewMode === "table"}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>IP</th>
+            <th>Hostname</th>
+            <th class="actions-col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each filtered as h (h.hostname)}
             <tr>
-              <th>IP</th>
-              <th>Hostname</th>
-              <th class="actions-col">Actions</th>
+              <td class="ip-cell truncate"><code>{h.ip}</code></td>
+              <td class="hostname-cell truncate"><code>{h.hostname}</code></td>
+              <td class="actions-cell">
+                <div class="actions-wrap">
+                  <button
+                    class="btn-sm btn-danger"
+                    onclick={() => remove(h.hostname)}
+                    disabled={deleting.has(h.hostname)}
+                  >
+                    {#if deleting.has(h.hostname)}
+                      <span class="spinner-sm"></span> Removing…
+                    {:else}
+                      Remove
+                    {/if}
+                  </button>
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {#each filtered as h (h.hostname)}
-              <tr>
-                <td class="ip-cell truncate"><code>{h.ip}</code></td>
-                <td class="hostname-cell truncate"><code>{h.hostname}</code></td>
-                <td class="actions-cell">
-                  <div class="actions-wrap">
-                    <button
-                      class="btn-sm btn-danger"
-                      onclick={() => remove(h.hostname)}
-                      disabled={deleting.has(h.hostname)}
-                    >
-                      {#if deleting.has(h.hostname)}
-                        <span class="spinner-sm"></span> Removing…
-                      {:else}
-                        Remove
-                      {/if}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    {:else}
-      <div class="list-cards">
-        {#each filtered as h (h.hostname)}
-          <div class="list-card">
-            <div class="lc-main">
-              <div class="lc-header">
-                <span class="lc-title"><code>{h.ip}</code></span>
-              </div>
-              <div class="lc-meta">
-                <span class="lc-meta-item">
-                  <span class="muted">Hostname:</span> <code>{h.hostname}</code>
-                </span>
-              </div>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  {:else}
+    <div class="list-cards">
+      {#each filtered as h (h.hostname)}
+        <div class="list-card">
+          <div class="lc-main">
+            <div class="lc-header">
+              <span class="lc-title"><code>{h.ip}</code></span>
             </div>
-            <div class="lc-actions">
-              <button
-                class="btn-danger"
-                onclick={() => remove(h.hostname)}
-                disabled={deleting.has(h.hostname)}
-              >
-                Remove
-              </button>
+            <div class="lc-meta">
+              <span class="lc-meta-item">
+                <span class="muted">Hostname:</span> <code>{h.hostname}</code>
+              </span>
             </div>
           </div>
-        {/each}
-      </div>
-    {/if}
+          <div class="lc-actions">
+            <button
+              class="btn-danger"
+              onclick={() => remove(h.hostname)}
+              disabled={deleting.has(h.hostname)}
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      {/each}
+    </div>
   {/if}
 </div>
 
@@ -597,7 +600,7 @@
     flex-direction: column;
     gap: 0.75rem;
   }
-  
+
   .list-card {
     display: flex;
     align-items: center;
@@ -608,33 +611,33 @@
     padding: 1.25rem 1.5rem;
     transition: all 0.2s ease;
   }
-  
+
   .list-card:hover {
     background: var(--bg-surface-2);
     border-color: var(--border-strong);
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   }
-  
+
   .lc-main {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
     overflow: hidden;
   }
-  
+
   .lc-header {
     display: flex;
     align-items: center;
     gap: 0.75rem;
   }
-  
+
   .lc-title {
     font-weight: 600;
     font-size: 1.05rem;
     color: var(--text-primary);
   }
-  
+
   .lc-meta {
     display: flex;
     align-items: center;
@@ -643,17 +646,13 @@
     flex-wrap: wrap;
     color: var(--text-secondary);
   }
-  
+
   .lc-meta-item {
     display: flex;
     align-items: center;
     gap: 0.25rem;
   }
-  
-  .lc-meta-sep {
-    color: var(--border-strong);
-  }
-  
+
   .lc-actions {
     flex-shrink: 0;
     margin-left: 1rem;
