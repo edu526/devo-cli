@@ -69,24 +69,6 @@
 <div class="titlebar" role="banner">
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="tb-brand" onmousedown={startDrag}>
-    <svg class="tb-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path
-        d="M4 6C4 4.895 4.895 4 6 4H10C13.314 4 16 6.686 16 10V14C16 17.314 13.314 20 10 20H6C4.895 20 4 19.105 4 18V6Z"
-        fill="url(#grad)"
-      />
-      <rect x="14" y="9" width="6" height="2.5" rx="1.25" fill="url(#grad2)" />
-      <rect x="14" y="12.5" width="4" height="2.5" rx="1.25" fill="url(#grad2)" opacity="0.6" />
-      <defs>
-        <linearGradient id="grad" x1="4" y1="4" x2="16" y2="20" gradientUnits="userSpaceOnUse">
-          <stop stop-color="#4f8ef7" />
-          <stop offset="1" stop-color="#a78bfa" />
-        </linearGradient>
-        <linearGradient id="grad2" x1="14" y1="9" x2="20" y2="15" gradientUnits="userSpaceOnUse">
-          <stop stop-color="#4f8ef7" />
-          <stop offset="1" stop-color="#a78bfa" />
-        </linearGradient>
-      </defs>
-    </svg>
     <span class="tb-name">Devo</span>
     {#if appVersion}
       <span class="tb-version" title="App version">v{appVersion}</span>
