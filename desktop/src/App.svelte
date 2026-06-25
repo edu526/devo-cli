@@ -6,6 +6,8 @@
   import { logError } from "./lib/error-log";
   import { theme, applyTheme } from "./lib/theme";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { fade } from "svelte/transition";
+  import { quintOut } from "svelte/easing";
   import TitleBar from "./lib/TitleBar.svelte";
   import LogsPage from "./pages/LogsPage.svelte";
 
@@ -288,7 +290,7 @@
 {:else if showOnboarding && onboardingChecked}
   <OnboardingPage />
 {:else}
-  <div class="layout">
+  <div class="layout" in:fade={{ duration: 600, delay: 300, easing: quintOut }}>
     <!-- Sidebar -->
     <nav class="sidebar">
       {#each NAV_SECTIONS as section}

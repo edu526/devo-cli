@@ -6,6 +6,7 @@
 
   import { preflightApi, configApi, ApiError } from "../lib/api";
   import { fade, slide } from "svelte/transition";
+  import { quintOut } from "svelte/easing";
 
   interface PreflightResult {
     aws_cli?: { ok: boolean; version?: string | null };
@@ -70,7 +71,7 @@
     try {
       // Mark the user as onboarded.
       await configApi.patch({ onboarded: true });
-      // Tell App.svelte to leave the wizard.
+      // Wait a tiny bit for UI update if needed, but the CustomEvent triggers the App re-render
       window.dispatchEvent(new CustomEvent("onboarding-complete"));
     } catch (e) {
       actionError = e instanceof ApiError ? e.message : String(e);
@@ -87,7 +88,7 @@
   });
 </script>
 
-<div class="onboarding-wrapper">
+<div class="onboarding-wrapper" out:fade={{ duration: 700, easing: quintOut }}>
   <div class="onboarding-card" in:fade={{ duration: 400 }}>
     <header>
       <img class="ob-logo" src="/app-icon.png" alt="Devo" />
@@ -154,9 +155,14 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: calc(100vh - 36px);
-    padding: 2rem;
+    position: absolute;
+    top: 36px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
     background: radial-gradient(circle at 50% -20%, rgba(79, 142, 247, 0.15), transparent 60%);
+    background-color: var(--bg-body, #0f0f0f);
   }
 
   .onboarding-card {
