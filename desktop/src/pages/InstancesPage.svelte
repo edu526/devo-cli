@@ -92,7 +92,7 @@
       showModal = false;
       await load();
     } catch (e) {
-      actionError = e instanceof ApiError ? String(e.detail) : String(e);
+      actionError = e instanceof ApiError ? e.message : String(e);
     } finally {
       saving = false;
     }
@@ -106,7 +106,7 @@
       await instancesApi.delete(name);
       await load();
     } catch (e) {
-      actionError = e instanceof ApiError ? String(e.detail) : String(e);
+      actionError = e instanceof ApiError ? e.message : String(e);
     } finally {
       deleting = new Set([...deleting].filter((n) => n !== name));
     }

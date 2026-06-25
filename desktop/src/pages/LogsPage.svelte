@@ -131,7 +131,7 @@
     try {
       lines = await logsApi.get(lineCount);
     } catch (e) {
-      error = e instanceof ApiError ? String(e.detail) : String(e);
+      error = e instanceof ApiError ? e.message : String(e);
     } finally {
       loading = false;
     }
@@ -144,7 +144,7 @@
       await logsApi.clear();
       lines = [];
     } catch (e) {
-      error = e instanceof ApiError ? String(e.detail) : String(e);
+      error = e instanceof ApiError ? e.message : String(e);
     } finally {
       clearing = false;
     }

@@ -76,7 +76,7 @@
       // Optimistic: show "starting" immediately; WS will push the real state
       connections = [...connections.filter((c) => c.name !== name), result];
     } catch (e) {
-      actionError = e instanceof ApiError ? String(e.detail) : String(e);
+      actionError = e instanceof ApiError ? e.message : String(e);
     } finally {
       busyConns = new Set([...busyConns].filter((n) => n !== name));
     }
@@ -90,7 +90,7 @@
       // Optimistic: remove from active connections; WS will confirm
       connections = connections.filter((c) => c.name !== name);
     } catch (e) {
-      actionError = e instanceof ApiError ? String(e.detail) : String(e);
+      actionError = e instanceof ApiError ? e.message : String(e);
     } finally {
       busyConns = new Set([...busyConns].filter((n) => n !== name));
     }
@@ -103,7 +103,7 @@
       await connectionsApi.startAll();
       await load();
     } catch (e) {
-      actionError = e instanceof ApiError ? String(e.detail) : String(e);
+      actionError = e instanceof ApiError ? e.message : String(e);
     } finally {
       busyAll = false;
     }
@@ -116,7 +116,7 @@
       await connectionsApi.stopAll();
       await load();
     } catch (e) {
-      actionError = e instanceof ApiError ? String(e.detail) : String(e);
+      actionError = e instanceof ApiError ? e.message : String(e);
     } finally {
       busyAll = false;
     }

@@ -15,6 +15,7 @@
   import HostsPage from "./pages/HostsPage.svelte";
   import ConfigPage from "./pages/ConfigPage.svelte";
   import OnboardingPage from "./pages/OnboardingPage.svelte";
+  import RegistryPage from "./pages/RegistryPage.svelte";
 
   const NAV_SECTIONS: { title: string; items: { id: Page; label: string; icon: string }[] }[] = [
     { title: "Tunnels", items: [{ id: "connections", label: "Connections", icon: "⚡" }] },
@@ -25,7 +26,7 @@
         { id: "hosts", label: "Hosts", icon: "🌐" },
       ],
     },
-    { title: "AWS", items: [{ id: "profiles", label: "Profiles", icon: "🔑" }] },
+    { title: "AWS", items: [{ id: "profiles", label: "Profiles", icon: "🔑" }, { id: "registry", label: "Registry", icon: "📦" }] },
     {
       title: "System",
       items: [
@@ -320,6 +321,8 @@
         <HostsPage />
       {:else if $currentPage === "config"}
         <ConfigPage />
+      {:else if $currentPage === "registry"}
+        <RegistryPage />
       {:else if $currentPage === "logs"}
         <LogsPage />
       {/if}

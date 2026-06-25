@@ -16,7 +16,8 @@
     "typecheck": "svelte-check --tsconfig ./tsconfig.json --threshold error",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "kill-zombies": "powershell -Command \"Stop-Process -Name 'devo', 'devo-sidecar*' -Force -ErrorAction SilentlyContinue; exit 0\""
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.2",

@@ -8,6 +8,7 @@
     type ProfileRecord,
     type IdentityRecord,
     type SsoSessionRecord,
+    type SsoSessionInfo,
     type DiscoveredAccount,
     ApiError,
   } from "../lib/api";
@@ -28,6 +29,7 @@
 
   const initialProfiles = (get(profilesCache) ?? []) as ProfileRecord[];
   let profiles: ProfileRecord[] = $state(initialProfiles);
+  let ssoSessionsInfo: SsoSessionInfo[] = $state([]);
   let defaultProfile: string | null = $state(
     initialProfiles.find((p) => p.is_default)?.name ?? null,
   );
@@ -39,7 +41,9 @@
   let busySet: Set<string> = $state(new Set());
   let busyIdentity: Set<string> = $state(new Set());
   let busyRefresh: Set<string> = $state(new Set());
+  let busyRefreshSso: Set<string> = $state(new Set());
   let ssoInProgress: string | null = $state(null);
+  let ssoManualUrl: { url: string; code: string } | null = $state(null);
   let query = $state("");
 
   // ── Add Profile wizard state ───────────────────────────────────────────
@@ -260,7 +264,7 @@
   // aborted. ApiError (the sidecar's JSON error envelope) is passed
   // through unchanged so 409/422 messages still appear as-is.
   function friendlyError(e: unknown): string {
-    if (e instanceof ApiError) return String(e.detail);
+    if (e instanceof ApiError) return e.message;
     if (
       e instanceof TypeError &&
       (e.message === "Load failed" || e.message === "Failed to fetch")
@@ -282,8 +286,9 @@
   async function load() {
     bgRefreshing = true;
     try {
-      const data = await profilesApi.list();
+      const [data, sessions] = await Promise.all([profilesApi.list(), ssoSessionsApi.info()]);
       profiles = data;
+      ssoSessionsInfo = sessions;
       defaultProfile = data.find((p) => p.is_default)?.name ?? null;
       profilesCache.set(data);
     } catch (e) {
@@ -308,7 +313,7 @@
       await profilesApi.refreshAll();
       // Result arrives via WS profile.refreshed
     } catch (e) {
-      actionError = e instanceof ApiError ? String(e.detail) : String(e);
+      actionError = e instanceof ApiError ? e.message : String(e);
       refreshing = false;
     }
   }
@@ -320,8 +325,36 @@
       await profilesApi.refresh(name);
       // Actual result arrives via WS profile.refreshed / profile.refreshing
     } catch (e) {
-      actionError = e instanceof ApiError ? String(e.detail) : String(e);
+      actionError = e instanceof ApiError ? e.message : String(e);
       busyRefresh = new Set([...busyRefresh].filter((n) => n !== name));
+    }
+  }
+
+  async function refreshSsoToken(name: string) {
+    actionError = null;
+    busyRefreshSso = new Set([...busyRefreshSso, name]);
+    try {
+      await profilesApi.refreshSsoToken(name);
+      const [data, sessions] = await Promise.all([profilesApi.list(), ssoSessionsApi.info()]);
+      profiles = data;
+      ssoSessionsInfo = sessions;
+      profilesCache.set(data);
+    } catch (e) {
+      actionError = e instanceof ApiError ? e.message : String(e);
+    } finally {
+      busyRefreshSso = new Set([...busyRefreshSso].filter((n) => n !== name));
+    }
+  }
+
+  async function refreshSsoSession(session: SsoSessionInfo) {
+    if (session.profiles.length === 0) return;
+    // Si la sesión está expirada o falta por completo, el token de refresco interno 
+    // no servirá. Necesitamos lanzar el flujo de navegador completo usando el primer perfil.
+    if (session.status === "expired" || session.status === "missing") {
+      await refreshOne(session.profiles[0]!);
+    } else {
+      // Si solo está a punto de expirar ("expiring"), intentamos el refresco ligero sin navegador.
+      await refreshSsoToken(session.profiles[0]!);
     }
   }
 
@@ -333,7 +366,7 @@
       defaultProfile = name; // optimistic — confirmed on load()
       await load();
     } catch (e) {
-      actionError = e instanceof ApiError ? String(e.detail) : String(e);
+      actionError = e instanceof ApiError ? e.message : String(e);
     } finally {
       busySet = new Set([...busySet].filter((n) => n !== name));
     }
@@ -346,7 +379,7 @@
       const id = await profilesApi.getIdentity(name);
       identities = { ...identities, [name]: id };
     } catch (e) {
-      actionError = e instanceof ApiError ? String(e.detail) : String(e);
+      actionError = e instanceof ApiError ? e.message : String(e);
     } finally {
       busyIdentity = new Set([...busyIdentity].filter((n) => n !== name));
     }
@@ -375,7 +408,7 @@
       if (defaultProfile === name) defaultProfile = null;
       await load();
     } catch (e) {
-      actionError = e instanceof ApiError ? String(e.detail) : String(e);
+      actionError = e instanceof ApiError ? e.message : String(e);
     } finally {
       busyDelete = new Set([...busyDelete].filter((n) => n !== name));
     }
@@ -388,6 +421,7 @@
 
   const offRefreshed = ws.on("profile.refreshed", (msg: WsMessage) => {
     ssoInProgress = null;
+    ssoManualUrl = null;
     refreshing = false;
     busyRefresh = new Set();
 
@@ -406,6 +440,13 @@
   });
 
   const offExpiring = ws.on("profile.expiring", () => load());
+
+  const offUrlReady = ws.on("sso.login.url_ready", (msg: WsMessage) => {
+    const m = msg as { profile?: string; source?: string; url?: string; code?: string };
+    if (m.source === "profile" && m.profile === ssoInProgress) {
+      ssoManualUrl = { url: m.url!, code: m.code! };
+    }
+  });
 
   // WS: sidecar signals completion of the discovery pipeline started by
   // the Add Profile wizard. Only acts when the modal is open so a stale
@@ -429,6 +470,7 @@
     offRefreshing();
     offRefreshed();
     offExpiring();
+    offUrlReady();
     offDiscoverStarting();
     offDiscoverCompleted();
   });
@@ -437,7 +479,7 @@
 
   function formatSeconds(s: number | null): string {
     if (s === null) return "—";
-    if (s <= 0) return "Expired";
+    if (s <= 0) return "0m";
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
     if (h > 0) return `${h}h ${m}m`;
@@ -473,9 +515,17 @@
       <span class="spinner-sm spinner-sso"></span>
       <div>
         <strong>Browser SSO login in progress</strong> for <code>{ssoInProgress}</code>
-        <p>
-          Approve the request in the browser window that just opened. This may take up to 2 minutes.
-        </p>
+        {#if ssoManualUrl}
+          <p>
+            Your browser could not be opened automatically. Please open 
+            <a href={ssoManualUrl.url} target="_blank" rel="noreferrer">{ssoManualUrl.url}</a> 
+            and enter the code <strong>{ssoManualUrl.code}</strong>.
+          </p>
+        {:else}
+          <p>
+            Approve the request in the browser window that just opened. This may take up to 2 minutes.
+          </p>
+        {/if}
       </div>
     </div>
   {/if}
@@ -495,6 +545,47 @@
       <p class="muted">Configure AWS SSO profiles in <code>~/.aws/config</code>.</p>
     </div>
   {:else}
+    {#if ssoSessionsInfo.length > 0}
+      <div class="sso-sessions">
+        <div class="sso-header">SSO Sessions</div>
+        <div class="sso-list">
+          {#each ssoSessionsInfo as s (s.session)}
+            <div class="sso-card">
+              <div class="sso-card-main">
+                <div class="sso-name-row">
+                  <strong class="sso-name">{s.session}</strong>
+                  <span class="badge-count">{s.profile_count} profile{s.profile_count === 1 ? "" : "s"}</span>
+                </div>
+                <div class="sso-meta">
+                  <span class="status-dot status-{s.status}"></span>
+                  <span class="muted">{s.status}</span>
+                  {#if s.seconds_remaining != null}
+                    <span class="meta-sep">·</span>
+                    <span class="muted">{formatSeconds(s.seconds_remaining)}</span>
+                  {/if}
+                  {#if s.region}
+                    <span class="meta-sep">·</span>
+                    <span class="muted">{s.region}</span>
+                  {/if}
+                </div>
+              </div>
+              {#if s.status === "expired" || s.status === "expiring" || s.status === "missing"}
+                <button
+                  class="action-icon icon-only"
+                  aria-label="Refresh SSO session"
+                  title="Refresh SSO session (no browser flow)"
+                  disabled={busyRefreshSso.size > 0}
+                  onclick={() => refreshSsoSession(s)}
+                >
+                  <span class="action-glyph">↻</span>
+                </button>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
     <div class="cards">
       {#each filtered as p (p.name)}
         <div
@@ -1127,6 +1218,9 @@
     opacity: 0.5;
     cursor: not-allowed;
   }
+  .action-icon.icon-only {
+    padding: 0.15rem 0.3rem;
+  }
   .action-glyph {
     font-size: 0.95rem;
     line-height: 1;
@@ -1319,5 +1413,61 @@
   }
   .dismiss:hover {
     color: #fff;
+  }
+  .sso-sessions {
+    margin-bottom: 1.25rem;
+  }
+  .sso-header {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted, #888);
+    margin-bottom: 0.5rem;
+  }
+  .sso-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .sso-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    background: var(--bg-card, #1e1e1e);
+    border: 1px solid var(--border-color, #333);
+    border-radius: 6px;
+    padding: 0.6rem 0.8rem;
+  }
+  .sso-card-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+  }
+  .sso-name-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .sso-name {
+    font-size: 0.95rem;
+  }
+  .badge-count {
+    background: var(--bg-input, #2a2a2a);
+    color: var(--text-muted, #888);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+  }
+  .sso-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.8rem;
+  }
+  .sso-meta .status-dot {
+    width: 6px;
+    height: 6px;
   }
 </style>

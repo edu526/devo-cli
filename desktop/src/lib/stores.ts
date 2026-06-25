@@ -7,6 +7,7 @@ export type Page =
   | "databases"
   | "profiles"
   | "hosts"
+  | "registry"
   | "config"
   | "logs";
 export type AppStatus = "loading" | "ready" | "error";

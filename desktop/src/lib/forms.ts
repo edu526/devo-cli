@@ -73,6 +73,23 @@ export const instanceSchema = z.object({
 
 export type InstanceForm = z.infer<typeof instanceSchema>;
 
+// ── CodeArtifact domain ───────────────────────────────────────────────────
+
+export const codeartifactDomainSchema = z.object({
+  domain: z.string().min(1, "Domain is required").max(64),
+  repository: z.string().min(1, "Repository is required").max(64),
+  namespace: z.string().optional(),
+  account_id: z
+    .string()
+    .regex(/^\d{12}$/, "AWS account ID must be 12 digits")
+    .optional()
+    .or(z.literal("")),
+  profile: z.string().optional(),
+  region: z.string().min(1, "Region is required"),
+});
+
+export type CodeArtifactDomainForm = z.infer<typeof codeartifactDomainSchema>;
+
 // ── Host ──────────────────────────────────────────────────────────────────
 
 export const hostSchema = z.object({

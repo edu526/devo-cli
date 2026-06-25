@@ -89,7 +89,7 @@
       // the WS event `profile.refreshed` will report success.
       ssoDone = true;
     } catch (e) {
-      ssoError = e instanceof ApiError ? String(e.detail) : String(e);
+      ssoError = e instanceof ApiError ? e.message : String(e);
     } finally {
       ssoInProgress = false;
     }
@@ -119,7 +119,7 @@
       // Tell App.svelte to leave the wizard.
       window.dispatchEvent(new CustomEvent("onboarding-complete"));
     } catch (e) {
-      actionError = e instanceof ApiError ? String(e.detail) : String(e);
+      actionError = e instanceof ApiError ? e.message : String(e);
     } finally {
       finishing = false;
     }

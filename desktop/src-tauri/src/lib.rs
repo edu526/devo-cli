@@ -73,6 +73,17 @@ fn run_elevated(args: Vec<String>) -> Result<u32, String> {
 }
 
 async fn setup_sidecar(app: AppHandle) {
+    // Kill any orphaned sidecars from previous crashes before spawning a new one
+    #[cfg(windows)]
+    let _ = std::process::Command::new("taskkill")
+        .args(["/F", "/IM", "devo-sidecar*.exe", "/T"])
+        .output();
+
+    #[cfg(not(windows))]
+    let _ = std::process::Command::new("pkill")
+        .args(["-f", "devo-sidecar"])
+        .output();
+
     match sidecar::spawn_and_wait(&app).await {
         Ok(info) => {
             if let Some(state) = app.try_state::<SidecarState>() {

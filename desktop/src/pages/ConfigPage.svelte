@@ -90,7 +90,7 @@
         saveOk = false;
       }, 2000);
     } catch (e) {
-      parseError = e instanceof ApiError ? String(e.detail) : String(e);
+      parseError = e instanceof ApiError ? e.message : String(e);
     } finally {
       saving = false;
     }
