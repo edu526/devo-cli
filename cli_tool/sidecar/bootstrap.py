@@ -38,6 +38,28 @@ def _configure_logging(log_level: str) -> None:
     logging.getLogger("watchdog").setLevel(logging.WARNING)
 
 
+def _kill_orphan_ssm_processes() -> None:
+    """Kill any leftover session-manager-plugin processes from a previous session.
+
+    If the sidecar crashed or was killed without a clean shutdown, SSM child
+    processes survive as orphans. We sweep them on startup so they don't hold
+    ports or consume resources.
+    """
+    import psutil
+
+    log = logging.getLogger(__name__)
+    killed = 0
+    for proc in psutil.process_iter(["name"]):
+        try:
+            if proc.info["name"] and "session-manager-plugin" in proc.info["name"].lower():
+                proc.terminate()
+                killed += 1
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    if killed:
+        log.info("Startup cleanup: terminated %d orphan session-manager-plugin process(es).", killed)
+
+
 def _find_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
@@ -47,6 +69,8 @@ def _find_free_port() -> int:
 def run(port: int = 0, host: str = "127.0.0.1", log_level: str = "info") -> None:
     _configure_logging(log_level)
     log = logging.getLogger(__name__)
+
+    _kill_orphan_ssm_processes()
 
     actual_port = port if port != 0 else _find_free_port()
 

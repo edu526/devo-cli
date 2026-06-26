@@ -85,6 +85,7 @@ def create_app(app_state: AppState) -> FastAPI:
             watcher.stop()
             watcher.join()
 
+        app_state.registry.stop_all()
         detach_log_streamer(log_handler)
 
     app = FastAPI(title="Devo Sidecar", version="1.0.0", lifespan=lifespan)

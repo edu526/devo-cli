@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 # ponytail: 12h is the max boto3 allows; shorter durations are pointless for dev workflows
 _TOKEN_DURATION = 43200
 
+
 def _token_registry_path() -> Path:
     # ponytail: persist login metadata so the UI can show expiration without re-parsing
     # the JWT from ~/.npmrc (which is URL-encoded by `aws codeartifact login` and may
@@ -83,14 +84,16 @@ def get_domains() -> list[dict[str, Any]]:
     domains = _load_domains_from_config()
     result: list[dict[str, Any]] = []
     for d in domains:
-        result.append({
-            "domain": d["domain"],
-            "repository": d["repository"],
-            "namespace": d.get("namespace", ""),
-            "account_id": _account_id_for(d),
-            "profile": d.get("profile", ""),
-            "region": _region_for(d),
-        })
+        result.append(
+            {
+                "domain": d["domain"],
+                "repository": d["repository"],
+                "namespace": d.get("namespace", ""),
+                "account_id": _account_id_for(d),
+                "profile": d.get("profile", ""),
+                "region": _region_for(d),
+            }
+        )
     return result
 
 
@@ -121,10 +124,9 @@ def _write_npmrc(registry_url: str, token: str, namespace: str) -> None:
     npmrc = Path.home() / ".npmrc"
     scope = namespace.lstrip("@") if namespace.startswith("@") else namespace
     scope_line = f"@{scope}:registry={registry_url}"
-    always_auth = f"//{registry_url.replace('https://', '')}:always-auth=true"
     auth_token = f"//{registry_url.replace('https://', '')}:_authToken={token}"
 
-    lines_to_add = [scope_line, always_auth, auth_token]
+    lines_to_add = [scope_line, auth_token]
     existing: dict[str, str] = {}
     if npmrc.exists():
         for line in npmrc.read_text().splitlines():
@@ -300,8 +302,7 @@ def login(domain_cfg: dict[str, Any], tool: str, profile_override: str | None = 
         raise ValueError(f"No account_id configured for domain '{domain}'")
     if not profile:
         raise ValueError(
-            f"No valid SSO profile found for account {account_id}. "
-            f"Log in via Profiles page first, or set 'profile' on the domain config."
+            f"No valid SSO profile found for account {account_id}. " f"Log in via Profiles page first, or set 'profile' on the domain config."
         )
 
     # ponytail: refresh the upstream SSO token before boto3 fails noisily on it
@@ -452,9 +453,7 @@ def delete_domain(domain_name: str) -> None:
 # we only care about the timestamp, not trust).
 
 
-_REGISTRY_URL_RE = _re.compile(
-    r"^//?(.+)-(\d+)\.d\.codeartifact\.([^.]+)\.amazonaws\.com/(npm|pypi)/(.+?)/?$"
-)
+_REGISTRY_URL_RE = _re.compile(r"^//?(.+)-(\d+)\.d\.codeartifact\.([^.]+)\.amazonaws\.com/(npm|pypi)/(.+?)/?$")
 
 
 def _jwt_exp(token: str) -> str | None:
@@ -496,15 +495,17 @@ def _parse_npm_tokens() -> list[dict[str, Any]]:
         if key in seen:
             continue
         seen.add(key)
-        results.append({
-            "domain": domain,
-            "repository": repo,
-            "account_id": account_id,
-            "region": region,
-            "tool": "npm",
-            "registry_url": f"https://{host}.d.codeartifact.{region}.amazonaws.com/{kind}/{repo}/",
-            "expires_at": _jwt_exp(token.strip()),
-        })
+        results.append(
+            {
+                "domain": domain,
+                "repository": repo,
+                "account_id": account_id,
+                "region": region,
+                "tool": "npm",
+                "registry_url": f"https://{host}.d.codeartifact.{region}.amazonaws.com/{kind}/{repo}/",
+                "expires_at": _jwt_exp(token.strip()),
+            }
+        )
     return results
 
 
@@ -530,15 +531,17 @@ def _parse_pip_tokens() -> list[dict[str, Any]]:
         return []
     _, account_id, region, _, _ = host_m.groups()
     domain = host.rsplit(f"-{account_id}", 1)[0]
-    return [{
-        "domain": domain,
-        "repository": repo,
-        "account_id": account_id,
-        "region": region,
-        "tool": "pip",
-        "registry_url": f"https://{host}/pypi/{repo}/",
-        "expires_at": _jwt_exp(token.strip()),
-    }]
+    return [
+        {
+            "domain": domain,
+            "repository": repo,
+            "account_id": account_id,
+            "region": region,
+            "tool": "pip",
+            "registry_url": f"https://{host}/pypi/{repo}/",
+            "expires_at": _jwt_exp(token.strip()),
+        }
+    ]
 
 
 def _parse_twine_tokens() -> list[dict[str, Any]]:
@@ -567,15 +570,17 @@ def _parse_twine_tokens() -> list[dict[str, Any]]:
         return []
     _, account_id, region, _, _ = host_m.groups()
     domain = host.rsplit(f"-{account_id}", 1)[0]
-    return [{
-        "domain": domain,
-        "repository": repo,
-        "account_id": account_id,
-        "region": region,
-        "tool": "twine",
-        "registry_url": repo_url,
-        "expires_at": _jwt_exp(token.strip()),
-    }]
+    return [
+        {
+            "domain": domain,
+            "repository": repo,
+            "account_id": account_id,
+            "region": region,
+            "tool": "twine",
+            "registry_url": repo_url,
+            "expires_at": _jwt_exp(token.strip()),
+        }
+    ]
 
 
 def list_active_tokens() -> list[dict[str, Any]]:
@@ -598,15 +603,17 @@ def list_active_tokens() -> list[dict[str, Any]]:
                     continue
             except Exception:
                 pass
-        tokens.append({
-            "domain": entry["domain"],
-            "repository": entry["repository"],
-            "account_id": entry["account_id"],
-            "region": entry["region"],
-            "tool": entry["tool"],
-            "registry_url": entry["registry_url"],
-            "expires_at": entry.get("expires_at"),
-        })
+        tokens.append(
+            {
+                "domain": entry["domain"],
+                "repository": entry["repository"],
+                "account_id": entry["account_id"],
+                "region": entry["region"],
+                "tool": entry["tool"],
+                "registry_url": entry["registry_url"],
+                "expires_at": entry.get("expires_at"),
+            }
+        )
         seen.add((entry["domain"], entry["tool"]))
 
     # Fallback: parse JWTs from config files for tokens we didn't issue

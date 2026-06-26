@@ -21,31 +21,34 @@ class EventHub:
     """
 
     def __init__(self) -> None:
-        self._subscribers: list[asyncio.Queue] = []
+        self._subscribers: list[tuple[asyncio.Queue, asyncio.AbstractEventLoop]] = []
         self._lock = threading.Lock()
 
     def subscribe(self) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=200)
+        loop = asyncio.get_running_loop()
         with self._lock:
-            self._subscribers.append(q)
+            self._subscribers.append((q, loop))
         return q
 
     def unsubscribe(self, q: asyncio.Queue) -> None:
         with self._lock:
-            try:
-                self._subscribers.remove(q)
-            except ValueError:
-                pass
+            self._subscribers = [(sq, loop) for sq, loop in self._subscribers if sq is not q]
 
     def publish(self, event: str, payload: dict) -> None:
         msg: dict[str, Any] = {"event": event, **payload}
         with self._lock:
             subs = list(self._subscribers)
-        for q in subs:
-            try:
-                q.put_nowait(msg)
-            except asyncio.QueueFull:
-                pass
+
+        for q, loop in subs:
+
+            def _do_put(queue=q, message=msg):
+                try:
+                    queue.put_nowait(message)
+                except asyncio.QueueFull:
+                    pass
+
+            loop.call_soon_threadsafe(_do_put)
 
 
 @dataclass

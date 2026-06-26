@@ -29,7 +29,7 @@ def get_connections(request: Request) -> list[dict[str, Any]]:
 
 
 @router.post(":start_all", status_code=status.HTTP_202_ACCEPTED)
-@limiter.limit("1/minute")
+@limiter.limit("10/minute")
 def start_all(request: Request, response: Response) -> list[dict[str, Any]]:
     app_state = _state(request)
     return start_all_connections(app_state.registry, app_state.event_hub)
@@ -42,7 +42,7 @@ def stop_all(request: Request) -> None:
 
 
 @router.post("/{name}", status_code=status.HTTP_202_ACCEPTED)
-@limiter.limit("10/minute")
+@limiter.limit("30/minute")
 def start_one(name: str, request: Request, response: Response) -> dict[str, Any]:
     app_state = _state(request)
     try:
