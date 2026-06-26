@@ -1,12 +1,13 @@
 <script lang="ts">
   // First-run wizard. Shown when ~/.devo/config.json has no
-  // `onboarded: true`. 
+  // `onboarded: true`.
   // Runs preflight checks (aws + session-manager-plugin + socat).
   // On finish, PATCH /api/v1/config to set onboarded=true.
 
   import { preflightApi, configApi, ApiError } from "../lib/api";
   import { fade, slide } from "svelte/transition";
   import { quintOut } from "svelte/easing";
+  import { Check, X, RefreshCw, ArrowRight } from "@lucide/svelte";
 
   interface PreflightResult {
     aws_cli?: { ok: boolean; version?: string | null };
@@ -57,7 +58,7 @@
     try {
       const raw = await preflightApi.run();
       // Backend returns the dict directly (no wrapping).
-      preflight = (raw as unknown) as PreflightResult;
+      preflight = raw as unknown as PreflightResult;
     } catch (e) {
       actionError = String(e);
     } finally {
@@ -121,7 +122,12 @@
             {@const checks = checksFrom(preflight)}
             {#each checks as check (check.name)}
               <li class="check-item" class:fail={!check.present}>
-                <div class="check-icon">{check.present ? "✓" : "✗"}</div>
+                <div class="check-icon" style="display:inline-flex">
+                  {#if check.present}<Check size={18} strokeWidth={3} />{:else}<X
+                      size={18}
+                      strokeWidth={3}
+                    />{/if}
+                </div>
                 <div class="check-info">
                   <span class="name">{check.name}</span>
                   {#if check.detail}<span class="detail muted">{check.detail}</span>{/if}
@@ -131,18 +137,31 @@
           {/if}
         </ul>
 
-        {#if preflight && !checksFrom(preflight).every(c => c.present)}
+        {#if preflight && !checksFrom(preflight).every((c) => c.present)}
           <div class="alert-warn" in:slide>
             <span class="warn-icon">!</span>
-            <p>One or more tools are missing. Devo will still launch but some features will not work until you install them.</p>
+            <p>
+              One or more tools are missing. Devo will still launch but some features will not work
+              until you install them.
+            </p>
           </div>
         {/if}
         <div class="actions">
-          <button class="btn-secondary" onclick={runPreflight} disabled={preflightLoading}>
-            ↺ Re-check
+          <button
+            class="btn-secondary"
+            style="display:inline-flex; align-items:center; gap:0.4rem;"
+            onclick={runPreflight}
+            disabled={preflightLoading}
+          >
+            <RefreshCw size={16} /> Re-check
           </button>
-          <button class="btn-primary" onclick={finish} disabled={finishing || preflightLoading}>
-            {finishing ? "Starting..." : "Start using Devo →"}
+          <button
+            class="btn-primary"
+            style="display:inline-flex; align-items:center; gap:0.4rem;"
+            onclick={finish}
+            disabled={finishing || preflightLoading}
+          >
+            {#if finishing}Starting...{:else}Start using Devo <ArrowRight size={16} />{/if}
           </button>
         </div>
       </section>
@@ -301,7 +320,9 @@
   }
 
   @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .alert-warn {

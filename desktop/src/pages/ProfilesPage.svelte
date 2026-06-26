@@ -23,6 +23,9 @@
   import FormField from "../lib/FormField.svelte";
   import SearchableSelect from "../lib/SearchableSelect.svelte";
   import { retryNetworkErrors } from "../lib/retry";
+  import { X, Star, RefreshCw } from "@lucide/svelte";
+
+  import { open as openUrl } from "@tauri-apps/plugin-shell";
 
   const viewMode = viewModes.profiles;
   import {
@@ -332,8 +335,6 @@
     }
   }
 
-
-
   async function setDefault(name: string) {
     actionError = null;
     busySet = new Set([...busySet, name]);
@@ -480,17 +481,16 @@
     <div class="header-actions">
       <ViewToggle page="profiles" />
       <SearchInput bind:value={query} placeholder="Filter profiles…" />
-      <button class="btn-secondary" onclick={openCreate}>
-        <span class="btn-glyph">+</span>
-        <span>Add Profile</span>
-      </button>
-      <button class="btn-primary" onclick={refreshAll} disabled={anyBusyRefresh}>
-        {#if refreshing}
-          <span class="spinner-sm"></span> Refreshing…
-        {:else}
+      <div class="actions">
+        <button class="btn-secondary" disabled={anyBusyRefresh} onclick={refreshAll}>
+          {#if refreshing}<span class="spinner-sm"></span>{/if}
           Refresh All
-        {/if}
-      </button>
+        </button>
+        <button class="btn-primary" onclick={openCreate}>
+          <span class="btn-glyph">+</span>
+          Add Profile
+        </button>
+      </div>
     </div>
   </div>
 
@@ -502,8 +502,21 @@
         {#if ssoManualUrl}
           <p>
             Your browser could not be opened automatically. Please open
-            <a href={ssoManualUrl.url} target="_blank" rel="noreferrer">{ssoManualUrl.url}</a>
-            and enter the code <strong>{ssoManualUrl.code}</strong>.
+            <a
+              href={ssoManualUrl.url}
+              onclick={(e) => {
+                e.preventDefault();
+                if (ssoManualUrl) {
+                  openUrl(ssoManualUrl.url);
+                }
+              }}
+              class="sso-link">{ssoManualUrl.url}</a
+            >
+            {#if ssoManualUrl.code}
+              and enter the code <strong>{ssoManualUrl.code}</strong>.
+            {:else}
+              to approve the request.
+            {/if}
           </p>
         {:else}
           <p>
@@ -518,7 +531,7 @@
   {#if actionError}
     <div class="alert-error">
       {actionError}
-      <button class="dismiss" onclick={() => (actionError = null)}>✕</button>
+      <button class="dismiss" onclick={() => (actionError = null)}><X size={14} /></button>
     </div>
   {/if}
 
@@ -557,15 +570,14 @@
 
               <td class="actions-cell">
                 <div class="actions-wrap">
-                  {#if defaultProfile !== p.name}
-                    <button
-                      class="btn-sm btn-secondary"
-                      onclick={() => setDefault(p.name)}
-                      disabled={busySet.has(p.name)}
-                    >
-                      {busySet.has(p.name) ? "Setting…" : "Set Default"}
-                    </button>
-                  {/if}
+                  <button
+                    class="btn-sm btn-secondary"
+                    onclick={() => setDefault(p.name)}
+                    disabled={busySet.has(p.name)}
+                    style:visibility={defaultProfile === p.name ? "hidden" : "visible"}
+                  >
+                    {busySet.has(p.name) ? "Setting…" : "Set Default"}
+                  </button>
                   <button
                     class="btn-sm btn-primary"
                     disabled={busyRefresh.has(p.name) || anyBusyRefresh}
@@ -603,7 +615,9 @@
           class:is-expiring={p.status === "expiring"}
         >
           {#if defaultProfile === p.name}
-            <div class="default-bar">★ default credentials</div>
+            <div class="default-bar">
+              <Star size={12} fill="currentColor" /> default credentials
+            </div>
           {/if}
           <div class="card-header">
             <span class="card-name">{p.name}</span>
@@ -625,14 +639,20 @@
 
           <div class="card-footer">
             {#if defaultProfile === p.name}
-              <span class="default-label"><span class="default-star">★</span> Default</span>
+              <span class="default-label"
+                ><span class="default-star" style="display:inline-flex"
+                  ><Star size={12} fill="currentColor" /></span
+                > Default</span
+              >
             {:else}
               <button
                 class="set-default-btn"
                 onclick={() => setDefault(p.name)}
                 disabled={busySet.has(p.name)}
               >
-                <span class="default-star">{busySet.has(p.name) ? "…" : "☆"}</span>
+                <span class="default-star" style="display:inline-flex"
+                  >{#if busySet.has(p.name)}…{:else}<Star size={12} />{/if}</span
+                >
                 <span class="set-default-label">
                   {busySet.has(p.name) ? "Setting…" : "Set as default"}
                 </span>
@@ -645,7 +665,7 @@
                 disabled={busyRefresh.has(p.name) || anyBusyRefresh}
                 onclick={() => refreshOne(p.name)}
               >
-                <span class="action-glyph">↻</span>
+                <span class="action-glyph"><RefreshCw size={14} /></span>
                 <span class="action-label">
                   {#if busyRefresh.has(p.name)}
                     {ssoInProgress === p.name ? "Approving…" : "Refreshing…"}
@@ -944,7 +964,7 @@
 {/if}
 
 <style>
-  .header-actions {
+  .actions {
     display: flex;
     align-items: center;
     gap: 0.6rem;
@@ -1358,6 +1378,12 @@
   }
   .alert-sso code {
     color: #fde68a;
+  }
+  .alert-sso a {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    color: #fbbf24;
+    text-decoration: underline;
   }
   .spinner-sso {
     margin-top: 3px;

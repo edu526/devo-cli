@@ -24,6 +24,8 @@ export interface ConnectionRecord {
   state: "starting" | "connecting" | "connected" | "stopped" | "error" | "expired_credentials";
   local_port: number;
   error: string | null;
+  sso_required?: boolean;
+  profile?: string;
   uptime_seconds?: number;
   attempts?: number;
   last_error_at?: number | null;
@@ -291,7 +293,12 @@ async function _refreshToken(): Promise<string> {
   return _refreshInFlight;
 }
 
-async function req<T>(method: string, path: string, body?: unknown, acceptStatuses?: number[]): Promise<T> {
+async function req<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  acceptStatuses?: number[],
+): Promise<T> {
   const send = () =>
     fetch(`${_baseUrl}${path}`, {
       method,
@@ -414,7 +421,8 @@ export interface CodeArtifactDomainPatch {
 
 export const codeartifactApi = {
   domains: () => req<CodeArtifactDomain[]>("GET", "/codeartifact/domains"),
-  create: (body: CodeArtifactDomainIn) => req<CodeArtifactDomain>("POST", "/codeartifact/domains", body),
+  create: (body: CodeArtifactDomainIn) =>
+    req<CodeArtifactDomain>("POST", "/codeartifact/domains", body),
   update: (domain: string, body: CodeArtifactDomainPatch) =>
     req<CodeArtifactDomain>("PATCH", `/codeartifact/domains/${domain}`, body),
   remove: (domain: string) => req<void>("DELETE", `/codeartifact/domains/${domain}`),
@@ -430,7 +438,8 @@ export const codeartifactApi = {
       { domain, tool, profile },
       [200, 202],
     ),
-  packages: (domain: string) => req<Record<string, string | null>>("GET", `/codeartifact/domains/${domain}/packages`),
+  packages: (domain: string) =>
+    req<Record<string, string | null>>("GET", `/codeartifact/domains/${domain}/packages`),
 };
 
 // ── Endpoint groups ───────────────────────────────────────────────────────────
@@ -471,7 +480,10 @@ export const profilesApi = {
   refresh: (name: string) =>
     req<{ status: string; message: string }>("POST", `/profiles/${name}:refresh`),
   refreshSsoToken: (name: string) =>
-    req<{ name: string; account: string; refreshed: boolean }>("POST", `/profiles/${name}:refresh_sso_token`),
+    req<{ name: string; account: string; refreshed: boolean }>(
+      "POST",
+      `/profiles/${name}:refresh_sso_token`,
+    ),
   setDefault: (name: string) => req<{ name: string }>("POST", `/profiles/${name}:set_default`),
   getIdentity: (name: string) => req<IdentityRecord>("GET", `/profiles/${name}/identity`),
 };

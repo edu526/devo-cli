@@ -11,17 +11,29 @@
   import FormField from "../lib/FormField.svelte";
   import ViewToggle from "../lib/ViewToggle.svelte";
   import { viewModes } from "../lib/stores";
-  import { codeartifactDomainSchema, validate, type CodeArtifactDomainForm, type FieldErrors } from "../lib/forms";
-  
+  import {
+    codeartifactDomainSchema,
+    validate,
+    type CodeArtifactDomainForm,
+    type FieldErrors,
+  } from "../lib/forms";
+  import { X, CircleDot, Circle } from "@lucide/svelte";
+  import { get } from "svelte/store";
+  import { registryCache } from "../lib/page-stores";
+
+  import { open as openUrl } from "@tauri-apps/plugin-shell";
+
   const viewMode = viewModes.registry;
 
   const configExample = `{ "domain": "my-domain", "repository": "npm", "namespace": "@scope", "account_id": "123456789012", "profile": "my-profile", "region": "us-east-1" }`;
 
-  let domains: CodeArtifactDomain[] = $state([]);
-  let tokens: CodeArtifactToken[] = $state([]);
-  let loading = $state(true);
+  const initialCache = get(registryCache);
+  let domains: CodeArtifactDomain[] = $state(initialCache?.domains ?? []);
+  let tokens: CodeArtifactToken[] = $state(initialCache?.tokens ?? []);
+  let loading = $state(!initialCache);
   let actionError: string | null = $state(null);
-  let busyDomain: string | null = $state(null);
+  let busyDomains: Record<string, boolean> = $state({});
+  let busyAll = $state(false);
   let packagesOpen: Record<string, boolean> = $state({});
   let packagesData: Record<string, [string, string | null][]> = $state({});
   let loadingPackages: string | null = $state(null);
@@ -33,6 +45,7 @@
   let ssoLoginInProgress: { profile: string; domain: string; tool: string } | null = $state(null);
   let ssoLoginError: string | null = $state(null);
   let ssoLoginUnsubscribe: (() => void) | null = null;
+  let ssoManualUrl = $state<{ url: string; code: string } | null>(null);
 
   // Modal state
   let showModal = $state(false);
@@ -74,6 +87,7 @@
       const [d, t] = await Promise.all([codeartifactApi.domains(), codeartifactApi.tokens()]);
       domains = d;
       tokens = t;
+      registryCache.set({ domains: d, tokens: t });
       for (const dom of domains) {
         if (!(dom.domain in toolSelections)) {
           toolSelections[dom.domain] = "npm";
@@ -88,7 +102,7 @@
 
   async function doLogin(domain: CodeArtifactDomain) {
     actionError = null;
-    busyDomain = domain.domain;
+    busyDomains = { ...busyDomains, [domain.domain]: true };
     const tool = toolFor(domain);
     try {
       const result = await codeartifactApi.login(domain.domain, tool);
@@ -102,19 +116,31 @@
     } catch (e) {
       actionError = e instanceof ApiError ? e.message : String(e);
     } finally {
-      busyDomain = null;
+      busyDomains = { ...busyDomains, [domain.domain]: false };
+    }
+  }
+
+  async function loginAll() {
+    busyAll = true;
+    actionError = null;
+    try {
+      await Promise.allSettled(domains.map((d) => doLogin(d)));
+    } finally {
+      busyAll = false;
     }
   }
 
   function handleSsoRequired(profile: string, domain: string, tool: string) {
     ssoLoginInProgress = { profile, domain, tool };
     ssoLoginError = null;
+    ssoManualUrl = null;
     // Subscribe once; the listener stays alive across retries until cleared
     if (ssoLoginUnsubscribe) ssoLoginUnsubscribe();
     ssoLoginUnsubscribe = ws.on("sso.login.completed", (msg) => {
       const m = msg as { profile?: string; source?: string; success?: boolean; error?: string };
       if (m.source !== "codeartifact" || m.profile !== profile) return;
       ssoLoginInProgress = null;
+      ssoManualUrl = null;
       if (m.success) {
         // Auto-retry the original CodeArtifact login
         const dom = domains.find((d) => d.domain === domain);
@@ -127,7 +153,6 @@
 
   // In-memory cache of last login result (not the JWT, just metadata)
   let loginCache: Record<string, CodeArtifactLoginResult> = {};
-
 
   async function togglePackages(domain: CodeArtifactDomain) {
     if (packagesOpen[domain.domain]) {
@@ -151,7 +176,14 @@
 
   function openCreate() {
     editingName = null;
-    form = { domain: "", repository: "", namespace: "", account_id: "", profile: "", region: "us-east-1" };
+    form = {
+      domain: "",
+      repository: "",
+      namespace: "",
+      account_id: "",
+      profile: "",
+      region: "us-east-1",
+    };
     formErrors = {};
     showModal = true;
   }
@@ -208,7 +240,8 @@
   }
 
   async function removeDomain(domain: CodeArtifactDomain) {
-    if (!confirm(`Delete registry "${domain.domain}"? This will not invalidate any active tokens.`)) return;
+    if (!confirm(`Delete registry "${domain.domain}"? This will not invalidate any active tokens.`))
+      return;
     deleting = { ...deleting, [domain.domain]: true };
     actionError = null;
     try {
@@ -226,9 +259,23 @@
     e.stopPropagation();
   }
 
-  onMount(load);
+  let offUrlReady: (() => void) | null = null;
+  onMount(() => {
+    load();
+    offUrlReady = ws.on("sso.login.url_ready", (msg) => {
+      const m = msg as { profile?: string; source?: string; url?: string; code?: string };
+      if (
+        m.source === "codeartifact" &&
+        ssoLoginInProgress &&
+        m.profile === ssoLoginInProgress.profile
+      ) {
+        ssoManualUrl = { url: m.url!, code: m.code! };
+      }
+    });
+  });
   onDestroy(() => {
     ssoLoginUnsubscribe?.();
+    offUrlReady?.();
   });
 </script>
 
@@ -237,8 +284,16 @@
     <h1>Registry</h1>
     <div class="header-actions">
       <ViewToggle page="registry" />
-      <button class="btn-secondary" onclick={load} disabled={loading}>Refresh</button>
-      <button class="btn-primary" onclick={openCreate}>New Registry</button>
+      <div class="actions">
+        <button
+          class="btn-secondary"
+          onclick={loginAll}
+          disabled={loading || busyAll || domains.length === 0}
+        >
+          {#if busyAll}<span class="spinner-sm"></span>{/if} Refresh All
+        </button>
+        <button class="btn-primary" onclick={openCreate}>New Registry</button>
+      </div>
     </div>
   </div>
 
@@ -251,8 +306,33 @@
       <div class="sso-banner-main">
         <span class="spinner-sm sso-spinner"></span>
         <div>
-          <strong>Browser SSO login in progress</strong> for <code>{ssoLoginInProgress.profile}</code>
-          <p>Approve the request in the browser window that just opened. The CodeArtifact login will retry automatically.</p>
+          <strong>Browser SSO login in progress</strong> for
+          <code>{ssoLoginInProgress.profile}</code>
+          {#if ssoManualUrl}
+            <p>
+              Your browser could not be opened automatically. Please open
+              <a
+                href={ssoManualUrl.url}
+                onclick={(e) => {
+                  e.preventDefault();
+                  if (ssoManualUrl) {
+                    openUrl(ssoManualUrl.url);
+                  }
+                }}
+                class="sso-link">{ssoManualUrl.url}</a
+              >
+              {#if ssoManualUrl.code}
+                and enter the code <strong>{ssoManualUrl.code}</strong>.
+              {:else}
+                to approve the request.
+              {/if}
+            </p>
+          {:else}
+            <p>
+              Approve the request in the browser window that just opened. The CodeArtifact login
+              will retry automatically.
+            </p>
+          {/if}
         </div>
       </div>
     </div>
@@ -261,7 +341,7 @@
   {#if ssoLoginError}
     <div class="alert-error">
       {ssoLoginError}
-      <button class="dismiss" onclick={() => (ssoLoginError = null)}>✕</button>
+      <button class="dismiss" onclick={() => (ssoLoginError = null)}><X size={14} /></button>
     </div>
   {/if}
 
@@ -275,75 +355,80 @@
         <br /><code>{configExample}</code>
       </p>
     </div>
-  {:else}
-    {#if $viewMode === 'table'}
-      <div class="table-wrap">
-        <table>
-          <thead>
+  {:else if $viewMode === "table"}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Domain</th>
+            <th>Repository</th>
+            <th>Status</th>
+            <th>Account / Region</th>
+            <th class="actions-col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each domains as domain (domain.domain)}
+            {@const tool = toolFor(domain)}
+            {@const token = tokenFor(domain.domain, tool)}
+            {@const isLoggedIn = !!token}
             <tr>
-              <th>Domain</th>
-              <th>Repository</th>
-              <th>Status</th>
-              <th>Account / Region</th>
-              <th class="actions-col">Actions</th>
+              <td class="name">
+                {domain.domain}
+                {#if domain.namespace}<code class="namespace" style="margin-left:8px"
+                    >{domain.namespace}</code
+                  >{/if}
+              </td>
+              <td><span class="badge badge-gray">{domain.repository}</span></td>
+              <td>
+                {#if isLoggedIn}
+                  <span class="status-dot" aria-hidden="true" style="display:inline-flex"
+                    ><CircleDot size={10} strokeWidth={3} /></span
+                  >
+                  <span class="status-text">Connected</span>
+                {:else}
+                  <span class="status-dot dim" aria-hidden="true" style="display:inline-flex"
+                    ><Circle size={10} strokeWidth={3} /></span
+                  >
+                  <span class="status-text muted">Not connected</span>
+                {/if}
+              </td>
+              <td><span class="muted">{domain.account_id || "auto"} · {domain.region}</span></td>
+              <td class="actions-cell">
+                <div class="actions-wrap">
+                  <select bind:value={toolSelections[domain.domain]} class="select-tool">
+                    <option value="npm">npm</option>
+                    <option value="pip">pip</option>
+                    <option value="twine">twine</option>
+                  </select>
+                  <button
+                    class="btn-sm btn-primary"
+                    onclick={() => doLogin(domain)}
+                    disabled={busyDomains[domain.domain] || busyAll}
+                  >
+                    {#if busyDomains[domain.domain]}
+                      <span class="spinner-sm"></span>
+                    {/if}
+                    {isLoggedIn ? "Refresh Token" : "Login"}
+                  </button>
+                  <button class="btn-sm btn-secondary" onclick={() => openEdit(domain)}>Edit</button
+                  >
+                  <button
+                    class="btn-sm btn-danger"
+                    onclick={() => removeDomain(domain)}
+                    disabled={deleting[domain.domain]}
+                  >
+                    {deleting[domain.domain] ? "…" : "Delete"}
+                  </button>
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {#each domains as domain (domain.domain)}
-              {@const tool = toolFor(domain)}
-              {@const token = tokenFor(domain.domain, tool)}
-              {@const isLoggedIn = !!token}
-              <tr>
-                <td class="name">
-                  {domain.domain}
-                  {#if domain.namespace}<code class="namespace" style="margin-left:8px">{domain.namespace}</code>{/if}
-                </td>
-                <td><span class="badge">{domain.repository}</span></td>
-                <td>
-                  {#if isLoggedIn}
-                    <span class="status-dot" aria-hidden="true">●</span>
-                    <span class="status-text">Connected</span>
-                  {:else}
-                    <span class="status-dot dim" aria-hidden="true">○</span>
-                    <span class="status-text muted">Not connected</span>
-                  {/if}
-                </td>
-                <td><span class="muted">{domain.account_id || "auto"} · {domain.region}</span></td>
-                <td class="actions-cell">
-                  <div class="actions-wrap">
-                    <select bind:value={toolSelections[domain.domain]} class="btn-sm" style="background:var(--bg-input); color:var(--text-normal); border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:0.2rem">
-                      <option value="npm">npm</option>
-                      <option value="pip">pip</option>
-                      <option value="twine">twine</option>
-                    </select>
-                    <button
-                      class="btn-sm btn-primary"
-                      onclick={() => doLogin(domain)}
-                      disabled={busyDomain === domain.domain}
-                    >
-                      {#if busyDomain === domain.domain}
-                        <span class="spinner-sm"></span>
-                      {:else}
-                        {isLoggedIn ? "Refresh Token" : "Login"}
-                      {/if}
-                    </button>
-                    <button class="btn-sm btn-secondary" onclick={() => openEdit(domain)}>Edit</button>
-                    <button
-                      class="btn-sm btn-danger"
-                      onclick={() => removeDomain(domain)}
-                      disabled={deleting[domain.domain]}
-                    >
-                      {deleting[domain.domain] ? "…" : "Delete"}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    {:else}
-      <div class="domain-list">
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  {:else}
+    <div class="domain-list">
       {#each domains as domain (domain.domain)}
         {@const tool = toolFor(domain)}
         {@const token = tokenFor(domain.domain, tool)}
@@ -352,7 +437,7 @@
           <div class="card-header">
             <div class="domain-title">
               <strong>{domain.domain}</strong>
-              <span class="badge">{domain.repository}</span>
+              <span class="badge badge-gray">{domain.repository}</span>
               {#if domain.namespace}
                 <code class="namespace">{domain.namespace}</code>
               {/if}
@@ -364,13 +449,17 @@
             </div>
             <div class="card-status">
               {#if isLoggedIn}
-                <span class="status-dot" aria-hidden="true">●</span>
+                <span class="status-dot" aria-hidden="true" style="display:inline-flex"
+                  ><CircleDot size={10} strokeWidth={3} /></span
+                >
                 <span class="muted">Connected via {tool}</span>
                 {#if formatExpiry(token!.expires_at)}
                   <span class="muted">· {formatExpiry(token!.expires_at)}</span>
                 {/if}
               {:else}
-                <span class="status-dot dim" aria-hidden="true">○</span>
+                <span class="status-dot dim" aria-hidden="true" style="display:inline-flex"
+                  ><Circle size={10} strokeWidth={3} /></span
+                >
                 <span class="muted">Not connected</span>
               {/if}
             </div>
@@ -389,7 +478,7 @@
           <div class="section">
             <div class="section-title">Authentication</div>
             <div class="auth-row">
-              <select bind:value={toolSelections[domain.domain]}>
+              <select bind:value={toolSelections[domain.domain]} class="select-tool">
                 <option value="npm">npm</option>
                 <option value="pip">pip</option>
                 <option value="twine">twine</option>
@@ -397,16 +486,17 @@
               <button
                 class="btn-primary"
                 onclick={() => doLogin(domain)}
-                disabled={busyDomain === domain.domain}
+                disabled={busyDomains[domain.domain] || busyAll}
               >
-                {#if busyDomain === domain.domain}
-                  <span class="spinner-sm"></span> Logging in…
-                {:else}
-                  {isLoggedIn ? "Refresh Token" : "Login"}
+                {#if busyDomains[domain.domain]}
+                  <span class="spinner-sm"></span>
                 {/if}
+                {isLoggedIn ? "Refresh Token" : "Login"}
               </button>
               {#if token}
-                <span class="muted">Registry: <code class="registry-url">{token.registry_url}</code></span>
+                <span class="muted"
+                  >Registry: <code class="registry-url">{token.registry_url}</code></span
+                >
               {/if}
             </div>
           </div>
@@ -449,8 +539,7 @@
           </div>
         </div>
       {/each}
-      </div>
-    {/if}
+    </div>
   {/if}
 </div>
 
@@ -489,7 +578,9 @@
         <input bind:value={form.region} placeholder="us-east-1" />
       </FormField>
       <div class="modal-actions">
-        <button class="btn-secondary" onclick={() => (showModal = false)} disabled={saving}>Cancel</button>
+        <button class="btn-secondary" onclick={() => (showModal = false)} disabled={saving}
+          >Cancel</button
+        >
         <button class="btn-primary" onclick={saveDomain} disabled={saving}>
           {#if saving}
             <span class="spinner-sm"></span> Saving…
@@ -559,14 +650,11 @@
   .card-actions {
     grid-area: actions;
     display: flex;
-    gap: 0.3rem;
+    justify-content: flex-end;
   }
-  .badge {
-    background: var(--accent, #2563eb);
-    color: #fff;
-    padding: 0.1rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.78rem;
+  .actions {
+    display: flex;
+    gap: 0.3rem;
   }
   .namespace {
     font-size: 0.85rem;
@@ -658,8 +746,26 @@
     color: var(--text-muted, #888);
     font-size: 0.85rem;
   }
+  .sso-banner a {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    color: #fbbf24;
+    text-decoration: underline;
+  }
   .sso-spinner {
     margin-top: 0.2rem;
     color: #fbbf24;
+  }
+  .select-tool {
+    background: #222;
+    color: #e0e0e0;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+  }
+  .select-tool option {
+    background: #222;
+    color: #e0e0e0;
   }
 </style>

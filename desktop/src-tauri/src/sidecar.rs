@@ -40,7 +40,7 @@ pub async fn spawn_and_wait(app: &AppHandle) -> Result<SidecarInfo, String> {
             app.shell()
                 .sidecar("devo-sidecar")
                 .map_err(|e| format!("sidecar placeholder not found: {e}"))?
-                .args(["--port", "0"])
+                .args(["--port", "0", "--log-level", "info"])
                 .spawn()
                 .map_err(|e| format!("failed to spawn sidecar: {e}"))?
         }

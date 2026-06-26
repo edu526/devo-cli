@@ -127,7 +127,9 @@
     </h1>
     <div class="header-actions">
       <SearchInput bind:value={query} placeholder="Filter instances…" />
-      <button class="btn-primary" onclick={openCreate}>New Instance</button>
+      <div class="actions">
+        <button class="btn-primary" onclick={openCreate}>New Instance</button>
+      </div>
     </div>
   </div>
 
@@ -211,11 +213,7 @@
       {/if}
 
       <FormField label="Name" required error={formErrors.name}>
-        <input
-          bind:value={form.name}
-          disabled={!!editingName}
-          placeholder="prod-bastion"
-        />
+        <input bind:value={form.name} disabled={!!editingName} placeholder="prod-bastion" />
       </FormField>
       <FormField label="Instance ID" required error={formErrors.instance_id}>
         <input bind:value={form.instance_id} placeholder="i-0abc123def456" />
@@ -248,9 +246,4 @@
 {/if}
 
 <style>
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-  }
 </style>

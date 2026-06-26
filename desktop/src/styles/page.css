@@ -24,6 +24,12 @@
   gap: 0.5rem;
 }
 
+.header-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
 .actions {
   display: flex;
   gap: 0.5rem;
@@ -50,29 +56,30 @@
 }
 
 .btn-primary {
-  background: #4f8ef7;
+  background: var(--accent);
   color: #fff;
 }
 .btn-primary:hover:not(:disabled) {
-  background: #3a7de8;
+  background: var(--accent-hover);
 }
 
 .btn-secondary {
-  background: #2a2a2a;
-  color: #c0c0c0;
-  border: 1px solid #3a3a3a;
+  background: var(--bg-panel);
+  color: var(--text-normal);
+  border: 1px solid var(--border-strong);
 }
 .btn-secondary:hover:not(:disabled) {
-  background: #333;
+  background: var(--border-strong);
 }
 
 .btn-danger {
-  background: #3a1a1a;
-  color: #f87171;
-  border: 1px solid #5a2a2a;
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 .btn-danger:hover:not(:disabled) {
-  background: #4a2020;
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
 }
 
 .btn-primary:disabled,

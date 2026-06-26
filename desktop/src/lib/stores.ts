@@ -15,12 +15,12 @@ export type AppStatus = "loading" | "ready" | "error";
 export const sidecar = writable<SidecarInfo | null>(null);
 export const appStatus = writable<AppStatus>("loading");
 export const appError = writable<string | null>(null);
-export const currentPage = writable<Page>("connections");
+export const currentPage = writable<Page>("databases");
 export const wsConnected = writable<boolean>(false);
 function createViewModeStore(pageId: string) {
   const key = `devo_view_mode_${pageId}`;
   const store = writable<"table" | "card">(
-    (localStorage.getItem(key) as "table" | "card") || "card"
+    (localStorage.getItem(key) as "table" | "card") || "card",
   );
   store.subscribe((value) => {
     localStorage.setItem(key, value);

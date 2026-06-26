@@ -4,6 +4,7 @@
   import { ws, type WsMessage } from "../lib/ws";
   import { errorLog, clearErrorLog } from "../lib/error-log";
   import SearchInput from "../lib/SearchInput.svelte";
+  import { Play, Pause, RefreshCw } from "@lucide/svelte";
 
   type LogLevel = "ALL" | "DEBUG" | "INFO" | "WARN" | "ERROR";
 
@@ -192,10 +193,20 @@
   <div class="page-header">
     <h1>Logs</h1>
     <div class="actions">
-      <button class="btn-secondary" onclick={togglePause} disabled={loading}>
-        {paused ? "▶ Resume" : "⏸ Pause"}
+      <button
+        class="btn-secondary"
+        style="display:inline-flex; align-items:center; gap:0.4rem;"
+        onclick={togglePause}
+        disabled={loading}
+      >
+        {#if paused}<Play size={14} /> Resume{:else}<Pause size={14} /> Pause{/if}
       </button>
-      <button class="btn-secondary" onclick={() => load()} disabled={loading}>↺ Refresh</button>
+      <button
+        class="btn-secondary"
+        style="display:inline-flex; align-items:center; gap:0.4rem;"
+        onclick={() => load()}
+        disabled={loading}><RefreshCw size={14} /> Refresh</button
+      >
       <button class="btn-danger" onclick={clear} disabled={clearing}>
         {clearing ? "Clearing…" : "Clear"}
       </button>
