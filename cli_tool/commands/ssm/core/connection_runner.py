@@ -4,6 +4,7 @@ Moved from commands/ssm/commands/database/connect.py so both the CLI and the
 sidecar REST API can share the same implementation without duplicating logic.
 """
 
+import logging
 import socket
 import subprocess
 import threading
@@ -25,6 +26,7 @@ from cli_tool.commands.ssm.core.states import (
     TRANSIENT_STATES,
 )
 
+logger = logging.getLogger(__name__)
 console = Console()
 
 _RECONNECT_DELAY = 3
@@ -86,8 +88,13 @@ class ForwarderRegistry:
 
     def stop_all(self) -> None:
         with self._lock:
-            for pf in self._forwarders:
-                pf.stop_all()
+            forwarders = list(self._forwarders)
+            record_names = list(self._records.keys())
+
+        for pf in forwarders:
+            pf.stop_all()
+        for name in record_names:
+            self.stop_one(name)
 
     # --- Sidecar path: per-connection records ---
 
@@ -117,10 +124,29 @@ class ForwarderRegistry:
         proc = record.ssm_proc
         pf = record.pf
         if proc is not None:
+            import sys
+
             try:
-                proc.terminate()
-            except ProcessLookupError:
-                pass
+                if sys.platform == "win32":
+                    import psutil
+
+                    try:
+                        parent = psutil.Process(proc.pid)
+                        for child in parent.children(recursive=True):
+                            try:
+                                child.terminate()
+                            except psutil.NoSuchProcess:
+                                pass
+                        parent.terminate()
+                    except psutil.NoSuchProcess:
+                        pass
+                else:
+                    proc.terminate()
+            except Exception:
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
         if pf is not None:
             pf.stop_all()
 
@@ -165,6 +191,20 @@ def _is_port_bindable(address: str, port: int) -> bool:
             s.bind((address, port))
             return True
         except OSError:
+            import platform
+            import subprocess
+
+            if platform.system() == "Windows" and address != "127.0.0.1":
+                # Check if the port is occupied by our own stale port proxy rule.
+                # If so, we can safely "bind" because our elevated start command will overwrite it.
+                try:
+                    res = subprocess.run(["netsh", "interface", "portproxy", "show", "v4tov4"], capture_output=True, text=True)
+                    for line in res.stdout.splitlines():
+                        parts = line.split()
+                        if len(parts) >= 2 and parts[0] == address and parts[1] == str(port):
+                            return True
+                except Exception:
+                    pass
             return False
 
 
@@ -245,12 +285,17 @@ def _run_attempt(
         pf = PortForwarder()
         if registry is not None:
             registry.add(pf)
-        pf.start_forward(local_address, db_config["port"], actual_local_port)
+        logger.info("[TIMING][%s] Starting portproxy (UAC) setup...", db_config.get("host", "?"))
+        _t0 = time.monotonic()
+        pf.start_forward(local_address, db_config["port"], actual_local_port, allow_uac_prompt=(record is not None))
+        logger.info("[TIMING][%s] portproxy done in %.1fs", db_config.get("host", "?"), time.monotonic() - _t0)
     if record is not None:
         record.pf = pf
 
     try:
         if record is not None:
+            logger.info("[TIMING][%s] Spawning SSM process...", db_config.get("host", "?"))
+            _t1 = time.monotonic()
             proc = SSMSession.spawn_port_forwarding_to_remote(
                 bastion=db_config["bastion"],
                 host=db_config["host"],
@@ -259,8 +304,10 @@ def _run_attempt(
                 region=db_config["region"],
                 profile=db_config.get("profile"),
             )
+            logger.info("[TIMING][%s] SSM process spawned in %.1fs (pid=%s)", db_config.get("host", "?"), time.monotonic() - _t1, proc.pid)
             record.ssm_proc = proc
             rc = proc.wait()
+            logger.info("SSM process for %s exited with code %s", db_config["host"], rc)
             record.ssm_proc = None
             return rc
         else:
@@ -341,19 +388,23 @@ def _run_connection_loop(
     def _probe_then_emit_connected(port: int, timeout: float = PROBE_TIMEOUT_SECONDS) -> None:
         """Probe localhost:port in background; emit 'connected' when ready."""
         deadline = time.monotonic() + timeout
+        attempt = 0
+        _probe_start = time.monotonic()
         while time.monotonic() < deadline:
             if _should_stop():
                 return
             try:
                 with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+                    elapsed = time.monotonic() - _probe_start
+                    logger.info("[TIMING][%s] Port %s ready after %.1fs (%d probe attempt(s))", name, port, elapsed, attempt + 1)
                     if (record is None or record.state in TRANSIENT_STATES) and not _should_stop():
                         _emit_state(CONNECTED)
                     return
             except OSError:
+                attempt += 1
                 time.sleep(0.5)
-        # Timed out — SSM process is running but port not ready; emit anyway
-        if (record is None or record.state in TRANSIENT_STATES) and not _should_stop():
-            _emit_state(CONNECTED)
+        # Timed out
+        logger.warning("[TIMING][%s] Probe timed out after %.1fs waiting for port %s", name, PROBE_TIMEOUT_SECONDS, port)
 
     _emit_state(STARTING)
     if record is not None and record.started_at is None:
@@ -400,6 +451,13 @@ def _run_connection_loop(
             threading.Thread(target=_probe_then_emit_connected, args=(actual_local_port,), daemon=True).start()
         if record is not None:
             record.attempts += 1
+        if SSMSession._is_token_expired(region=db_config["region"], profile=db_config.get("profile")):
+            console.print(_TOKENS_EXPIRED_MSG)
+            console.print(_TOKENS_REFRESH_MSG)
+            _emit_state(EXPIRED_CREDENTIALS)
+            _join_probe()
+            return
+
         try:
             _run_attempt(db_config, actual_local_port, use_hostname_forwarding, registry, record)
         except KeyboardInterrupt:
@@ -485,6 +543,38 @@ def _process_db_for_table(
     fallback_port = db_config["port"] if use_hostname_forwarding else 15432
     preferred_local_port = db_config.get("local_port", fallback_port)
     actual_local_port = get_unique_local_port(preferred_local_port)
+
+    if use_hostname_forwarding:
+        import platform
+
+        if platform.system() == "Windows":
+            import ctypes
+            import os
+            import subprocess
+
+            if ctypes.windll.shell32.IsUserAnAdmin() == 0 and "PYTEST_CURRENT_TEST" not in os.environ:
+                rule_exists = False
+                try:
+                    res = subprocess.run(["netsh", "interface", "portproxy", "show", "v4tov4"], capture_output=True, text=True)
+                    for line in res.stdout.splitlines():
+                        parts = line.split()
+                        if (
+                            len(parts) >= 4
+                            and parts[0] == local_address
+                            and parts[1] == str(db_config["port"])
+                            and parts[2] == "127.0.0.1"
+                            and parts[3] == str(actual_local_port)
+                        ):
+                            rule_exists = True
+                            break
+                except Exception:
+                    pass
+
+                if not rule_exists:
+                    console.print(f"[red]✗ {name}: Permission denied. Please run your terminal as Administrator to configure port forwarding.[/red]")
+                    status = "[red]✗ Requires Administrator[/red]"
+                    return (name, f"{local_address}:{db_config['port']}", "-", remote, profile, status), None, True
+
     if actual_local_port != preferred_local_port:
         console.print(f"[yellow]⚠ {name}: Port {preferred_local_port} in use, using {actual_local_port} instead[/yellow]")
     status = f"[yellow]✓ Port {actual_local_port}[/yellow]" if actual_local_port != preferred_local_port else "[green]✓ Connected[/green]"

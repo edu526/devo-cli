@@ -35,4 +35,4 @@ TRANSIENT_STATES: frozenset[str] = frozenset({STARTING, CONNECTING})
 TERMINAL_STATES: frozenset[str] = frozenset({STOPPED, ERROR, EXPIRED_CREDENTIALS})
 
 # Probe timeout (seconds) — moved from hardcoded 15.0 in connection_runner.py
-PROBE_TIMEOUT_SECONDS: float = 15.0
+PROBE_TIMEOUT_SECONDS: float = 60.0

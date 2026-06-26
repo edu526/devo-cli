@@ -15,6 +15,19 @@ _TOKEN_EXPIRED_PATTERNS = [
     "token has expired",
     "credentials have expired",
     "authfailure",
+    "sso session associated with this profile has expired",
+    "sso session has expired",
+    "is otherwise invalid",
+    "the security token included in the request is invalid",
+    "the security token included in the request is expired",
+    "invalidclienttokenid",
+    "expiredtoken",
+    "ssotokenloaderror",
+    "tokenretrievalerror",
+    "credentialretrievalerror",
+    "unauthorizedssotokenerror",
+    "nocredentialserror",
+    "error loading sso token",
 ]
 
 
@@ -59,17 +72,37 @@ class SSMSession:
         Returns True only when the STS call explicitly indicates token expiry.
         Returns False on network errors or any other non-expiry failures so that
         reconnect attempts are not incorrectly suppressed.
+        Uses boto3 to avoid hanging on auto-refresh behavior in AWS CLI v2.
         """
-        cmd = ["aws", "sts", "get-caller-identity", "--region", region]
-        if profile:
-            cmd.extend(["--profile", profile])
+        import boto3
+        from botocore.exceptions import BotoCoreError, ClientError
+
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, shell=platform.system() == "Windows")
-            if result.returncode == 0:
-                return False
-            error_text = (result.stderr + result.stdout).lower()
-            return any(pattern in error_text for pattern in _TOKEN_EXPIRED_PATTERNS)
-        except Exception:
+            import botocore.session as _bc_session
+
+            # Force a brand-new botocore session so we never read a stale
+            # in-memory token from a previous SSO cycle. The sidecar is a
+            # long-running process, so boto3's default caching would keep
+            # the old expired token until the process restarts.
+            bc = _bc_session.get_session()
+            bc.set_config_variable("profile", profile)
+
+            session = boto3.Session(botocore_session=bc, region_name=region)
+            session.client("sts").get_caller_identity()
+            return False
+        except (BotoCoreError, ClientError) as e:
+            error_text = str(e).lower()
+            matched = any(pattern in error_text for pattern in _TOKEN_EXPIRED_PATTERNS)
+            import logging
+
+            logging.getLogger(__name__).warning(
+                f"[_is_token_expired] error_text={error_text!r}, matched={matched}, patterns={_TOKEN_EXPIRED_PATTERNS[:3]}..."
+            )
+            return matched
+        except Exception as e:
+            import logging
+
+            logging.getLogger(__name__).warning(f"[_is_token_expired] unknown exception type {type(e)}: {e}")
             return False
 
     @staticmethod

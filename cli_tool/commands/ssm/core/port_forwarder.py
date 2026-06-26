@@ -52,7 +52,7 @@ class PortForwarder:
                     "Stop that service or use --no-hosts to connect without hostname forwarding."
                 )
 
-    def start_forward(self, local_address: str, local_port: int, target_port: int) -> Optional[int]:
+    def start_forward(self, local_address: str, local_port: int, target_port: int, allow_uac_prompt: bool = True) -> Optional[int]:
         """
         Start port forwarding from local_address:local_port to 127.0.0.1:target_port
 
@@ -65,7 +65,8 @@ class PortForwarder:
             self.stop_forward(local_address, local_port)
 
         if self.system == "Windows":
-            return self._start_forward_windows(local_address, local_port, target_port)
+            self._start_forward_windows(local_address, local_port, target_port, allow_uac_prompt)
+            return None
         else:
             return self._start_forward_unix(local_address, local_port, target_port)
 
@@ -151,61 +152,129 @@ class PortForwarder:
         except Exception:
             pass
 
-    def _start_forward_windows(self, local_address: str, local_port: int, target_port: int) -> None:
-        """Start forwarding using netsh portproxy (Windows)"""
+    def _start_forward_windows(self, local_address: str, local_port: int, target_port: int, allow_uac_prompt: bool = True) -> None:
+        """Start forwarding using netsh portproxy (Windows) with UAC elevation."""
+        import ctypes
+        import ctypes.wintypes
+        import subprocess
+
         key = f"{local_address}:{local_port}"
 
-        # Clear any stale rule from a previous session before adding a new one.
-        # Persistent registry rules are the Windows analogue of orphan socat
-        # processes on Unix.
-        self._kill_orphaned_portproxy(local_address, local_port)
-
-        # netsh portproxy requires admin privileges
-        cmd = [
-            "netsh",
-            "interface",
-            "portproxy",
-            "add",
-            "v4tov4",
-            f"listenaddress={local_address}",
-            f"listenport={local_port}",
-            "connectaddress=127.0.0.1",
-            f"connectport={target_port}",
-        ]
-
+        # Check if the exact rule already exists to avoid unnecessary UAC prompts (e.g., on auto-reconnect)
         try:
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
+            res = subprocess.run(["netsh", "interface", "portproxy", "show", "v4tov4"], capture_output=True, text=True)
+            for line in res.stdout.splitlines():
+                parts = line.split()
+                if (
+                    len(parts) >= 4
+                    and parts[0] == local_address
+                    and parts[1] == str(local_port)
+                    and parts[2] == "127.0.0.1"
+                    and parts[3] == str(target_port)
+                ):
+                    self.processes[key] = None
+                    return
+        except Exception:
+            pass
 
-            # Store a marker (netsh doesn't return a process)
-            self.processes[key] = None
+        # Clear any stale rule and add the new one
+        delete_cmd = f"netsh interface portproxy delete v4tov4 listenaddress={local_address} listenport={local_port}"
+        add_cmd = (
+            f"netsh interface portproxy add v4tov4 listenaddress={local_address} listenport={local_port} "
+            f"connectaddress=127.0.0.1 connectport={target_port}"
+        )
 
-        except subprocess.CalledProcessError as e:
-            stderr = e.stderr if e.stderr else ""
-            stdout = e.stdout if e.stdout else ""
-            error_output = stderr + stdout
-            error_lower = error_output.lower()
+        if not allow_uac_prompt:
+            try:
+                subprocess.run(["cmd.exe", "/c", f"{delete_cmd} & {add_cmd}"], capture_output=True, text=True, check=True)
+                self.processes[key] = None
+                return
+            except subprocess.CalledProcessError as e:
+                error_output = (e.stderr or "") + (e.stdout or "")
+                error_lower = error_output.lower()
 
-            # Check for permission/elevation errors in multiple languages
-            permission_keywords = [
-                "access is denied",
-                "denied",
-                "acceso denegado",
-                "requiere elevación",
-                "requiere elevacion",
-                "requires elevation",
-                "ejecutar como administrador",
-                "run as administrator",
+                permission_keywords = [
+                    "access is denied",
+                    "denied",
+                    "acceso denegado",
+                    "requiere elevación",
+                    "requiere elevacion",
+                    "requires elevation",
+                    "ejecutar como administrador",
+                    "run as administrator",
+                ]
+
+                if any(keyword in error_lower for keyword in permission_keywords):
+                    raise PermissionError(
+                        "Permission denied. Please run your terminal as Administrator:\n"
+                        "  1. Right-click on Git Bash, Command Prompt or PowerShell\n"
+                        "  2. Select 'Run as administrator'\n"
+                        "  3. Run the command again"
+                    )
+                else:
+                    raise RuntimeError(f"Failed to create port proxy: {error_output.strip() or 'Unknown error'}")
+
+        # If UAC prompt IS allowed, use ShellExecuteExW
+        combined_cmd = f'/c "{delete_cmd} & {add_cmd}"'
+
+        SEE_MASK_NOCLOSEPROCESS = 0x00000040
+
+        class SHELLEXECUTEINFOW(ctypes.Structure):
+            _fields_ = [
+                ("cbSize", ctypes.wintypes.DWORD),
+                ("fMask", ctypes.wintypes.ULONG),
+                ("hwnd", ctypes.wintypes.HWND),
+                ("lpVerb", ctypes.c_wchar_p),
+                ("lpFile", ctypes.c_wchar_p),
+                ("lpParameters", ctypes.c_wchar_p),
+                ("lpDirectory", ctypes.c_wchar_p),
+                ("nShow", ctypes.c_int),
+                ("hInstApp", ctypes.wintypes.HINSTANCE),
+                ("lpIDList", ctypes.c_void_p),
+                ("lpClass", ctypes.c_wchar_p),
+                ("hkeyClass", ctypes.wintypes.HKEY),
+                ("dwHotKey", ctypes.wintypes.DWORD),
+                ("hIconOrMonitor", ctypes.wintypes.HANDLE),
+                ("hProcess", ctypes.wintypes.HANDLE),
             ]
 
-            if any(keyword in error_lower for keyword in permission_keywords):
-                raise PermissionError(
-                    "Permission denied. Please run your terminal as Administrator:\n"
-                    "  1. Right-click on Git Bash, Command Prompt or PowerShell\n"
-                    "  2. Select 'Run as administrator'\n"
-                    "  3. Run the command again"
-                )
-            else:
-                raise RuntimeError(f"Failed to create port proxy: {error_output.strip() or 'Unknown error'}")
+        info = SHELLEXECUTEINFOW()
+        info.cbSize = ctypes.sizeof(info)
+        info.fMask = SEE_MASK_NOCLOSEPROCESS
+        info.lpVerb = "runas"
+        info.lpFile = "cmd.exe"
+        info.lpParameters = combined_cmd
+        info.nShow = 0  # SW_HIDE
+
+        import threading
+
+        if not hasattr(self.__class__, "_uac_lock"):
+            self.__class__._uac_lock = threading.Lock()
+
+        with self.__class__._uac_lock:
+            if not ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(info)):
+                error_code = ctypes.windll.kernel32.GetLastError()
+                if error_code in (1223, 5):  # ERROR_CANCELLED or ERROR_ACCESS_DENIED
+                    raise PermissionError("Elevation cancelled. Please allow the UAC prompt to configure port forwarding.")
+                raise RuntimeError(f"Failed to elevate netsh command. Error code: {error_code}")
+
+            process = info.hProcess
+            if process:
+                # Wait up to 30 seconds for the elevated process to finish
+                wait_res = ctypes.windll.kernel32.WaitForSingleObject(process, 30000)
+                if wait_res != 0:
+                    ctypes.windll.kernel32.CloseHandle(process)
+                    raise RuntimeError("Elevated netsh process timed out.")
+
+                exit_code = ctypes.wintypes.DWORD()
+                ctypes.windll.kernel32.GetExitCodeProcess(process, ctypes.byref(exit_code))
+                ctypes.windll.kernel32.CloseHandle(process)
+
+                if exit_code.value != 0:
+                    raise RuntimeError(f"Elevated netsh failed with exit code {exit_code.value}")
+
+        # Store a marker (netsh doesn't return a process)
+        self.processes[key] = None
 
     def stop_forward(self, local_address: str, local_port: int):
         """Stop port forwarding"""
