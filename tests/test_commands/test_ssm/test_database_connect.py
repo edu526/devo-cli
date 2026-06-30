@@ -707,7 +707,7 @@ class TestConnectDatabases:
             with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
                 mock_hm_cls.return_value.get_managed_entries.return_value = []
                 with patch(f"{_MODULE}.console") as mock_console:
-                    _connect_databases(databases, no_hosts=False)
+                    _connect_databases(databases, no_hosts=False, no_auto_setup=True)
         calls_str = str(mock_console.print.call_args_list)
         assert "No databases" in calls_str
 
@@ -717,7 +717,7 @@ class TestConnectDatabases:
             with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
                 mock_hm_cls.return_value.get_managed_entries.return_value = []
                 with patch(f"{_MODULE}.console") as mock_console:
-                    _connect_databases(databases, no_hosts=False)
+                    _connect_databases(databases, no_hosts=False, no_auto_setup=True)
         calls_str = str(mock_console.print.call_args_list)
         assert "No databases" in calls_str
 

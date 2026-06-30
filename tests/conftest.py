@@ -1,3 +1,5 @@
+import queue
+
 """
 Pytest configuration and shared fixtures for the Devo CLI test suite.
 
@@ -252,3 +254,29 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "integration: Integration tests for CLI commands")
     config.addinivalue_line("markers", "platform: Platform-specific tests")
     config.addinivalue_line("markers", "slow: Slow tests (skipped by default)")
+
+
+# ============================================================================
+# EventHub Mock Fixture
+# ============================================================================
+
+
+class MockLoop:
+    def call_soon_threadsafe(self, func, *args):
+        func(*args)
+
+
+@pytest.fixture(autouse=True)
+def mock_eventhub_subscribe(mocker):
+    """
+    Patch EventHub.subscribe across all tests to return a thread-safe sync Queue.
+    This prevents 'RuntimeError: no running event loop' in sync tests that use EventHub.
+    """
+
+    def fake_subscribe(self):
+        q = queue.Queue()
+        with self._lock:
+            self._subscribers.append((q, MockLoop()))
+        return q
+
+    mocker.patch("cli_tool.sidecar.state.EventHub.subscribe", fake_subscribe, autospec=False)
