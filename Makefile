@@ -65,8 +65,8 @@ endif
 
 # Install package in editable mode with dev dependencies
 install:
-	@echo "Installing package with all dependencies (dev + docs)..."
-	pip install -e ".[dev,docs]"
+	@echo "Installing package with all dependencies (dev + docs + sidecar)..."
+	pip install -e ".[dev,docs,sidecar]"
 	@echo "Installing pre-commit hooks..."
 	pre-commit install && pre-commit install --hook-type pre-push
 	@echo "✓ Package and all dependencies installed"
