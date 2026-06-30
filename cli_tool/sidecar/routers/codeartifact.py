@@ -1,7 +1,6 @@
 """CodeArtifact registry endpoints /api/v1/codeartifact."""
 
 import logging
-import subprocess
 import threading
 from typing import Any
 
@@ -10,13 +9,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from cli_tool.sidecar.deps import get_app_state, require_bearer
 from cli_tool.sidecar.services.codeartifact_service import (
     SSOLoginRequired,
+    _resolve_profile,
     create_domain,
     delete_domain,
     get_domains,
     list_active_tokens,
     login,
     update_domain,
-    _resolve_profile,
 )
 
 logger = logging.getLogger(__name__)
@@ -124,7 +123,9 @@ def login_endpoint(body: dict[str, Any], request: Request) -> dict[str, Any]:
 
         hub = get_app_state(request).event_hub
         threading.Thread(
-            target=_do_sso_login_and_publish, args=(hub, exc.profile), daemon=True,
+            target=_do_sso_login_and_publish,
+            args=(hub, exc.profile),
+            daemon=True,
         ).start()
         return JSONResponse(
             status_code=status.HTTP_202_ACCEPTED,
@@ -150,7 +151,9 @@ def login_endpoint(body: dict[str, Any], request: Request) -> dict[str, Any]:
 
                 hub = get_app_state(request).event_hub
                 threading.Thread(
-                    target=_do_sso_login_and_publish, args=(hub, profile), daemon=True,
+                    target=_do_sso_login_and_publish,
+                    args=(hub, profile),
+                    daemon=True,
                 ).start()
                 return JSONResponse(
                     status_code=status.HTTP_202_ACCEPTED,

@@ -97,9 +97,6 @@ Pipfile.lock
 # poetry
 poetry.lock
 
-# pdm
-.pdm.toml
-
 # PEP 582
 __pypackages__/
 

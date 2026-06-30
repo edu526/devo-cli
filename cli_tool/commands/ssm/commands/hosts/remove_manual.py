@@ -3,6 +3,7 @@
 Used by the desktop app's UAC helper for entries that have no matching
 db name in ~/.devo/config.json (orphan hosts, manual additions).
 """
+
 import click
 from rich.console import Console
 

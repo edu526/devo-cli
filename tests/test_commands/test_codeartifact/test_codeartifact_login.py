@@ -70,9 +70,7 @@ def test_codeartifact_login_authentication_failure(cli_runner, mock_config_value
     import subprocess
 
     mock_run = mocker.patch("subprocess.run")
-    mock_run.side_effect = subprocess.CalledProcessError(
-        returncode=1, cmd=["aws", "codeartifact", "login"], stderr="AccessDeniedException"
-    )
+    mock_run.side_effect = subprocess.CalledProcessError(returncode=1, cmd=["aws", "codeartifact", "login"], stderr="AccessDeniedException")
     result = cli_runner.invoke(codeartifact_login, [], obj={})
     assert result.exit_code == 1
     assert "Failed: 2" in result.output

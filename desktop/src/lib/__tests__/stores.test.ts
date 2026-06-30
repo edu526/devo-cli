@@ -16,8 +16,8 @@ describe("stores", () => {
     expect(get(appError)).toBeNull();
   });
 
-  it("currentPage defaults to connections", () => {
-    expect(get(currentPage)).toBe("connections");
+  it("currentPage defaults to databases", () => {
+    expect(get(currentPage)).toBe("databases");
   });
 
   it("wsConnected defaults to false", () => {

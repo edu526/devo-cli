@@ -4,6 +4,7 @@ Used by the desktop app's UAC helper when an entry was added directly via
 the UI (no matching db name in ~/.devo/config.json). The regular
 `devo ssm hosts add <name>` only works for configured dbs.
 """
+
 import click
 from rich.console import Console
 

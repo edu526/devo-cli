@@ -99,7 +99,8 @@ class TestIsPortBindable:
             mock_sock.bind.return_value = None
             assert _is_port_bindable("127.0.0.2", 5432) is True
 
-    def test_returns_false_when_port_is_occupied(self):
+    @patch("platform.system", return_value="Linux")
+    def test_returns_false_when_port_is_occupied(self, mock_system):
         with patch(f"{_RUNNER}.socket.socket") as mock_socket_cls:
             mock_sock = MagicMock()
             mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
@@ -448,7 +449,7 @@ class TestRunAttempt:
             with patch(f"{_RUNNER}.SSMSession") as mock_session:
                 mock_session.start_port_forwarding_to_remote.return_value = 0
                 _run_attempt(db_config, 15432, use_hostname_forwarding=True)
-        mock_pf.start_forward.assert_called_once_with("127.0.0.2", 5432, 15432)
+        mock_pf.start_forward.assert_called_once_with("127.0.0.2", 5432, 15432, allow_uac_prompt=False)
         mock_pf.stop_all.assert_called_once()
 
     def test_skips_port_forwarder_without_hostname_forwarding(self):

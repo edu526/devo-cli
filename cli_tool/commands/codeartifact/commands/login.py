@@ -20,14 +20,16 @@ def _load_domain_configs():
     domains = get_config_value("codeartifact.domains", [])
     result = []
     for d in domains:
-        result.append({
-            "domain": d["domain"],
-            "repository": d["repository"],
-            "namespace": d.get("namespace", ""),
-            "account_id": d.get("account_id", ""),
-            "profile": d.get("profile", ""),
-            "region": d.get("region", global_region),
-        })
+        result.append(
+            {
+                "domain": d["domain"],
+                "repository": d["repository"],
+                "namespace": d.get("namespace", ""),
+                "account_id": d.get("account_id", ""),
+                "profile": d.get("profile", ""),
+                "region": d.get("region", global_region),
+            }
+        )
     return result
 
 
@@ -67,7 +69,11 @@ def _list_available_packages(auth, domain_cfgs: list[dict], cli_profile: str | N
 
         with console.status(f"[blue]Fetching packages from {dc['domain']}...", spinner="dots"):
             packages_with_versions = auth.list_packages_with_versions(
-                dc["domain"], dc["repository"], dc["namespace"], profile, region,
+                dc["domain"],
+                dc["repository"],
+                dc["namespace"],
+                profile,
+                region,
             )
 
         if packages_with_versions:
@@ -131,7 +137,11 @@ def codeartifact_login(ctx):
         with console.status(f"[yellow]Authenticating with {label}{extra}...", spinner="dots"):
             auth = CodeArtifactAuthenticator(region, [(dc["domain"], dc["repository"], dc["namespace"])])
             success, error = auth.authenticate_domain(
-                dc["domain"], dc["repository"], dc["namespace"], profile, region,
+                dc["domain"],
+                dc["repository"],
+                dc["namespace"],
+                profile,
+                region,
             )
 
         if success:
