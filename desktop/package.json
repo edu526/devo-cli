@@ -18,7 +18,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "prepare": "cd .. && pre-commit install && pre-commit install --hook-type pre-push",
-    "kill-zombies": "powershell -ExecutionPolicy Bypass -File kill-zombies.ps1"
+    "kill-zombies": "node scripts/kill-zombies.mjs"
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.2",
