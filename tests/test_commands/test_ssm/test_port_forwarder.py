@@ -275,7 +275,7 @@ def test_start_forward_windows_success(mocker):
     pf = _make_forwarder("Windows")
     mocker.patch("subprocess.run")
 
-    result = pf.start_forward("127.0.0.2", 5432, 15432)
+    result = pf.start_forward("127.0.0.2", 5432, 15432, allow_uac_prompt=False)
 
     assert result is None
     assert "127.0.0.2:5432" in pf.processes
@@ -287,16 +287,17 @@ def test_start_forward_windows_clears_orphan_portproxy_first(mocker):
     pf = _make_forwarder("Windows")
     mock_run = mocker.patch("subprocess.run")
 
-    pf.start_forward("127.0.0.2", 5432, 15432)
+    pf.start_forward("127.0.0.2", 5432, 15432, allow_uac_prompt=False)
 
     assert mock_run.call_count == 2
-    delete_call, add_call = mock_run.call_args_list
-    delete_cmd = delete_call.args[0]
-    add_cmd = add_call.args[0]
-    assert delete_cmd[:5] == ["netsh", "interface", "portproxy", "delete", "v4tov4"]
-    assert "listenaddress=127.0.0.2" in delete_cmd
-    assert "listenport=5432" in delete_cmd
-    assert add_cmd[3] == "add"
+    show_call, combined_call = mock_run.call_args_list
+    assert show_call.args[0][:4] == ["netsh", "interface", "portproxy", "show"]
+
+    combined_cmd = combined_call.args[0]
+    assert combined_cmd[:2] == ["cmd.exe", "/c"]
+    command_str = combined_cmd[2]
+    assert "delete v4tov4 listenaddress=127.0.0.2 listenport=5432" in command_str
+    assert "add v4tov4 listenaddress=127.0.0.2 listenport=5432 connectaddress=127.0.0.1 connectport=15432" in command_str
 
 
 @pytest.mark.unit
@@ -313,7 +314,7 @@ def test_start_forward_windows_orphan_cleanup_failure_does_not_abort(mocker):
 
     mocker.patch("subprocess.run", side_effect=run_side_effect)
 
-    result = pf.start_forward("127.0.0.2", 5432, 15432)
+    result = pf.start_forward("127.0.0.2", 5432, 15432, allow_uac_prompt=False)
 
     assert result is None
     assert "127.0.0.2:5432" in pf.processes
@@ -330,7 +331,7 @@ def test_start_forward_windows_permission_error(mocker):
     mocker.patch("subprocess.run", side_effect=error)
 
     with pytest.raises(PermissionError, match="Permission denied"):
-        pf.start_forward("127.0.0.2", 5432, 15432)
+        pf.start_forward("127.0.0.2", 5432, 15432, allow_uac_prompt=False)
 
 
 @pytest.mark.unit
@@ -343,7 +344,7 @@ def test_start_forward_windows_generic_error(mocker):
     mocker.patch("subprocess.run", side_effect=error)
 
     with pytest.raises(RuntimeError, match="Failed to create port proxy"):
-        pf.start_forward("127.0.0.2", 5432, 15432)
+        pf.start_forward("127.0.0.2", 5432, 15432, allow_uac_prompt=False)
 
 
 # ============================================================================

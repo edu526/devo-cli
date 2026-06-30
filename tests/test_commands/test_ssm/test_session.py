@@ -254,9 +254,8 @@ def test_start_session_without_profile(mocker):
 @pytest.mark.unit
 def test_is_token_expired_returns_false_when_sts_succeeds(mocker):
     """Returns False when get-caller-identity succeeds (tokens valid)."""
-    mock_result = MagicMock()
-    mock_result.returncode = 0
-    mocker.patch("subprocess.run", return_value=mock_result)
+    mock_session = MagicMock()
+    mocker.patch("boto3.Session", return_value=mock_session)
 
     result = SSMSession._is_token_expired()
 
@@ -266,11 +265,19 @@ def test_is_token_expired_returns_false_when_sts_succeeds(mocker):
 @pytest.mark.unit
 def test_is_token_expired_returns_true_on_expired_token_exception(mocker):
     """Returns True when stderr contains ExpiredTokenException."""
-    mock_result = MagicMock()
-    mock_result.returncode = 1
-    mock_result.stderr = "An error occurred (ExpiredTokenException) when calling the GetCallerIdentity operation"
-    mock_result.stdout = ""
-    mocker.patch("subprocess.run", return_value=mock_result)
+    from botocore.exceptions import ClientError
+
+    mock_session = MagicMock()
+    mock_client = MagicMock()
+    mock_session.client.return_value = mock_client
+    error_response = {
+        "Error": {
+            "Code": "ExpiredTokenException",
+            "Message": "An error occurred (ExpiredTokenException) when calling the GetCallerIdentity operation",
+        }
+    }
+    mock_client.get_caller_identity.side_effect = ClientError(error_response, "GetCallerIdentity")
+    mocker.patch("boto3.Session", return_value=mock_session)
 
     result = SSMSession._is_token_expired()
 
@@ -280,11 +287,14 @@ def test_is_token_expired_returns_true_on_expired_token_exception(mocker):
 @pytest.mark.unit
 def test_is_token_expired_returns_true_on_token_has_expired(mocker):
     """Returns True when error message says 'token has expired'."""
-    mock_result = MagicMock()
-    mock_result.returncode = 1
-    mock_result.stderr = "The security token included in the request is expired"
-    mock_result.stdout = ""
-    mocker.patch("subprocess.run", return_value=mock_result)
+    from botocore.exceptions import ClientError
+
+    mock_session = MagicMock()
+    mock_client = MagicMock()
+    mock_session.client.return_value = mock_client
+    error_response = {"Error": {"Code": "InvalidToken", "Message": "The security token included in the request is expired"}}
+    mock_client.get_caller_identity.side_effect = ClientError(error_response, "GetCallerIdentity")
+    mocker.patch("boto3.Session", return_value=mock_session)
 
     result = SSMSession._is_token_expired()
 
@@ -294,11 +304,14 @@ def test_is_token_expired_returns_true_on_token_has_expired(mocker):
 @pytest.mark.unit
 def test_is_token_expired_returns_false_on_unrelated_error(mocker):
     """Returns False when the STS error is not related to token expiry."""
-    mock_result = MagicMock()
-    mock_result.returncode = 1
-    mock_result.stderr = "Could not connect to the endpoint URL"
-    mock_result.stdout = ""
-    mocker.patch("subprocess.run", return_value=mock_result)
+    from botocore.exceptions import ClientError
+
+    mock_session = MagicMock()
+    mock_client = MagicMock()
+    mock_session.client.return_value = mock_client
+    error_response = {"Error": {"Code": "ConnectionError", "Message": "Could not connect to the endpoint URL"}}
+    mock_client.get_caller_identity.side_effect = ClientError(error_response, "GetCallerIdentity")
+    mocker.patch("boto3.Session", return_value=mock_session)
 
     result = SSMSession._is_token_expired()
 
@@ -307,8 +320,8 @@ def test_is_token_expired_returns_false_on_unrelated_error(mocker):
 
 @pytest.mark.unit
 def test_is_token_expired_returns_false_on_exception(mocker):
-    """Returns False when subprocess raises an exception (e.g. aws not found)."""
-    mocker.patch("subprocess.run", side_effect=FileNotFoundError)
+    """Returns False when boto3 raises an unexpected exception."""
+    mocker.patch("boto3.Session", side_effect=Exception("General error"))
 
     result = SSMSession._is_token_expired()
 
@@ -317,16 +330,14 @@ def test_is_token_expired_returns_false_on_exception(mocker):
 
 @pytest.mark.unit
 def test_is_token_expired_includes_profile_in_command(mocker):
-    """Includes --profile in the sts command when profile is provided."""
-    mock_result = MagicMock()
-    mock_result.returncode = 0
-    mock_run = mocker.patch("subprocess.run", return_value=mock_result)
+    """Sets the --profile in the botocore session when profile is provided."""
+    mock_bc = MagicMock()
+    mocker.patch("botocore.session.get_session", return_value=mock_bc)
+    mocker.patch("boto3.Session")
 
     SSMSession._is_token_expired(region="eu-west-1", profile="my-profile")
 
-    cmd = mock_run.call_args[0][0]
-    assert "--profile" in cmd
-    assert "my-profile" in cmd
+    mock_bc.set_config_variable.assert_called_with("profile", "my-profile")
 
 
 # ============================================================================

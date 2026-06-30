@@ -69,9 +69,8 @@ class TestRefreshAllHappyPath:
     def test_publishes_success_event_with_verified_names(self, mocker):
         app, app_state = _make_app()
 
-        # Subscribe BEFORE the request so the queue is wired up when
-        # the background thread fires the publish.
-        q = app_state.event_hub.subscribe()
+        published_events = []
+        mocker.patch.object(app_state.event_hub, "publish", side_effect=lambda ev, p: published_events.append({"event": ev, **p}))
 
         mocker.patch(
             "cli_tool.commands.aws_login.core.config.list_aws_profiles",
@@ -95,14 +94,25 @@ class TestRefreshAllHappyPath:
             assert r.status_code == 202, r.text
             assert "Refresh started" in r.json()["message"]
 
-        msg = _drain_for(q, "profile.refreshed", timeout=2.0)
-        assert msg is not None, "profile.refreshed event was not published"
-        assert msg["success"] is True
-        assert msg["names"] == ["dev"]
+        import time
+
+        start = time.time()
+        while time.time() - start < 2.0:
+            events = [e for e in published_events if e["event"] == "profile.refreshed"]
+            if events:
+                msg = events[0]
+                assert msg["success"] is True
+                assert msg["names"] == ["dev"]
+                return
+            time.sleep(0.01)
+
+        pytest.fail("profile.refreshed event was not published")
 
     def test_publishes_success_when_nothing_to_refresh(self, mocker):
         app, app_state = _make_app()
-        q = app_state.event_hub.subscribe()
+
+        published_events = []
+        mocker.patch.object(app_state.event_hub, "publish", side_effect=lambda ev, p: published_events.append({"event": ev, **p}))
 
         mocker.patch(
             "cli_tool.commands.aws_login.core.config.list_aws_profiles",
@@ -117,14 +127,25 @@ class TestRefreshAllHappyPath:
             r = client.post("/api/v1/profiles:refresh_all", headers=AUTH)
             assert r.status_code == 202
 
-        msg = _drain_for(q, "profile.refreshed", timeout=2.0)
-        assert msg is not None
-        assert msg["success"] is True
-        assert msg["names"] == []
+        import time
+
+        start = time.time()
+        while time.time() - start < 2.0:
+            events = [e for e in published_events if e["event"] == "profile.refreshed"]
+            if events:
+                msg = events[0]
+                assert msg["success"] is True
+                assert msg["names"] == []
+                return
+            time.sleep(0.01)
+
+        pytest.fail("profile.refreshed event was not published")
 
     def test_publishes_failure_on_pipeline_error(self, mocker):
         app, app_state = _make_app()
-        q = app_state.event_hub.subscribe()
+
+        published_events = []
+        mocker.patch.object(app_state.event_hub, "publish", side_effect=lambda ev, p: published_events.append({"event": ev, **p}))
 
         mocker.patch(
             "cli_tool.commands.aws_login.core.config.list_aws_profiles",
@@ -135,10 +156,19 @@ class TestRefreshAllHappyPath:
             r = client.post("/api/v1/profiles:refresh_all", headers=AUTH)
             assert r.status_code == 202
 
-        msg = _drain_for(q, "profile.refreshed", timeout=2.0)
-        assert msg is not None
-        assert msg["success"] is False
-        assert "boto3 not configured" in msg["error"]
+        import time
+
+        start = time.time()
+        while time.time() - start < 2.0:
+            events = [e for e in published_events if e["event"] == "profile.refreshed"]
+            if events:
+                msg = events[0]
+                assert msg["success"] is False
+                assert "boto3 not configured" in msg["error"]
+                return
+            time.sleep(0.01)
+
+        pytest.fail("profile.refreshed event was not published")
 
 
 @pytest.mark.unit
