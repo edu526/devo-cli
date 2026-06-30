@@ -26,7 +26,10 @@ class EventHub:
 
     def subscribe(self) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=200)
-        loop = asyncio.get_running_loop()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
         with self._lock:
             self._subscribers.append((q, loop))
         return q
@@ -48,7 +51,10 @@ class EventHub:
                 except asyncio.QueueFull:
                     pass
 
-            loop.call_soon_threadsafe(_do_put)
+            if loop is not None:
+                loop.call_soon_threadsafe(_do_put)
+            else:
+                _do_put()
 
 
 @dataclass
