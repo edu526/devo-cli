@@ -182,19 +182,34 @@ def test_connect_database_without_hostname_forwarding(cli_runner, mock_ssm_confi
     # Database configured with localhost
     mock_ssm_config["ssm"]["databases"] = sample_database_config
 
-    # Mock SSMSession to raise KeyboardInterrupt (simulate user stopping)
+    # Mock SSMSession to simulate process running
     mock_ssm_session = mocker.patch("cli_tool.commands.ssm.core.connection_runner.SSMSession")
     mock_ssm_session._is_token_expired.return_value = False
-    mock_ssm_session.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt()
+
+    mock_proc = MagicMock()
+    mock_proc.pid = 12345
+    mock_proc.poll.return_value = None
+    mock_ssm_session.spawn_port_forwarding_to_remote.return_value = mock_proc
+
+    import time
+
+    original_sleep = time.sleep
+
+    def sleep_mock(secs):
+        if secs == 1:
+            raise KeyboardInterrupt()
+        original_sleep(secs)
+
+    mocker.patch("time.sleep", side_effect=sleep_mock)
 
     result = cli_runner.invoke(connect_database, ["test-db", "--no-hosts"])
 
     assert result.exit_code == 0
     assert "Starting connections" in result.output
-    assert "Connection closed" in result.output
+    assert "All connections closed" in result.output
 
     # Verify SSM session was started
-    mock_ssm_session.start_port_forwarding_to_remote.assert_called_once_with(
+    mock_ssm_session.spawn_port_forwarding_to_remote.assert_called_once_with(
         bastion="i-1234567890abcdef0", host="test-db.example.com", port=5432, local_port=15432, region="us-east-1", profile="test-profile"
     )
 
@@ -205,7 +220,11 @@ def test_connect_database_ssm_session_failure_expired_tokens(cli_runner, mock_ss
     mock_ssm_config["ssm"]["databases"] = sample_database_config
 
     mock_ssm_session = mocker.patch("cli_tool.commands.ssm.core.connection_runner.SSMSession")
-    mock_ssm_session.start_port_forwarding_to_remote.return_value = 1
+    mock_proc = MagicMock()
+    mock_proc.pid = 12345
+    mock_proc.poll.return_value = 1
+    mock_proc.returncode = 1
+    mock_ssm_session.spawn_port_forwarding_to_remote.return_value = mock_proc
     mock_ssm_session._is_token_expired.return_value = True
 
     result = cli_runner.invoke(connect_database, ["test-db"])
