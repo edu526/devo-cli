@@ -28,6 +28,8 @@ _TOKEN_EXPIRED_PATTERNS = [
     "unauthorizedssotokenerror",
     "nocredentialserror",
     "error loading sso token",
+    "could not be found",
+    "accessdenied",
 ]
 
 
@@ -130,11 +132,14 @@ class SSMSession:
         region: str = "us-east-1",
         profile: Optional[str] = None,
         local_address: str = "127.0.0.1",
+        capture_output: bool = True,
     ) -> subprocess.Popen:
         """Same as start_port_forwarding_to_remote but returns the live Popen handle.
 
         Caller is responsible for plugin preflight. Use stop_one() / proc.terminate()
         to end the session without touching other active connections.
+        capture_output=True (sidecar): pipes stdout/stderr for programmatic handling.
+        capture_output=False (CLI): lets AWS print directly to the terminal.
         """
         cmd = SSMSession._build_port_forwarding_cmd(bastion, host, port, local_port, region, profile)
 
@@ -143,11 +148,14 @@ class SSMSession:
         # and cleanly terminate the child process instead, preventing ugly tracebacks.
         start_new_session = platform.system() != "Windows"
 
+        stdout = subprocess.PIPE if capture_output else None
+        stderr = subprocess.PIPE if capture_output else None
+
         return subprocess.Popen(
             cmd,
             shell=platform.system() == "Windows",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=stdout,
+            stderr=stderr,
             text=True,
             start_new_session=start_new_session,
         )

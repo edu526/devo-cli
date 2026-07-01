@@ -320,8 +320,27 @@ def _run_attempt(
             )
             logger.info("[TIMING][%s] SSM process spawned in %.1fs (pid=%s)", db_config.get("host", "?"), time.monotonic() - _t1, proc.pid)
             record.ssm_proc = proc
-            rc = proc.wait()
+            stdout, stderr = proc.communicate()
+            rc = proc.returncode
             logger.info("SSM process for %s exited with code %s", db_config["host"], rc)
+            if rc != 0 and stderr:
+                logger.error(f"SSM Error: {stderr.strip()}")
+                error_lower = stderr.lower()
+                if "sessionmanagerplugin is not found" in error_lower or "session-manager-plugin" in error_lower:
+                    SSMSession._show_plugin_installation_guide()
+                else:
+                    from rich.panel import Panel
+
+                    console.print(
+                        Panel(
+                            stderr.strip(),
+                            title=f"[bold red]AWS Error — {db_config['host']}[/bold red]",
+                            border_style="red",
+                            padding=(0, 1),
+                        )
+                    )
+                    if "accessdenied" in error_lower or "could not be found" in error_lower:
+                        record.error_message = stderr.strip()
             record.ssm_proc = None
             return rc
         else:
@@ -332,6 +351,7 @@ def _run_attempt(
                 local_port=actual_local_port,
                 region=db_config["region"],
                 profile=db_config.get("profile"),
+                capture_output=False,
             )
             while proc.poll() is None:
                 if registry is not None and registry.stop_event.is_set():
@@ -362,7 +382,8 @@ def _run_attempt(
                 import time as _t
 
                 _t.sleep(0.2)
-            return proc.returncode or 0
+            rc = proc.returncode or 0
+            return rc
     finally:
         if record is not None:
             record.pf = None
@@ -481,6 +502,8 @@ def _run_connection_loop(
             record.probe_thread = None
 
     is_reconnect = False
+    reconnect_attempts = 0
+    MAX_RECONNECT_ATTEMPTS = 5
     while True:
         if _should_stop():
             _emit_state(STOPPED)
@@ -503,7 +526,29 @@ def _run_connection_loop(
             return
 
         try:
+            import time as _t
+
+            _attempt_start = _t.monotonic()
             _run_attempt(db_config, actual_local_port, use_hostname_forwarding, registry, record)
+
+            if record is not None and getattr(record, "error_message", None):
+                console.print(f"[red]✗ {name}: {record.error_message}[/red]")
+                _emit_state(ERROR, error=record.error_message)
+                _join_probe()
+                return
+
+            if _t.monotonic() - _attempt_start > 10:
+                reconnect_attempts = 0
+            else:
+                reconnect_attempts += 1
+
+            if reconnect_attempts >= MAX_RECONNECT_ATTEMPTS:
+                msg = f"Failed to connect after {MAX_RECONNECT_ATTEMPTS} attempts. Aborting."
+                console.print(f"[red]✗ {name}: {msg}[/red]")
+                _emit_state(ERROR, error=msg)
+                _join_probe()
+                return
+
         except KeyboardInterrupt:
             console.print("\n[green]Connection closed[/green]")
             _emit_state(STOPPED)
