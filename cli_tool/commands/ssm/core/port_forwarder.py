@@ -299,7 +299,8 @@ class PortForwarder:
             try:
                 if process.pid > 1:
                     if hasattr(os, "killpg") and hasattr(os, "getpgid"):
-                        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                        sig = getattr(signal, "SIGKILL", 9)
+                        os.killpg(os.getpgid(process.pid), sig)
                     else:
                         process.kill()
             except ProcessLookupError:
