@@ -78,6 +78,8 @@ test:
 		venv/bin/pytest tests/ -v; \
 	elif [ -f "venv/Scripts/pytest.exe" ]; then \
 		venv/Scripts/pytest.exe tests/ -v; \
+	elif [ -f ".venv/Scripts/pytest.exe" ]; then \
+		.venv/Scripts/pytest.exe tests/ -v; \
 	else \
 		echo "Error: pytest not found in venv. Run 'make install' first."; \
 		exit 1; \
