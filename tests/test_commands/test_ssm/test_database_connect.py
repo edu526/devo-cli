@@ -437,7 +437,11 @@ class TestRunAttempt:
     def test_returns_exit_code_from_ssm(self):
         db_config = _make_db_config()
         with patch(f"{_RUNNER}.SSMSession") as mock_session:
-            mock_session.start_port_forwarding_to_remote.return_value = 0
+            mock_proc = MagicMock()
+            mock_proc.pid = 12345
+            mock_proc.poll.return_value = 0
+            mock_proc.returncode = 0
+            mock_session.spawn_port_forwarding_to_remote.return_value = mock_proc
             result = _run_attempt(db_config, 15432, use_hostname_forwarding=False)
         assert result == 0
 
@@ -447,7 +451,11 @@ class TestRunAttempt:
             mock_pf = MagicMock()
             mock_pf_cls.return_value = mock_pf
             with patch(f"{_RUNNER}.SSMSession") as mock_session:
-                mock_session.start_port_forwarding_to_remote.return_value = 0
+                mock_proc = MagicMock()
+                mock_proc.pid = 12345
+                mock_proc.poll.return_value = 0
+                mock_proc.returncode = 0
+                mock_session.spawn_port_forwarding_to_remote.return_value = mock_proc
                 _run_attempt(db_config, 15432, use_hostname_forwarding=True)
         mock_pf.start_forward.assert_called_once_with("127.0.0.2", 5432, 15432, allow_uac_prompt=False)
         mock_pf.stop_all.assert_called_once()
@@ -456,7 +464,11 @@ class TestRunAttempt:
         db_config = _make_db_config()
         with patch(f"{_RUNNER}.PortForwarder") as mock_pf_cls:
             with patch(f"{_RUNNER}.SSMSession") as mock_session:
-                mock_session.start_port_forwarding_to_remote.return_value = 0
+                mock_proc = MagicMock()
+                mock_proc.pid = 12345
+                mock_proc.poll.return_value = 0
+                mock_proc.returncode = 0
+                mock_session.spawn_port_forwarding_to_remote.return_value = mock_proc
                 _run_attempt(db_config, 15432, use_hostname_forwarding=False)
         mock_pf_cls.assert_not_called()
 
@@ -467,7 +479,7 @@ class TestRunAttempt:
             mock_pf = MagicMock()
             mock_pf_cls.return_value = mock_pf
             with patch(f"{_RUNNER}.SSMSession") as mock_session:
-                mock_session.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt
+                mock_session.spawn_port_forwarding_to_remote.side_effect = KeyboardInterrupt
                 with pytest.raises(KeyboardInterrupt):
                     _run_attempt(db_config, 15432, use_hostname_forwarding=True)
         mock_pf.stop_all.assert_called_once()

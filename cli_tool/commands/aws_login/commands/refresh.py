@@ -164,8 +164,10 @@ def _update_default_credentials_after_refresh(refreshed_profiles: list) -> None:
         console.print("[yellow]⚠ Could not update [default] credentials[/yellow]")
 
 
-def refresh_all_profiles():
-    """Refresh all profiles that are expired or expiring soon."""
+def refresh_all_profiles(force: bool = False):
+    """Refresh all profiles that are expired or expiring soon.
+    If force is True, refreshes all profiles regardless of expiration.
+    """
     profiles = list_aws_profiles()
     if not profiles:
         console.print("[yellow]No AWS profiles found[/yellow]")
@@ -173,6 +175,12 @@ def refresh_all_profiles():
 
     with spinner("Checking all profiles for expiration..."):
         profiles_to_refresh, profiles_valid = _classify_profiles(profiles)
+
+    if force:
+        # If forced, move all valid profiles to the refresh list
+        for prof, _ in profiles_valid:
+            profiles_to_refresh.append((prof, "Forced refresh"))
+        profiles_valid = []
 
     if not profiles_to_refresh:
         console.print("[green]✓ All profiles have valid credentials[/green]\n")

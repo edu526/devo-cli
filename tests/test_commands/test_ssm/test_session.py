@@ -252,92 +252,75 @@ def test_start_session_without_profile(mocker):
 
 
 @pytest.mark.unit
-def test_is_token_expired_returns_false_when_sts_succeeds(mocker):
-    """Returns False when get-caller-identity succeeds (tokens valid)."""
-    mock_session = MagicMock()
-    mocker.patch("boto3.Session", return_value=mock_session)
+def test_is_token_expired_returns_false_when_check_succeeds(mocker):
+    """Returns False when credentials are valid."""
+    mocker.patch(
+        "cli_tool.commands.aws_login.core.credentials.check_profile_credentials_available",
+        return_value=(True, ""),
+    )
 
-    result = SSMSession._is_token_expired()
+    result = SSMSession._is_token_expired(profile="dev")
 
     assert result is False
 
 
 @pytest.mark.unit
-def test_is_token_expired_returns_true_on_expired_token_exception(mocker):
-    """Returns True when stderr contains ExpiredTokenException."""
-    from botocore.exceptions import ClientError
+def test_is_token_expired_returns_true_on_expired_token_error_message(mocker):
+    """Returns True when error message contains an expired token pattern."""
+    mocker.patch(
+        "cli_tool.commands.aws_login.core.credentials.check_profile_credentials_available",
+        return_value=(False, "An error occurred (ExpiredTokenException) when calling the GetCallerIdentity operation"),
+    )
 
-    mock_session = MagicMock()
-    mock_client = MagicMock()
-    mock_session.client.return_value = mock_client
-    error_response = {
-        "Error": {
-            "Code": "ExpiredTokenException",
-            "Message": "An error occurred (ExpiredTokenException) when calling the GetCallerIdentity operation",
-        }
-    }
-    mock_client.get_caller_identity.side_effect = ClientError(error_response, "GetCallerIdentity")
-    mocker.patch("boto3.Session", return_value=mock_session)
-
-    result = SSMSession._is_token_expired()
+    result = SSMSession._is_token_expired(profile="dev")
 
     assert result is True
 
 
 @pytest.mark.unit
-def test_is_token_expired_returns_true_on_token_has_expired(mocker):
+def test_is_token_expired_returns_true_on_token_has_expired_message(mocker):
     """Returns True when error message says 'token has expired'."""
-    from botocore.exceptions import ClientError
+    mocker.patch(
+        "cli_tool.commands.aws_login.core.credentials.check_profile_credentials_available",
+        return_value=(False, "The security token included in the request is expired"),
+    )
 
-    mock_session = MagicMock()
-    mock_client = MagicMock()
-    mock_session.client.return_value = mock_client
-    error_response = {"Error": {"Code": "InvalidToken", "Message": "The security token included in the request is expired"}}
-    mock_client.get_caller_identity.side_effect = ClientError(error_response, "GetCallerIdentity")
-    mocker.patch("boto3.Session", return_value=mock_session)
-
-    result = SSMSession._is_token_expired()
+    result = SSMSession._is_token_expired(profile="dev")
 
     assert result is True
 
 
 @pytest.mark.unit
 def test_is_token_expired_returns_false_on_unrelated_error(mocker):
-    """Returns False when the STS error is not related to token expiry."""
-    from botocore.exceptions import ClientError
+    """Returns False when the error is not related to token expiry."""
+    mocker.patch(
+        "cli_tool.commands.aws_login.core.credentials.check_profile_credentials_available",
+        return_value=(False, "Could not connect to the endpoint URL"),
+    )
 
-    mock_session = MagicMock()
-    mock_client = MagicMock()
-    mock_session.client.return_value = mock_client
-    error_response = {"Error": {"Code": "ConnectionError", "Message": "Could not connect to the endpoint URL"}}
-    mock_client.get_caller_identity.side_effect = ClientError(error_response, "GetCallerIdentity")
-    mocker.patch("boto3.Session", return_value=mock_session)
-
-    result = SSMSession._is_token_expired()
+    result = SSMSession._is_token_expired(profile="dev")
 
     assert result is False
 
 
 @pytest.mark.unit
 def test_is_token_expired_returns_false_on_exception(mocker):
-    """Returns False when boto3 raises an unexpected exception."""
-    mocker.patch("boto3.Session", side_effect=Exception("General error"))
+    """Returns False when an unexpected exception occurs."""
+    mocker.patch(
+        "cli_tool.commands.aws_login.core.credentials.check_profile_credentials_available",
+        side_effect=Exception("General error"),
+    )
 
-    result = SSMSession._is_token_expired()
+    result = SSMSession._is_token_expired(profile="dev")
 
     assert result is False
 
 
 @pytest.mark.unit
-def test_is_token_expired_includes_profile_in_command(mocker):
-    """Sets the --profile in the botocore session when profile is provided."""
-    mock_bc = MagicMock()
-    mocker.patch("botocore.session.get_session", return_value=mock_bc)
-    mocker.patch("boto3.Session")
-
-    SSMSession._is_token_expired(region="eu-west-1", profile="my-profile")
-
-    mock_bc.set_config_variable.assert_called_with("profile", "my-profile")
+def test_is_token_expired_returns_false_without_profile():
+    """Returns False if no profile is provided."""
+    result = SSMSession._is_token_expired(profile=None)
+    assert result is False
 
 
 # ============================================================================

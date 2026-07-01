@@ -141,10 +141,24 @@ class ForwarderRegistry:
                     except psutil.NoSuchProcess:
                         pass
                 else:
-                    proc.terminate()
+                    import os
+                    import signal
+
+                    try:
+                        if proc.pid > 1:
+                            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
             except Exception:
                 try:
-                    proc.terminate()
+                    import os
+                    import signal
+
+                    if sys.platform != "win32":
+                        if proc.pid > 1:
+                            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    else:
+                        proc.terminate()
                 except Exception:
                     pass
         if pf is not None:
@@ -311,7 +325,7 @@ def _run_attempt(
             record.ssm_proc = None
             return rc
         else:
-            return SSMSession.start_port_forwarding_to_remote(
+            proc = SSMSession.spawn_port_forwarding_to_remote(
                 bastion=db_config["bastion"],
                 host=db_config["host"],
                 port=db_config["port"],
@@ -319,6 +333,36 @@ def _run_attempt(
                 region=db_config["region"],
                 profile=db_config.get("profile"),
             )
+            while proc.poll() is None:
+                if registry is not None and registry.stop_event.is_set():
+                    import os
+                    import signal
+                    import sys
+
+                    try:
+                        if sys.platform != "win32":
+                            if proc.pid > 1:
+                                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                        else:
+                            import psutil
+
+                            try:
+                                parent = psutil.Process(proc.pid)
+                                for child in parent.children(recursive=True):
+                                    try:
+                                        child.terminate()
+                                    except psutil.NoSuchProcess:
+                                        pass
+                                parent.terminate()
+                            except psutil.NoSuchProcess:
+                                pass
+                    except Exception:
+                        pass
+                    break
+                import time as _t
+
+                _t.sleep(0.2)
+            return proc.returncode or 0
     finally:
         if record is not None:
             record.pf = None

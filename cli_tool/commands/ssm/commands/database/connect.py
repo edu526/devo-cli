@@ -120,6 +120,8 @@ def _connect_databases(databases: dict, no_hosts: bool, no_auto_setup: bool = Fa
         while any(thread.is_alive() for _, thread in threads):
             time.sleep(1)
     except KeyboardInterrupt:
+        pass  # Handled in finally block
+    finally:
         try:
             console.print("\n[cyan]Stopping all connections...[/cyan]")
             registry.stop_event.set()

@@ -163,14 +163,15 @@ def configure_cmd(profile):
 
 
 @aws_login.command("refresh")
-def refresh_cmd():
+@click.option("--force", is_flag=True, help="Force refresh even if credentials are valid.")
+def refresh_cmd(force: bool):
     """Refresh expired or expiring credentials.
 
     Checks all profiles and refreshes those that are expired
     or expiring within 10 minutes. Groups profiles by SSO
     session to minimize login prompts.
     """
-    refresh_all_profiles()
+    refresh_all_profiles(force=force)
 
 
 @aws_login.command("set-default")

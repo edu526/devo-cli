@@ -178,7 +178,16 @@ def _parse_command_name(argv: list) -> str | None:
 
 def main():
     import os
+    import signal
     import sys
+
+    def _handle_fatal_signal(signum, frame):
+        # Translate SIGHUP/SIGTERM into a clean exit so `finally` blocks and `atexit` run
+        sys.exit(128 + signum)
+
+    if hasattr(signal, "SIGHUP"):
+        signal.signal(signal.SIGHUP, _handle_fatal_signal)
+    signal.signal(signal.SIGTERM, _handle_fatal_signal)
 
     is_autocomplete = "_DEVO_COMPLETE" in os.environ
 
@@ -199,6 +208,10 @@ def main():
         if not is_autocomplete:
             telemetry_thread = capture_command(cmd_name, success=(e.code == 0))
         raise
+    except KeyboardInterrupt:
+        if not is_autocomplete:
+            telemetry_thread = capture_command(cmd_name, success=False)
+        sys.exit(130)
     except Exception as e:
         if not is_autocomplete:
             telemetry_thread = capture_error(cmd_name, e)

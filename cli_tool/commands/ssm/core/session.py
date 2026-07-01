@@ -72,27 +72,25 @@ class SSMSession:
         Returns True only when the STS call explicitly indicates token expiry.
         Returns False on network errors or any other non-expiry failures so that
         reconnect attempts are not incorrectly suppressed.
-        Uses boto3 to avoid hanging on auto-refresh behavior in AWS CLI v2.
+        We use the AWS CLI via export-credentials rather than boto3 to ensure
+        we share the same credential cache as the AWS CLI.
         """
-        import boto3
-        from botocore.exceptions import BotoCoreError, ClientError
+        if not profile:
+            # If no profile is provided, we can't easily check via export-credentials
+            # but usually profile is provided for SSO sessions.
+            return False
 
         try:
-            import botocore.session as _bc_session
+            from cli_tool.commands.aws_login.core.credentials import check_profile_credentials_available
 
-            # Force a brand-new botocore session so we never read a stale
-            # in-memory token from a previous SSO cycle. The sidecar is a
-            # long-running process, so boto3's default caching would keep
-            # the old expired token until the process restarts.
-            bc = _bc_session.get_session()
-            bc.set_config_variable("profile", profile)
+            available, error_msg = check_profile_credentials_available(profile)
+            if available:
+                return False
 
-            session = boto3.Session(botocore_session=bc, region_name=region)
-            session.client("sts").get_caller_identity()
+            if error_msg:
+                error_text = error_msg.lower()
+                return any(pattern in error_text for pattern in _TOKEN_EXPIRED_PATTERNS)
             return False
-        except (BotoCoreError, ClientError) as e:
-            error_text = str(e).lower()
-            return any(pattern in error_text for pattern in _TOKEN_EXPIRED_PATTERNS)
         except Exception:
             return False
 
@@ -139,12 +137,19 @@ class SSMSession:
         to end the session without touching other active connections.
         """
         cmd = SSMSession._build_port_forwarding_cmd(bastion, host, port, local_port, region, profile)
+
+        # Start the AWS process in a new session (process group) on Unix so it doesn't receive
+        # SIGINT directly when the user presses Ctrl+C. The parent process will catch SIGINT
+        # and cleanly terminate the child process instead, preventing ugly tracebacks.
+        start_new_session = platform.system() != "Windows"
+
         return subprocess.Popen(
             cmd,
             shell=platform.system() == "Windows",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            start_new_session=start_new_session,
         )
 
     @staticmethod

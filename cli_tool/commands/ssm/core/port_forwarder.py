@@ -111,7 +111,8 @@ class PortForwarder:
         cmd = ["socat", f"TCP-LISTEN:{local_port},bind={local_address},reuseaddr,fork", f"TCP:127.0.0.1:{target_port}"]
 
         try:
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # noqa: S603
+            start_new_session = platform.system() != "Windows"
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=start_new_session)  # noqa: S603
 
             # Give socat a moment to start and check if it failed immediately
             import time
@@ -290,14 +291,18 @@ class PortForwarder:
 
     def _stop_forward_unix(self, key: str):
         """Stop socat process"""
-        process = self.processes[key]
+        process = self.processes.get(key)
         if process:
+            import os
+            import signal
+
             try:
-                process.terminate()
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-        del self.processes[key]
+                if process.pid > 1:
+                    os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        if key in self.processes:
+            del self.processes[key]
 
     def _stop_forward_windows(self, local_address: str, local_port: int):
         """Remove netsh portproxy rule"""

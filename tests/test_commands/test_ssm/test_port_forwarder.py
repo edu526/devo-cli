@@ -208,6 +208,7 @@ def test_start_forward_unix_stops_existing_before_restart(mocker):
     """Stops an existing forward on the same key before starting a new one."""
     pf = _make_forwarder("Linux")
     existing_proc = MagicMock()
+    existing_proc.pid = 12345
     pf.processes["127.0.0.2:5432"] = existing_proc
 
     mock_new_proc = MagicMock()
@@ -217,10 +218,12 @@ def test_start_forward_unix_stops_existing_before_restart(mocker):
     mocker.patch.object(pf, "_kill_orphaned_socat")
     mocker.patch("subprocess.Popen", return_value=mock_new_proc)
     mocker.patch("time.sleep")
+    mock_killpg = mocker.patch("os.killpg")
+    mocker.patch("os.getpgid", return_value=12345)
 
     pf.start_forward("127.0.0.2", 5432, 15432)
 
-    existing_proc.terminate.assert_called_once()
+    mock_killpg.assert_called_once()
 
 
 # ============================================================================
@@ -354,28 +357,18 @@ def test_start_forward_windows_generic_error(mocker):
 
 @pytest.mark.unit
 def test_stop_forward_unix_terminates_process(mocker):
-    """stop_forward terminates the socat process on Linux."""
+    """stop_forward kills the socat process group on Linux."""
     pf = _make_forwarder("Linux")
     mock_proc = MagicMock()
+    mock_proc.pid = 12345
     pf.processes["127.0.0.2:5432"] = mock_proc
+
+    mock_killpg = mocker.patch("os.killpg")
+    mocker.patch("os.getpgid", return_value=12345)
 
     pf.stop_forward("127.0.0.2", 5432)
 
-    mock_proc.terminate.assert_called_once()
-    assert "127.0.0.2:5432" not in pf.processes
-
-
-@pytest.mark.unit
-def test_stop_forward_unix_kills_on_timeout(mocker):
-    """stop_forward kills the process if terminate times out."""
-    pf = _make_forwarder("Linux")
-    mock_proc = MagicMock()
-    mock_proc.wait.side_effect = subprocess.TimeoutExpired("socat", 5)
-    pf.processes["127.0.0.2:5432"] = mock_proc
-
-    pf.stop_forward("127.0.0.2", 5432)
-
-    mock_proc.kill.assert_called_once()
+    mock_killpg.assert_called_once()
     assert "127.0.0.2:5432" not in pf.processes
 
 
@@ -425,14 +418,18 @@ def test_stop_all_stops_all_processes(mocker):
     """stop_all terminates all registered forwarding processes."""
     pf = _make_forwarder("Linux")
     proc1 = MagicMock()
+    proc1.pid = 12345
     proc2 = MagicMock()
+    proc2.pid = 12346
     pf.processes["127.0.0.2:5432"] = proc1
     pf.processes["127.0.0.3:3306"] = proc2
 
+    mock_killpg = mocker.patch("os.killpg")
+    mocker.patch("os.getpgid", return_value=12345)
+
     pf.stop_all()
 
-    proc1.terminate.assert_called_once()
-    proc2.terminate.assert_called_once()
+    assert mock_killpg.call_count == 2
     assert pf.processes == {}
 
 
