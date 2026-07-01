@@ -149,7 +149,7 @@ jobs:
           else
             gh release create "$TAG" \
               --prerelease \
-              --title "Devo Desktop v${VERSION}" \
+              --title "Desktop v${VERSION}" \
               --target "$SHA" \
               --notes-file release_notes.md \
               --repo ${{ github.repository }}
@@ -226,7 +226,7 @@ jobs:
       - name: Install Python deps (sidecar extras)
         run: |
           pip install -e ".[sidecar]"
-          pip install pyinstaller
+          pip install pyinstaller pre-commit
 
       - name: Build sidecar binary
         run: pyinstaller devo-sidecar.spec --distpath dist-sidecar --workpath build-sidecar
@@ -414,3 +414,25 @@ jobs:
             Author: ${{ github.actor }}
 
             🔗 [View Workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+  cleanup-failed-release:
+    name: Cleanup Failed Release
+    runs-on: ubuntu-latest
+    needs: [create-release, build-desktop]
+    if: always() && needs.create-release.result == 'success' && needs.build-desktop.result != 'success'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Delete release and tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.create-release.outputs.tag }}"
+          if [ -n "$TAG" ]; then
+            echo "Deleting failed release and tag: $TAG"
+            gh release delete "$TAG" --cleanup-tag --yes --repo ${{ github.repository }} || true
+            git push --delete origin "$TAG" || true
+          fi
