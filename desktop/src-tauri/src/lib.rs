@@ -67,10 +67,52 @@ fn run_elevated(args: Vec<String>) -> Result<u32, String> {
     {
         elevated::run_elevated(&args).map_err(|e| e.to_string())
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        let cmd = args.join(" ");
+        let script = format!(
+            "do shell script \"{}\" with administrator privileges",
+            cmd.replace("\"", "\\\"")
+        );
+        let status = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&script)
+            .status()
+            .map_err(|e| e.to_string())?;
+
+        if status.success() {
+            Ok(0)
+        } else {
+            Err(format!("osascript failed with status: {}", status))
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let mut child = std::process::Command::new("pkexec")
+            .args(&args)
+            .spawn()
+            .or_else(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    // Fallback to sudo if pkexec is not installed (e.g. WSL)
+                    std::process::Command::new("sudo").args(&args).spawn()
+                } else {
+                    Err(e)
+                }
+            })
+            .map_err(|e| e.to_string())?;
+
+        let status = child.wait().map_err(|e| e.to_string())?;
+
+        if status.success() {
+            Ok(0)
+        } else {
+            Err(format!("elevation command failed with status: {}", status))
+        }
+    }
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     {
         let _ = args;
-        Err("run_elevated: only implemented on Windows".to_string())
+        Err("run_elevated: not implemented for this platform".to_string())
     }
 }
 

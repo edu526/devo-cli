@@ -23,6 +23,7 @@
     requestPermission,
     sendNotification,
   } from "@tauri-apps/plugin-notification";
+  import { invoke } from "@tauri-apps/api/core";
   import { Settings, RefreshCw, X } from "@lucide/svelte";
   import { open as openUrl } from "@tauri-apps/plugin-shell";
 
@@ -104,7 +105,13 @@
         .filter((r: any) => r.action === "add" || r.action === "update")
         .map((r: any) => r.hostname);
     } catch (e) {
-      console.error("Failed to check hosts:", e);
+      if (e instanceof ApiError && e.status === 401) {
+        // We know hosts are missing because the backend needs elevation to fix them.
+        // We set a dummy missing host to trigger the warning banner.
+        missingHosts = ["_needs_elevation_"];
+      } else {
+        console.error("Failed to check hosts:", e);
+      }
     }
   }
 
@@ -115,6 +122,33 @@
       await hostsApi.setup();
       missingHosts = [];
     } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        try {
+          // Optionally, if the backend sends `params: { db_names: [...] }`, we could append them:
+          const detail = typeof e.detail === "string" ? JSON.parse(e.detail) : e.detail;
+          const pythonBin = (detail && detail.params && detail.params.python_bin) ? detail.params.python_bin : "python";
+          const configDir = (detail && detail.params && detail.params.config_dir) ? detail.params.config_dir : "";
+          const useEnv = (detail && detail.params && detail.params.use_env) ? detail.params.use_env : false;
+
+          let args = [];
+          if (configDir && useEnv) {
+            args.push("env", `DEVO_CONFIG_DIR=${configDir}`);
+          }
+          args.push(pythonBin, "-m", "cli_tool.cli", "ssm", "hosts", "setup");
+
+          if (detail && detail.params && detail.params.db_names && detail.params.db_names.length > 0) {
+            args.push(...detail.params.db_names);
+          }
+
+          await invoke("run_elevated", { args });
+          // If the user approved the elevation, it successfully completed. Refresh the hosts status.
+          await checkHosts();
+          return;
+        } catch (elevateErr) {
+          actionError = elevateErr instanceof Error ? elevateErr.message : String(elevateErr);
+          return;
+        }
+      }
       actionError = e instanceof ApiError ? e.message : String(e);
     } finally {
       settingUpHosts = false;

@@ -7,8 +7,13 @@ from typing import Any, Dict, List, Optional
 
 def get_config_dir():
     """Get the configuration directory path."""
-    config_dir = Path.home() / ".devo"
-    config_dir.mkdir(exist_ok=True)
+    import os
+
+    if "DEVO_CONFIG_DIR" in os.environ:
+        config_dir = Path(os.environ["DEVO_CONFIG_DIR"])
+    else:
+        config_dir = Path.home() / ".devo"
+    config_dir.mkdir(exist_ok=True, parents=True)
     return config_dir
 
 

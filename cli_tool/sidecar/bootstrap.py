@@ -2,6 +2,7 @@
 
 import logging
 import logging.handlers
+import os
 import socket
 import sys
 from pathlib import Path
@@ -11,6 +12,8 @@ import uvicorn
 from cli_tool.commands.ssm.core.connection_runner import ForwarderRegistry
 from cli_tool.sidecar.app import create_app
 from cli_tool.sidecar.state import AppState, EventHub
+
+os.environ["DEVO_SIDECAR"] = "1"
 
 LOG_FILE = Path.home() / ".devo" / "sidecar.log"
 
