@@ -210,7 +210,13 @@ def test_connect_database_without_hostname_forwarding(cli_runner, mock_ssm_confi
 
     # Verify SSM session was started
     mock_ssm_session.spawn_port_forwarding_to_remote.assert_called_once_with(
-        bastion="i-1234567890abcdef0", host="test-db.example.com", port=5432, local_port=15432, region="us-east-1", profile="test-profile"
+        bastion="i-1234567890abcdef0",
+        host="test-db.example.com",
+        port=5432,
+        local_port=15432,
+        region="us-east-1",
+        profile="test-profile",
+        capture_output=False,
     )
 
 

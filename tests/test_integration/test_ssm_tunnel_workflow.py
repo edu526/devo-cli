@@ -163,7 +163,13 @@ def test_ssm_tunnel_complete_workflow(cli_runner, mock_ssm_config, sample_databa
 
     # Verify SSM session was called with correct parameters
     mock_ssm_session.spawn_port_forwarding_to_remote.assert_called_once_with(
-        bastion="i-1234567890abcdef0", host="test-db.example.com", port=5432, local_port=15432, region="us-east-1", profile="test-profile"
+        bastion="i-1234567890abcdef0",
+        host="test-db.example.com",
+        port=5432,
+        local_port=15432,
+        region="us-east-1",
+        profile="test-profile",
+        capture_output=False,
     )
 
     # ========== Step 3: Verify Cleanup (implicit in KeyboardInterrupt handling) ==========
@@ -316,7 +322,7 @@ def test_ssm_tunnel_multiple_simultaneous_tunnels(cli_runner, mock_ssm_config, m
 
     # Verify correct parameters for db1
     mock_ssm_session_1.spawn_port_forwarding_to_remote.assert_called_once_with(
-        bastion="i-111111111", host="db1.example.com", port=5432, local_port=15432, region="us-east-1", profile="dev"
+        bastion="i-111111111", host="db1.example.com", port=5432, local_port=15432, region="us-east-1", profile="dev", capture_output=False
     )
 
     # ========== Step 3: Establish Second Tunnel ==========
@@ -338,7 +344,7 @@ def test_ssm_tunnel_multiple_simultaneous_tunnels(cli_runner, mock_ssm_config, m
 
     # Verify correct parameters for db2
     mock_ssm_session_2.spawn_port_forwarding_to_remote.assert_called_once_with(
-        bastion="i-222222222", host="db2.example.com", port=3306, local_port=13306, region="us-east-1", profile="dev"
+        bastion="i-222222222", host="db2.example.com", port=3306, local_port=13306, region="us-east-1", profile="dev", capture_output=False
     )
 
     # ========== Step 4: Establish Third Tunnel (Different Region) ==========
@@ -360,7 +366,7 @@ def test_ssm_tunnel_multiple_simultaneous_tunnels(cli_runner, mock_ssm_config, m
 
     # Verify correct parameters for db3 (different region)
     mock_ssm_session_3.spawn_port_forwarding_to_remote.assert_called_once_with(
-        bastion="i-333333333", host="db3.example.com", port=27017, local_port=17017, region="us-west-2", profile="prod"
+        bastion="i-333333333", host="db3.example.com", port=27017, local_port=17017, region="us-west-2", profile="prod", capture_output=False
     )
 
 
@@ -462,7 +468,7 @@ def test_ssm_tunnel_state_persistence_across_connections(cli_runner, mock_ssm_co
 
     # Verify SSM session was called with correct parameters
     mock_ssm_session_1.spawn_port_forwarding_to_remote.assert_called_once_with(
-        bastion="i-persistent123", host="persistent.example.com", port=5432, local_port=15432, region="us-east-1", profile=None
+        bastion="i-persistent123", host="persistent.example.com", port=5432, local_port=15432, region="us-east-1", profile=None, capture_output=False
     )
 
     # ========== Step 3: Second Connection (using persisted config) ==========
@@ -483,7 +489,7 @@ def test_ssm_tunnel_state_persistence_across_connections(cli_runner, mock_ssm_co
 
     # Verify SSM session was called with same parameters
     mock_ssm_session_2.spawn_port_forwarding_to_remote.assert_called_once_with(
-        bastion="i-persistent123", host="persistent.example.com", port=5432, local_port=15432, region="us-east-1", profile=None
+        bastion="i-persistent123", host="persistent.example.com", port=5432, local_port=15432, region="us-east-1", profile=None, capture_output=False
     )
 
     # ========== Step 4: Third Connection (after simulated restart) ==========
@@ -504,7 +510,7 @@ def test_ssm_tunnel_state_persistence_across_connections(cli_runner, mock_ssm_co
 
     # Verify configuration persisted across all connections
     mock_ssm_session_3.spawn_port_forwarding_to_remote.assert_called_once_with(
-        bastion="i-persistent123", host="persistent.example.com", port=5432, local_port=15432, region="us-east-1", profile=None
+        bastion="i-persistent123", host="persistent.example.com", port=5432, local_port=15432, region="us-east-1", profile=None, capture_output=False
     )
 
 
@@ -561,7 +567,7 @@ def test_ssm_tunnel_with_aws_profile_switching(cli_runner, mock_ssm_config, mock
 
     # Verify correct profile was used
     mock_ssm_session_dev.spawn_port_forwarding_to_remote.assert_called_once_with(
-        bastion="i-dev123", host="dev-db.example.com", port=5432, local_port=15432, region="us-east-1", profile="dev-profile"
+        bastion="i-dev123", host="dev-db.example.com", port=5432, local_port=15432, region="us-east-1", profile="dev-profile", capture_output=False
     )
 
     # ========== Step 3: Connect to Prod Database ==========
@@ -582,5 +588,5 @@ def test_ssm_tunnel_with_aws_profile_switching(cli_runner, mock_ssm_config, mock
 
     # Verify correct profile was used (different from dev)
     mock_ssm_session_prod.spawn_port_forwarding_to_remote.assert_called_once_with(
-        bastion="i-prod456", host="prod-db.example.com", port=5432, local_port=25432, region="us-west-2", profile="prod-profile"
+        bastion="i-prod456", host="prod-db.example.com", port=5432, local_port=25432, region="us-west-2", profile="prod-profile", capture_output=False
     )

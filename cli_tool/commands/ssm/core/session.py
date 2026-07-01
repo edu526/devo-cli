@@ -19,7 +19,6 @@ _TOKEN_EXPIRED_PATTERNS = [
     "sso session has expired",
     "is otherwise invalid",
     "the security token included in the request is invalid",
-    "the security token included in the request is expired",
     "invalidclienttokenid",
     "expiredtoken",
     "ssotokenloaderror",
@@ -28,8 +27,6 @@ _TOKEN_EXPIRED_PATTERNS = [
     "unauthorizedssotokenerror",
     "nocredentialserror",
     "error loading sso token",
-    "could not be found",
-    "accessdenied",
 ]
 
 
