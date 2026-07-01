@@ -156,8 +156,22 @@
     }
   }
 
-  function blockReloads(e: KeyboardEvent) {
-    if (e.key === "F5" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "r")) {
+  function blockBrowserShortcuts(e: KeyboardEvent) {
+    if (e.key === "F5" || e.key === "F3") {
+      e.preventDefault();
+      return;
+    }
+    if (e.ctrlKey || e.metaKey) {
+      const k = e.key.toLowerCase();
+      // Bloquear Recargar (r), Buscar (f, g), Imprimir (p), Guardar (s), Abrir (o), Ver código (u)
+      // Nota: e.preventDefault() cancela la acción del navegador pero el evento JS sigue fluyendo,
+      // permitiendo atajos internos como Ctrl+S en CodeMirror de ConfigPage.
+      if (["r", "f", "g", "p", "s", "o", "u"].includes(k)) {
+        e.preventDefault();
+      }
+    }
+    // Bloquear navegación hacia atrás/adelante (Alt + flechas)
+    if (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
       e.preventDefault();
     }
   }
@@ -169,7 +183,7 @@
   onMount(async () => {
     window.addEventListener("keydown", handleKeydown, true);
     window.addEventListener("keydown", handleGlobalShortcut, true);
-    window.addEventListener("keydown", blockReloads, true);
+    window.addEventListener("keydown", blockBrowserShortcuts, true);
     window.addEventListener("contextmenu", blockContextMenu, true);
     window.addEventListener("focusin", recordFocus, true);
     window.addEventListener("input", recordInput, true);
@@ -264,7 +278,7 @@
   onDestroy(() => {
     window.removeEventListener("keydown", handleKeydown, true);
     window.removeEventListener("keydown", handleGlobalShortcut, true);
-    window.removeEventListener("keydown", blockReloads, true);
+    window.removeEventListener("keydown", blockBrowserShortcuts, true);
     window.removeEventListener("contextmenu", blockContextMenu, true);
     window.removeEventListener("focusin", recordFocus, true);
     window.removeEventListener("input", recordInput, true);

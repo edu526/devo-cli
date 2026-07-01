@@ -509,10 +509,12 @@
             Stop All
           </button>
         {/if}
-        <button class="btn-primary" onclick={openCreate}>New Database</button>
-        <button class="btn-primary" onclick={startAll} disabled={busyAll || allRows.length === 0}>
+        <button class="btn-secondary" onclick={startAll} disabled={busyAll || allRows.length === 0}>
           {#if busyAll}<span class="spinner-sm"></span>{/if}
           Start All
+        </button>
+        <button class="btn-primary" onclick={openCreate}>
+          <span class="btn-glyph">+</span> New Database
         </button>
       </div>
     </div>
@@ -809,16 +811,6 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.75rem;
-  }
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-  }
-  .actions {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
   }
   .host-cell {
     max-width: 220px;

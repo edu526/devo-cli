@@ -964,12 +964,6 @@
 {/if}
 
 <style>
-  .actions {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-  }
-
   .btn-glyph {
     font-size: 1rem;
     line-height: 1;

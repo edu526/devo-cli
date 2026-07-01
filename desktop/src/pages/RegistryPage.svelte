@@ -10,6 +10,7 @@
   import { ws } from "../lib/ws";
   import FormField from "../lib/FormField.svelte";
   import ViewToggle from "../lib/ViewToggle.svelte";
+  import SearchInput from "../lib/SearchInput.svelte";
   import { viewModes } from "../lib/stores";
   import {
     codeartifactDomainSchema,
@@ -30,6 +31,16 @@
   const initialCache = get(registryCache);
   let domains: CodeArtifactDomain[] = $state(initialCache?.domains ?? []);
   let tokens: CodeArtifactToken[] = $state(initialCache?.tokens ?? []);
+  let query = $state("");
+
+  const filteredDomains = $derived(
+    domains.filter(
+      (d) =>
+        d.domain.toLowerCase().includes(query.toLowerCase()) ||
+        (d.namespace && d.namespace.toLowerCase().includes(query.toLowerCase())) ||
+        d.repository.toLowerCase().includes(query.toLowerCase())
+    )
+  );
   let loading = $state(!initialCache);
   let actionError: string | null = $state(null);
   let busyDomains: Record<string, boolean> = $state({});
@@ -284,6 +295,7 @@
     <h1>Registry</h1>
     <div class="header-actions">
       <ViewToggle page="registry" />
+      <SearchInput bind:value={query} placeholder="Filter registries…" />
       <div class="actions">
         <button
           class="btn-secondary"
@@ -292,7 +304,9 @@
         >
           {#if busyAll}<span class="spinner-sm"></span>{/if} Refresh All
         </button>
-        <button class="btn-primary" onclick={openCreate}>New Registry</button>
+        <button class="btn-primary" onclick={openCreate}>
+          <span class="btn-glyph">+</span> New Registry
+        </button>
       </div>
     </div>
   </div>
@@ -368,7 +382,7 @@
           </tr>
         </thead>
         <tbody>
-          {#each domains as domain (domain.domain)}
+          {#each filteredDomains as domain (domain.domain)}
             {@const tool = toolFor(domain)}
             {@const token = tokenFor(domain.domain, tool)}
             {@const isLoggedIn = !!token}
@@ -429,7 +443,7 @@
     </div>
   {:else}
     <div class="domain-list">
-      {#each domains as domain (domain.domain)}
+      {#each filteredDomains as domain (domain.domain)}
         {@const tool = toolFor(domain)}
         {@const token = tokenFor(domain.domain, tool)}
         {@const isLoggedIn = !!token}
@@ -594,11 +608,6 @@
 {/if}
 
 <style>
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
   .domain-list {
     display: flex;
     flex-direction: column;
@@ -651,10 +660,6 @@
     grid-area: actions;
     display: flex;
     justify-content: flex-end;
-  }
-  .actions {
-    display: flex;
-    gap: 0.3rem;
   }
   .namespace {
     font-size: 0.85rem;

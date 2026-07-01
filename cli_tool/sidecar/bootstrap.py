@@ -69,7 +69,15 @@ def _find_free_port() -> int:
         return s.getsockname()[1]
 
 
-def run(port: int = 0, host: str = "127.0.0.1", log_level: str = "info") -> None:
+def run(port: int = 0, host: str = "127.0.0.1", log_level: str = "warning") -> None:
+    try:
+        from cli_tool.core.utils.config_manager import load_config
+
+        # Override CLI arg with config
+        log_level = "debug" if load_config().get("debug_mode") else "warning"
+    except Exception:
+        pass  # Fallback to function argument if config fails
+
     _configure_logging(log_level)
     log = logging.getLogger(__name__)
 
@@ -90,5 +98,10 @@ def run(port: int = 0, host: str = "127.0.0.1", log_level: str = "info") -> None
 
     # Handshake line read by the Tauri shell / parent process
     print(f"DEVO_SIDECAR_READY port={actual_port} token={token}", flush=True)
-
-    uvicorn.run(app, host=host, port=actual_port, log_level=log_level)
+    uvicorn.run(
+        app,
+        host=host,
+        port=actual_port,
+        log_level=log_level,
+        access_log=(log_level == "debug"),
+    )
