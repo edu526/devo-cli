@@ -92,17 +92,8 @@ class SSMSession:
             return False
         except (BotoCoreError, ClientError) as e:
             error_text = str(e).lower()
-            matched = any(pattern in error_text for pattern in _TOKEN_EXPIRED_PATTERNS)
-            import logging
-
-            logging.getLogger(__name__).warning(
-                f"[_is_token_expired] error_text={error_text!r}, matched={matched}, patterns={_TOKEN_EXPIRED_PATTERNS[:3]}..."
-            )
-            return matched
-        except Exception as e:
-            import logging
-
-            logging.getLogger(__name__).warning(f"[_is_token_expired] unknown exception type {type(e)}: {e}")
+            return any(pattern in error_text for pattern in _TOKEN_EXPIRED_PATTERNS)
+        except Exception:
             return False
 
     @staticmethod
