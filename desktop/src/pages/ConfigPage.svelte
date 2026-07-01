@@ -6,12 +6,19 @@
   import { EditorState } from "@codemirror/state";
   import { keymap } from "@codemirror/view";
   import { configApi, ApiError } from "../lib/api";
+  import { get } from "svelte/store";
+  import { configCache } from "../lib/page-stores";
 
-  let config: Record<string, unknown> = $state({});
-  let loading = $state(true);
+  const initialCache = get(configCache);
+  let config: Record<string, unknown> = $state(initialCache ?? {});
+  let loading = $state(!initialCache);
   let saving = $state(false);
   let parseError: string | null = $state(null);
   let saveOk = $state(false);
+
+  const configPath = navigator.userAgent.includes("Windows")
+    ? "%USERPROFILE%\\.devo\\config.json"
+    : "~/.devo/config.json";
 
   let editorEl: HTMLDivElement;
   let view: EditorView | null = null;
@@ -55,6 +62,7 @@
   async function load() {
     try {
       config = await configApi.get();
+      configCache.set(config);
       const text = JSON.stringify(config, null, 2);
       if (view) {
         view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
@@ -90,7 +98,7 @@
         saveOk = false;
       }, 2000);
     } catch (e) {
-      parseError = e instanceof ApiError ? String(e.detail) : String(e);
+      parseError = e instanceof ApiError ? e.message : String(e);
     } finally {
       saving = false;
     }
@@ -111,7 +119,7 @@
   onDestroy(() => view?.destroy());
 </script>
 
-<div class="page">
+<div class="page" style="height: calc(100vh - 36px - 4rem);">
   <div class="page-header">
     <h1>Config</h1>
     <div class="actions">
@@ -136,7 +144,7 @@
     <p class="muted">Loading…</p>
   {:else}
     <p class="muted hint">
-      Edit the JSON below. Changes are written to <code>~/.devo/config.json</code>.
+      Edit the JSON below. Changes are written to <code>{configPath}</code>.
       <span class="shortcuts">Ctrl+Z undo · Ctrl+Y redo · Ctrl+S save</span>
     </p>
   {/if}
@@ -157,7 +165,7 @@
 
   .editor-wrap {
     flex: 1;
-    min-height: 400px;
+    min-height: 0;
     border: 1px solid var(--border);
     border-radius: 6px;
     overflow: hidden;
@@ -176,7 +184,7 @@
     background: var(--bg-surface);
     width: 100%;
     height: 100%;
-    min-height: 400px;
+    min-height: 0;
   }
 
   .editor-wrap :global(.cm-gutters) {

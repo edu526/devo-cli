@@ -3,12 +3,12 @@ import { mount, unmount } from "svelte";
 import SearchableSelect from "../SearchableSelect.svelte";
 
 const sampleOptions = [
-  { value: "111", label: "PDM | Tooling (767398063426)" },
-  { value: "222", label: "Epicride Shared Service | Dev (609837931903)" },
-  { value: "333", label: "GenAIIC (231299271166)" },
-  { value: "444", label: "Member Portal | Prod (061039765573)" },
-  { value: "555", label: "PDM | Dev (339713060902)" },
-  { value: "666", label: "Machine Learning – Dev (195275674420)" },
+  { value: "111", label: "Project Alpha | Tooling (111111111111)" },
+  { value: "222", label: "Shared Service | Dev (222222222222)" },
+  { value: "333", label: "Project Beta (333333333333)" },
+  { value: "444", label: "Customer Portal | Prod (444444444444)" },
+  { value: "555", label: "Project Alpha | Dev (555555555555)" },
+  { value: "666", label: "Machine Learning – Dev (666666666666)" },
 ];
 
 function makeInputEvent(input: HTMLInputElement, value: string) {
@@ -37,7 +37,7 @@ describe("SearchableSelect", () => {
       props: { options: sampleOptions, value: "333" },
     });
     const input = target.querySelector("input")!;
-    expect(input.value).toBe("GenAIIC (231299271166)");
+    expect(input.value).toBe("Project Beta (333333333333)");
   });
 
   it("renders the placeholder when no option is selected", () => {
@@ -70,14 +70,14 @@ describe("SearchableSelect", () => {
     const input = target.querySelector("input")!;
     input.dispatchEvent(new FocusEvent("focus", { bubbles: true }));
     await Promise.resolve();
-    makeInputEvent(input, "pdm");
+    makeInputEvent(input, "alpha");
     await Promise.resolve();
     const options = Array.from(
       target.querySelectorAll('[role="option"]'),
     ) as HTMLElement[];
     expect(options).toHaveLength(2);
     const labels = options.map((o) => o.textContent);
-    expect(labels.every((l) => l && l.toLowerCase().includes("pdm"))).toBe(true);
+    expect(labels.every((l) => l && l.toLowerCase().includes("alpha"))).toBe(true);
   });
 
   it("matches by account ID inside the label", async () => {
@@ -88,7 +88,7 @@ describe("SearchableSelect", () => {
     const input = target.querySelector("input")!;
     input.dispatchEvent(new FocusEvent("focus", { bubbles: true }));
     await Promise.resolve();
-    makeInputEvent(input, "767398063426");
+    makeInputEvent(input, "111111111111");
     await Promise.resolve();
     const options = target.querySelectorAll('[role="option"]');
     expect(options).toHaveLength(1);
@@ -121,7 +121,7 @@ describe("SearchableSelect", () => {
       target.querySelectorAll('[role="option"]'),
     ) as HTMLElement[];
     const targetOpt = options.find((o) =>
-      o.textContent?.includes("GenAIIC"),
+      o.textContent?.includes("Project Beta"),
     )!;
     targetOpt.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     expect(onchange).toHaveBeenCalledWith("333");
@@ -140,7 +140,7 @@ describe("SearchableSelect", () => {
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    expect(onchange).toHaveBeenCalledWith("222"); // Epicride
+    expect(onchange).toHaveBeenCalledWith("222");
   });
 
   it("closes the dropdown on Escape without changing the value", async () => {

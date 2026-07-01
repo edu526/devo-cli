@@ -69,7 +69,10 @@ class TestPreflightAllPresent:
         assert body["aws_cli"]["version"] == "2.17.0"
         assert body["session_manager_plugin"]["ok"] is True
         assert body["socat"]["ok"] is True
-        assert body["socat"]["version"] == "1.7.4.4"
+        if platform.system() == "Windows":
+            assert body["socat"]["version"] == "n/a (Windows uses netsh)"
+        else:
+            assert body["socat"]["version"] == "1.7.4.4"
 
     def test_does_not_require_bearer(self):
         client, _ = _make_app()

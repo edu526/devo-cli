@@ -7,8 +7,13 @@ from typing import Any, Dict, List, Optional
 
 def get_config_dir():
     """Get the configuration directory path."""
-    config_dir = Path.home() / ".devo"
-    config_dir.mkdir(exist_ok=True)
+    import os
+
+    if "DEVO_CONFIG_DIR" in os.environ:
+        config_dir = Path(os.environ["DEVO_CONFIG_DIR"])
+    else:
+        config_dir = Path.home() / ".devo"
+    config_dir.mkdir(exist_ok=True, parents=True)
     return config_dir
 
 
@@ -37,9 +42,7 @@ def get_default_config():
         },
         "codeartifact": {
             "region": "us-east-1",
-            "account_id": "123456789012",
-            "sso_url": "https://my-org.awsapps.com/start",
-            "required_role": "Developer",
+            "account_id": "",
             "domains": [],
         },
         "version_check": {"enabled": True},

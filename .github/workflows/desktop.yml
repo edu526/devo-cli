@@ -106,6 +106,44 @@ jobs:
             echo "✅ Created tag $TAG"
           fi
 
+          # Find previous app-v* tag to generate scoped release notes
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 --match "app-v*" HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREVIOUS_TAG" ]; then
+            git log "${PREVIOUS_TAG}..${SHA}" --pretty=format:"* %s (%h)" -- desktop cli_tool/sidecar cli_tool/commands/ssm cli_tool/commands/aws_login devo-sidecar.spec .github/workflows/desktop.yml > raw_commits.txt
+          else
+            git log "${SHA}" --pretty=format:"* %s (%h)" -- desktop cli_tool/sidecar cli_tool/commands/ssm cli_tool/commands/aws_login devo-sidecar.spec .github/workflows/desktop.yml > raw_commits.txt
+          fi
+
+          echo "## Changelog" > release_notes.md
+
+          if [ ! -s raw_commits.txt ]; then
+            echo "* No desktop-specific changes in this release." >> release_notes.md
+          else
+            if grep -q -i "^* feat" raw_commits.txt; then
+              echo "### 🚀 Features" >> release_notes.md
+              grep -i "^* feat" raw_commits.txt >> release_notes.md
+              echo "" >> release_notes.md
+            fi
+
+            if grep -q -i "^* fix" raw_commits.txt; then
+              echo "### 🐛 Bug Fixes" >> release_notes.md
+              grep -i "^* fix" raw_commits.txt >> release_notes.md
+              echo "" >> release_notes.md
+            fi
+
+            if grep -q -E -i "^* (refactor|style|perf)" raw_commits.txt; then
+              echo "### 💅 Polish & Refactors" >> release_notes.md
+              grep -E -i "^* (refactor|style|perf)" raw_commits.txt >> release_notes.md
+              echo "" >> release_notes.md
+            fi
+
+            if grep -q -v -E -i "^* (feat|fix|refactor|style|perf)" raw_commits.txt; then
+              echo "### 🧰 Maintenance & Others" >> release_notes.md
+              grep -v -E -i "^* (feat|fix|refactor|style|perf)" raw_commits.txt >> release_notes.md
+              echo "" >> release_notes.md
+            fi
+          fi
+
           if gh release view "$TAG" --repo ${{ github.repository }} >/dev/null 2>&1; then
             echo "⚠️  Release $TAG already exists, skipping release creation"
           else
@@ -113,7 +151,7 @@ jobs:
               --prerelease \
               --title "Devo Desktop v${VERSION}" \
               --target "$SHA" \
-              --notes "Alpha release v${VERSION}" \
+              --notes-file release_notes.md \
               --repo ${{ github.repository }}
             echo "✅ Created release $TAG"
           fi

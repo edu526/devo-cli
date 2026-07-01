@@ -99,7 +99,8 @@ class TestIsPortBindable:
             mock_sock.bind.return_value = None
             assert _is_port_bindable("127.0.0.2", 5432) is True
 
-    def test_returns_false_when_port_is_occupied(self):
+    @patch("platform.system", return_value="Linux")
+    def test_returns_false_when_port_is_occupied(self, mock_system):
         with patch(f"{_RUNNER}.socket.socket") as mock_socket_cls:
             mock_sock = MagicMock()
             mock_socket_cls.return_value.__enter__ = MagicMock(return_value=mock_sock)
@@ -264,13 +265,14 @@ class TestMaybeRunAutoSetup:
         databases = {"db1": _make_db_config(local_address="127.0.0.1", host="db.example.com")}
         refreshed_db = _make_db_config(local_address="127.0.0.2", host="db.example.com")
         with patch(f"{_MODULE}.sys.stdin.isatty", return_value=True):
-            with patch(f"{_MODULE}.click.confirm", return_value=True):
-                with patch("cli_tool.commands.ssm.commands.hosts.setup.setup_databases", return_value=(["db1"], [])) as mock_setup:
-                    with patch(f"{_MODULE}.SSMConfigManager") as mock_cm_cls:
-                        mock_cm_cls.return_value.list_databases.return_value = {"db1": refreshed_db}
-                        with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
-                            mock_hm_cls.return_value.get_managed_entries.return_value = [("127.0.0.2", "db.example.com")]
-                            result = _maybe_run_auto_setup(databases, set(), no_auto_setup=False)
+            with patch(f"{_MODULE}._is_windows_admin", return_value=True):
+                with patch(f"{_MODULE}.click.confirm", return_value=True):
+                    with patch("cli_tool.commands.ssm.commands.hosts.setup.setup_databases", return_value=(["db1"], [])) as mock_setup:
+                        with patch(f"{_MODULE}.SSMConfigManager") as mock_cm_cls:
+                            mock_cm_cls.return_value.list_databases.return_value = {"db1": refreshed_db}
+                            with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
+                                mock_hm_cls.return_value.get_managed_entries.return_value = [("127.0.0.2", "db.example.com")]
+                                result = _maybe_run_auto_setup(databases, set(), no_auto_setup=False)
         mock_setup.assert_called_once_with(["db1"])
         assert result == {"db.example.com"}
         # Caller's db_config dict was updated in place with refreshed values
@@ -279,9 +281,10 @@ class TestMaybeRunAutoSetup:
     def test_skips_setup_when_user_declines(self):
         databases = {"db1": _make_db_config(local_address="127.0.0.1", host="db.example.com")}
         with patch(f"{_MODULE}.sys.stdin.isatty", return_value=True):
-            with patch(f"{_MODULE}.click.confirm", return_value=False):
-                with patch("cli_tool.commands.ssm.commands.hosts.setup.setup_databases") as mock_setup:
-                    result = _maybe_run_auto_setup(databases, set(), no_auto_setup=False)
+            with patch(f"{_MODULE}._is_windows_admin", return_value=True):
+                with patch(f"{_MODULE}.click.confirm", return_value=False):
+                    with patch("cli_tool.commands.ssm.commands.hosts.setup.setup_databases") as mock_setup:
+                        result = _maybe_run_auto_setup(databases, set(), no_auto_setup=False)
         mock_setup.assert_not_called()
         assert result == set()
 
@@ -434,7 +437,11 @@ class TestRunAttempt:
     def test_returns_exit_code_from_ssm(self):
         db_config = _make_db_config()
         with patch(f"{_RUNNER}.SSMSession") as mock_session:
-            mock_session.start_port_forwarding_to_remote.return_value = 0
+            mock_proc = MagicMock()
+            mock_proc.pid = 12345
+            mock_proc.poll.return_value = 0
+            mock_proc.returncode = 0
+            mock_session.spawn_port_forwarding_to_remote.return_value = mock_proc
             result = _run_attempt(db_config, 15432, use_hostname_forwarding=False)
         assert result == 0
 
@@ -444,16 +451,24 @@ class TestRunAttempt:
             mock_pf = MagicMock()
             mock_pf_cls.return_value = mock_pf
             with patch(f"{_RUNNER}.SSMSession") as mock_session:
-                mock_session.start_port_forwarding_to_remote.return_value = 0
+                mock_proc = MagicMock()
+                mock_proc.pid = 12345
+                mock_proc.poll.return_value = 0
+                mock_proc.returncode = 0
+                mock_session.spawn_port_forwarding_to_remote.return_value = mock_proc
                 _run_attempt(db_config, 15432, use_hostname_forwarding=True)
-        mock_pf.start_forward.assert_called_once_with("127.0.0.2", 5432, 15432)
+        mock_pf.start_forward.assert_called_once_with("127.0.0.2", 5432, 15432, allow_uac_prompt=False)
         mock_pf.stop_all.assert_called_once()
 
     def test_skips_port_forwarder_without_hostname_forwarding(self):
         db_config = _make_db_config()
         with patch(f"{_RUNNER}.PortForwarder") as mock_pf_cls:
             with patch(f"{_RUNNER}.SSMSession") as mock_session:
-                mock_session.start_port_forwarding_to_remote.return_value = 0
+                mock_proc = MagicMock()
+                mock_proc.pid = 12345
+                mock_proc.poll.return_value = 0
+                mock_proc.returncode = 0
+                mock_session.spawn_port_forwarding_to_remote.return_value = mock_proc
                 _run_attempt(db_config, 15432, use_hostname_forwarding=False)
         mock_pf_cls.assert_not_called()
 
@@ -464,7 +479,7 @@ class TestRunAttempt:
             mock_pf = MagicMock()
             mock_pf_cls.return_value = mock_pf
             with patch(f"{_RUNNER}.SSMSession") as mock_session:
-                mock_session.start_port_forwarding_to_remote.side_effect = KeyboardInterrupt
+                mock_session.spawn_port_forwarding_to_remote.side_effect = KeyboardInterrupt
                 with pytest.raises(KeyboardInterrupt):
                     _run_attempt(db_config, 15432, use_hostname_forwarding=True)
         mock_pf.stop_all.assert_called_once()
@@ -704,7 +719,7 @@ class TestConnectDatabases:
             with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
                 mock_hm_cls.return_value.get_managed_entries.return_value = []
                 with patch(f"{_MODULE}.console") as mock_console:
-                    _connect_databases(databases, no_hosts=False)
+                    _connect_databases(databases, no_hosts=False, no_auto_setup=True)
         calls_str = str(mock_console.print.call_args_list)
         assert "No databases" in calls_str
 
@@ -714,7 +729,7 @@ class TestConnectDatabases:
             with patch(f"{_MODULE}.HostsManager") as mock_hm_cls:
                 mock_hm_cls.return_value.get_managed_entries.return_value = []
                 with patch(f"{_MODULE}.console") as mock_console:
-                    _connect_databases(databases, no_hosts=False)
+                    _connect_databases(databases, no_hosts=False, no_auto_setup=True)
         calls_str = str(mock_console.print.call_args_list)
         assert "No databases" in calls_str
 

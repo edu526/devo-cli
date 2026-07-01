@@ -68,10 +68,23 @@ def _send(event: str, properties: dict) -> None:
 
     def _do_send():
         try:
+            import atexit
+
             from cli_tool.config import POSTHOG_API_KEY, POSTHOG_HOST
 
             posthog.api_key = POSTHOG_API_KEY
             posthog.host = POSTHOG_HOST
+
+            # The PostHog client registers an atexit handler to join its background thread.
+            # This causes tracebacks if the user hits Ctrl+C while the CLI is exiting.
+            # We flush synchronously below anyway, so we unregister the atexit hook.
+            client = posthog.setup()
+            if client:
+                try:
+                    atexit.unregister(client.join)
+                except Exception:
+                    pass
+
             _log(f"sending '{event}' → {properties}")
             posthog.capture(event=event, distinct_id=_get_or_create_anonymous_id(), properties=properties)
             posthog.flush()
@@ -120,3 +133,5 @@ def show_first_run_notice() -> None:
             padding=(0, 2),
         )
     )
+    # Create the telemetry ID file so the notice is not shown again
+    _get_or_create_anonymous_id()

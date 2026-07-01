@@ -46,11 +46,16 @@ def _wait_for_port(host: str, port: int, timeout: float = 10.0) -> bool:
 
 
 @pytest.fixture(scope="module")
-def live_sidecar():
+def live_sidecar(tmp_path_factory):
     """Spawn a real uvicorn sidecar (slowapi active) on a free port."""
     env = os.environ.copy()
     env.pop("DEVO_TESTING", None)
     env["PYTHONUNBUFFERED"] = "1"
+
+    # Isolate from user's real config so start_all doesn't hit AWS
+    tmp_home = str(tmp_path_factory.mktemp("home"))
+    env["HOME"] = tmp_home
+    env["USERPROFILE"] = tmp_home
 
     proc = subprocess.Popen(
         [sys.executable, "-m", "cli_tool.sidecar", "--port", "0"],
@@ -96,33 +101,34 @@ def _post(url: str, token: str) -> urllib.request.Request:
     )
 
 
-def _hit_twice(url: str, token: str) -> None:
-    """POST twice, second call must 429 *with* CORS header."""
-    try:
-        with urllib.request.urlopen(_post(url, token), timeout=5) as r1:
-            assert r1.status in (200, 202), f"first call: {r1.status} {r1.read()!r}"
-            assert r1.headers.get("Access-Control-Allow-Origin") == "http://localhost:5173"
-    except urllib.error.HTTPError as e:
-        pytest.fail(f"first call to {url} failed: {e.code} {e.read()!r}")
+def _trigger_429(url: str, token: str) -> None:
+    """POST until 429 is returned *with* CORS header."""
+    for i in range(35):
+        try:
+            with urllib.request.urlopen(_post(url, token), timeout=1.0) as r:
+                pass  # Success, keep hitting
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                cors = e.headers.get("Access-Control-Allow-Origin")
+                assert cors == "http://localhost:5173", (
+                    f"{url}: 429 missing CORS header. Browser will block and report "
+                    f"'Origin not allowed by Access-Control-Allow-Origin'. "
+                    f"Headers: {dict(e.headers)}"
+                )
+                return
+            else:
+                pytest.fail(f"call to {url} failed: {e.code} {e.read()!r}")
+        except (urllib.error.URLError, TimeoutError):
+            pass  # timeout is fine, request still counts against rate limit
 
-    try:
-        with urllib.request.urlopen(_post(url, token), timeout=5) as r2:
-            pytest.fail(f"second call to {url} should have been 429, got {r2.status}")
-    except urllib.error.HTTPError as e:
-        assert e.code == 429, f"second call to {url}: expected 429, got {e.code}"
-        cors = e.headers.get("Access-Control-Allow-Origin")
-        assert cors == "http://localhost:5173", (
-            f"{url}: 429 missing CORS header. Browser will block and report "
-            f"'Origin not allowed by Access-Control-Allow-Origin'. "
-            f"Headers: {dict(e.headers)}"
-        )
+    pytest.fail(f"Did not receive 429 from {url} after 35 calls")
 
 
 def test_refresh_all_cors_on_429(live_sidecar):
     port, token = live_sidecar
-    _hit_twice(f"http://127.0.0.1:{port}/api/v1/profiles:refresh_all", token)
+    _trigger_429(f"http://127.0.0.1:{port}/api/v1/profiles:refresh_all", token)
 
 
 def test_start_all_cors_on_429(live_sidecar):
     port, token = live_sidecar
-    _hit_twice(f"http://127.0.0.1:{port}/api/v1/connections:start_all", token)
+    _trigger_429(f"http://127.0.0.1:{port}/api/v1/connections:start_all", token)

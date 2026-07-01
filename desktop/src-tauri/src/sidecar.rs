@@ -1,7 +1,7 @@
 use std::time::Duration;
 use tauri::AppHandle;
-use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::CommandEvent;
+use tauri_plugin_shell::ShellExt;
 use tokio::time::timeout;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
@@ -31,7 +31,22 @@ fn parse_ready_line(line: &str) -> Option<SidecarInfo> {
 }
 
 pub async fn spawn_and_wait(app: &AppHandle) -> Result<SidecarInfo, String> {
-    let (mut rx, _child) = {
+    use tauri::Manager;
+
+    // Ponytail log rotation: keep log under 5MB by rotating on startup
+    let log_path = app.path().home_dir()
+        .map(|h| h.join(".devo").join("sidecar.log"))
+        .unwrap_or_else(|_| std::path::PathBuf::from(".devo/sidecar.log"));
+
+    if let Ok(meta) = std::fs::metadata(&log_path) {
+        if meta.len() > 5 * 1024 * 1024 {
+            let mut old_log = log_path.clone();
+            old_log.set_extension("old.log");
+            let _ = std::fs::rename(&log_path, &old_log);
+        }
+    }
+
+    let (mut rx, child) = {
         #[cfg(debug_assertions)]
         {
             // Dev: the `scripts/build_sidecar_placeholder.sh` wrapper
@@ -40,7 +55,7 @@ pub async fn spawn_and_wait(app: &AppHandle) -> Result<SidecarInfo, String> {
             app.shell()
                 .sidecar("devo-sidecar")
                 .map_err(|e| format!("sidecar placeholder not found: {e}"))?
-                .args(["--port", "0"])
+                .args(["--port", "0", "--log-level", "info"])
                 .spawn()
                 .map_err(|e| format!("failed to spawn sidecar: {e}"))?
         }
@@ -89,7 +104,80 @@ pub async fn spawn_and_wait(app: &AppHandle) -> Result<SidecarInfo, String> {
     .await;
 
     match result {
-        Ok(inner) => inner,
+        Ok(Ok(info)) => {
+            // Once ready, spawn a background task to consume the rest of stdout/stderr
+            // so we don't block the pipe and we capture unhandled Python crashes.
+            use tauri::Manager;
+            use std::fs::OpenOptions;
+            use std::io::Write;
+
+            let app_handle = app.clone();
+            tauri::async_runtime::spawn(async move {
+                // Keep `child` alive for the lifetime of this task
+                let mut _keepalive_child = child;
+
+                // log_path was already computed in spawn_and_wait, but we recompute it
+                // here for the background thread to avoid moving it if not needed.
+                let log_path = app_handle.path().home_dir()
+                    .map(|h| h.join(".devo").join("sidecar.log"))
+                    .unwrap_or_else(|_| std::path::PathBuf::from(".devo/sidecar.log"));
+
+                while let Some(event) = rx.recv().await {
+                    match event {
+                        CommandEvent::Stdout(bytes) | CommandEvent::Stderr(bytes) => {
+                            let msg = String::from_utf8_lossy(&bytes);
+                            let msg_trimmed = msg.trim();
+                            if msg_trimmed.is_empty() {
+                                continue;
+                            }
+
+                            // Write to the UI console for local debugging
+                            eprintln!("[sidecar] {}", msg_trimmed);
+
+                            // Append to sidecar.log so the LogsPage UI can pick it up
+                            if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&log_path) {
+                                let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+                                for line in msg_trimmed.lines() {
+                                    let line = line.trim_end(); // only trim end to keep indentation
+                                    if line.is_empty() {
+                                        continue;
+                                    }
+                                    let has_timestamp = line.len() > 10 && line.chars().nth(4) == Some('-') && line.chars().nth(7) == Some('-');
+                                    if has_timestamp {
+                                        let _ = writeln!(file, "{}", line);
+                                    } else if line.starts_with("INFO:") {
+                                        let _ = writeln!(file, "{} INFO [console] {}", now, line);
+                                    } else if line.starts_with("WARNING:") {
+                                        let _ = writeln!(file, "{} WARN [console] {}", now, line);
+                                    } else if line.starts_with("ERROR:") {
+                                        let _ = writeln!(file, "{} ERROR [console] {}", now, line);
+                                    } else {
+                                        // Raw line (e.g. stacktrace or standard print), write as is
+                                        // so the UI can group it with the previous log entry.
+                                        let _ = writeln!(file, "{}", line);
+                                    }
+                                }
+                            }
+                        }
+                        CommandEvent::Terminated(_) => {
+                            eprintln!("[sidecar] Terminated");
+                            break;
+                        }
+                        CommandEvent::Error(e) => {
+                            eprintln!("[sidecar] Error: {}", e);
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Explicitly kill if the loop breaks
+                let _ = _keepalive_child.kill();
+            });
+
+            Ok(info)
+        },
+        Ok(Err(e)) => Err(e),
         Err(_) => Err("timed out waiting for DEVO_SIDECAR_READY (30s)".to_string()),
     }
 }

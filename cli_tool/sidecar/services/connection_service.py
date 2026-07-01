@@ -59,6 +59,20 @@ def start_connection(
 
     local_port = _resolve_local_port(db_config, use_hostname_forwarding)
     record = ConnectionRecord(name=name, local_port=local_port)
+
+    from cli_tool.commands.ssm.core.session import SSMSession
+
+    if SSMSession._is_token_expired(region=db_config["region"], profile=db_config.get("profile")):
+        record.state = "expired_credentials"
+        registry.register(name, record)
+        return {
+            "name": name,
+            "local_port": local_port,
+            "state": "expired_credentials",
+            "sso_required": True,
+            "profile": db_config.get("profile") or "default",
+        }
+
     registry.register(name, record)
 
     if not registry._observers:

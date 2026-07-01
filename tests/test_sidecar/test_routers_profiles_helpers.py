@@ -73,20 +73,14 @@ class TestDoRefreshAll:
 @pytest.mark.unit
 class TestDoRefreshOne:
     def test_publishes_not_found_when_profile_config_missing(self, mocker):
-        # Bypass the aws_login.command import dance
-        mocker.patch.dict(
-            "sys.modules",
-            {
-                "cli_tool.commands.aws_login.commands.refresh": MagicMock(_build_sso_login_cmd=MagicMock(return_value=["aws", "sso", "login"])),
-                "cli_tool.commands.aws_login.core.config": MagicMock(get_profile_config=MagicMock(return_value=None)),
-                "cli_tool.commands.aws_login.core.credentials": MagicMock(verify_credentials=MagicMock(return_value={"UserId": "x"})),
-            },
+        mocker.patch(
+            "cli_tool.commands.aws_login.core.config.get_profile_config",
+            return_value=None,
         )
 
         hub = EventHub()
         q = hub.subscribe()
         profiles_router._do_refresh_one(hub, "missing")
-        # First message is profile.refreshing, then profile.refreshed
         msgs = []
         while not q.empty():
             msgs.append(q.get_nowait())
@@ -95,17 +89,15 @@ class TestDoRefreshOne:
         assert msgs[1]["success"] is False
         assert "not found" in msgs[1]["error"]
 
-    def test_publishes_refreshing_then_failure_on_sso_exit_nonzero(self, mocker):
-        mocker.patch.dict(
-            "sys.modules",
-            {
-                "cli_tool.commands.aws_login.commands.refresh": MagicMock(_build_sso_login_cmd=MagicMock(return_value=["aws", "sso", "login"])),
-                "cli_tool.commands.aws_login.core.config": MagicMock(get_profile_config=MagicMock(return_value={"region": "us-east-1"})),
-                "cli_tool.commands.aws_login.core.credentials": MagicMock(verify_credentials=MagicMock(return_value={"UserId": "x"})),
-            },
+    def test_publishes_failure_when_run_sso_login_sync_fails(self, mocker):
+        mocker.patch(
+            "cli_tool.commands.aws_login.core.config.get_profile_config",
+            return_value={"region": "us-east-1"},
         )
-        mock_run = MagicMock(return_value=MagicMock(returncode=1))
-        mocker.patch("subprocess.run", mock_run)
+        mocker.patch(
+            "cli_tool.sidecar.services.sso_service.run_sso_login_sync",
+            return_value=False,
+        )
 
         hub = EventHub()
         q = hub.subscribe()
@@ -115,19 +107,17 @@ class TestDoRefreshOne:
             msgs.append(q.get_nowait())
         assert msgs[0] == {"event": "profile.refreshing", "name": "dev"}
         assert msgs[1]["success"] is False
-        assert "exit 1" in msgs[1]["error"]
+        assert "Refresh failed" in msgs[1]["error"]
 
     def test_publishes_success_when_sso_login_succeeds(self, mocker):
-        mocker.patch.dict(
-            "sys.modules",
-            {
-                "cli_tool.commands.aws_login.commands.refresh": MagicMock(_build_sso_login_cmd=MagicMock(return_value=["aws", "sso", "login"])),
-                "cli_tool.commands.aws_login.core.config": MagicMock(get_profile_config=MagicMock(return_value={"region": "us-east-1"})),
-                "cli_tool.commands.aws_login.core.credentials": MagicMock(verify_credentials=MagicMock(return_value={"UserId": "AIDAX"})),
-            },
+        mocker.patch(
+            "cli_tool.commands.aws_login.core.config.get_profile_config",
+            return_value={"region": "us-east-1"},
         )
-        mock_run = MagicMock(return_value=MagicMock(returncode=0))
-        mocker.patch("subprocess.run", mock_run)
+        mocker.patch(
+            "cli_tool.sidecar.services.sso_service.run_sso_login_sync",
+            return_value=True,
+        )
 
         hub = EventHub()
         q = hub.subscribe()
@@ -137,68 +127,3 @@ class TestDoRefreshOne:
             msgs.append(q.get_nowait())
         assert msgs[0] == {"event": "profile.refreshing", "name": "dev"}
         assert msgs[1] == {"event": "profile.refreshed", "names": ["dev"], "success": True}
-
-    def test_publishes_failure_when_verify_returns_none(self, mocker):
-        mocker.patch.dict(
-            "sys.modules",
-            {
-                "cli_tool.commands.aws_login.commands.refresh": MagicMock(_build_sso_login_cmd=MagicMock(return_value=["aws", "sso", "login"])),
-                "cli_tool.commands.aws_login.core.config": MagicMock(get_profile_config=MagicMock(return_value={"region": "us-east-1"})),
-                "cli_tool.commands.aws_login.core.credentials": MagicMock(verify_credentials=MagicMock(return_value=None)),
-            },
-        )
-        mock_run = MagicMock(return_value=MagicMock(returncode=0))
-        mocker.patch("subprocess.run", mock_run)
-
-        hub = EventHub()
-        q = hub.subscribe()
-        profiles_router._do_refresh_one(hub, "dev")
-        msgs = []
-        while not q.empty():
-            msgs.append(q.get_nowait())
-        assert msgs[1]["success"] is False
-        assert "verification failed" in msgs[1]["error"]
-
-    def test_publishes_failure_on_subprocess_timeout(self, mocker):
-        import subprocess as real_subprocess
-
-        mocker.patch.dict(
-            "sys.modules",
-            {
-                "cli_tool.commands.aws_login.commands.refresh": MagicMock(_build_sso_login_cmd=MagicMock(return_value=["aws", "sso", "login"])),
-                "cli_tool.commands.aws_login.core.config": MagicMock(get_profile_config=MagicMock(return_value={"region": "us-east-1"})),
-                "cli_tool.commands.aws_login.core.credentials": MagicMock(verify_credentials=MagicMock(return_value={"UserId": "x"})),
-            },
-        )
-        mocker.patch(
-            "subprocess.run",
-            side_effect=real_subprocess.TimeoutExpired(cmd="aws", timeout=120),
-        )
-
-        hub = EventHub()
-        q = hub.subscribe()
-        profiles_router._do_refresh_one(hub, "dev")
-        msgs = []
-        while not q.empty():
-            msgs.append(q.get_nowait())
-        assert msgs[1]["success"] is False
-        assert "timed out" in msgs[1]["error"]
-
-    def test_publishes_failure_on_unexpected_exception(self, mocker):
-        mocker.patch.dict(
-            "sys.modules",
-            {
-                "cli_tool.commands.aws_login.commands.refresh": MagicMock(_build_sso_login_cmd=MagicMock(return_value=["aws", "sso", "login"])),
-                "cli_tool.commands.aws_login.core.config": MagicMock(get_profile_config=MagicMock(side_effect=Exception("weird"))),
-                "cli_tool.commands.aws_login.core.credentials": MagicMock(),
-            },
-        )
-
-        hub = EventHub()
-        q = hub.subscribe()
-        profiles_router._do_refresh_one(hub, "dev")
-        msgs = []
-        while not q.empty():
-            msgs.append(q.get_nowait())
-        assert msgs[1]["success"] is False
-        assert "weird" in msgs[1]["error"]

@@ -1,38 +1,42 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { initApi, configApi, bootApi, type BootStatus, type VersionInfo } from "./lib/api";
+  import {
+    initApi,
+    bootApi,
+    type BootStatus,
+    type VersionInfo,
+    profilesApi,
+    codeartifactApi,
+    configApi,
+  } from "./lib/api";
   import { ws } from "./lib/ws";
   import { sidecar, appStatus, appError, currentPage, wsConnected, type Page } from "./lib/stores";
+  import { profilesCache, registryCache, configCache } from "./lib/page-stores";
   import { logError } from "./lib/error-log";
   import { theme, applyTheme } from "./lib/theme";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { fade } from "svelte/transition";
+  import { quintOut } from "svelte/easing";
   import TitleBar from "./lib/TitleBar.svelte";
-  import UpdateBanner from "./lib/UpdateBanner.svelte";
   import LogsPage from "./pages/LogsPage.svelte";
 
-  import ConnectionsPage from "./pages/ConnectionsPage.svelte";
   import DatabasesPage from "./pages/DatabasesPage.svelte";
   import ProfilesPage from "./pages/ProfilesPage.svelte";
-  import HostsPage from "./pages/HostsPage.svelte";
   import ConfigPage from "./pages/ConfigPage.svelte";
   import OnboardingPage from "./pages/OnboardingPage.svelte";
+  import RegistryPage from "./pages/RegistryPage.svelte";
 
-  const NAV_SECTIONS: { title: string; items: { id: Page; label: string; icon: string }[] }[] = [
-    { title: "Tunnels", items: [{ id: "connections", label: "Connections", icon: "⚡" }] },
-    {
-      title: "Resources",
-      items: [
-        { id: "databases", label: "Databases", icon: "🗄️" },
-        { id: "hosts", label: "Hosts", icon: "🌐" },
-      ],
-    },
-    { title: "AWS", items: [{ id: "profiles", label: "Profiles", icon: "🔑" }] },
-    {
-      title: "System",
-      items: [
-        { id: "config", label: "Settings", icon: "⚙️" },
-        { id: "logs", label: "Logs", icon: "📋" },
-      ],
-    },
+  import { Database, KeyRound, Package, Settings, FileText } from "@lucide/svelte";
+
+  const MAIN_NAV: { id: Page; label: string; icon: any }[] = [
+    { id: "databases", label: "Databases", icon: Database },
+    { id: "profiles", label: "Profiles", icon: KeyRound },
+    { id: "registry", label: "Registry", icon: Package },
+  ];
+
+  const BOTTOM_NAV: { id: Page; label: string; icon: any }[] = [
+    { id: "config", label: "Settings", icon: Settings },
+    { id: "logs", label: "Logs", icon: FileText },
   ];
 
   // Subscribe once so the page re-renders when the theme toggles.
@@ -152,9 +156,35 @@
     }
   }
 
+  function blockBrowserShortcuts(e: KeyboardEvent) {
+    if (e.key === "F5" || e.key === "F3") {
+      e.preventDefault();
+      return;
+    }
+    if (e.ctrlKey || e.metaKey) {
+      const k = e.key.toLowerCase();
+      // Bloquear Recargar (r), Buscar (f, g), Imprimir (p), Guardar (s), Abrir (o), Ver código (u)
+      // Nota: e.preventDefault() cancela la acción del navegador pero el evento JS sigue fluyendo,
+      // permitiendo atajos internos como Ctrl+S en CodeMirror de ConfigPage.
+      if (["r", "f", "g", "p", "s", "o", "u"].includes(k)) {
+        e.preventDefault();
+      }
+    }
+    // Bloquear navegación hacia atrás/adelante (Alt + flechas)
+    if (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+      e.preventDefault();
+    }
+  }
+
+  function blockContextMenu(e: Event) {
+    e.preventDefault();
+  }
+
   onMount(async () => {
     window.addEventListener("keydown", handleKeydown, true);
     window.addEventListener("keydown", handleGlobalShortcut, true);
+    window.addEventListener("keydown", blockBrowserShortcuts, true);
+    window.addEventListener("contextmenu", blockContextMenu, true);
     window.addEventListener("focusin", recordFocus, true);
     window.addEventListener("input", recordInput, true);
     window.addEventListener("onboarding-complete", leaveOnboarding);
@@ -163,7 +193,11 @@
     });
     window.addEventListener("unhandledrejection", (e) => {
       const reason = e.reason instanceof Error ? e.reason.message : String(e.reason);
-      logError("unhandledrejection", reason, e.reason instanceof Error ? e.reason.stack : undefined);
+      logError(
+        "unhandledrejection",
+        reason,
+        e.reason instanceof Error ? e.reason.stack : undefined,
+      );
     });
     // Poll the Rust boot status. The version check happens in setup()
     // before the sidecar is spawned, so a stale bundle never produces
@@ -182,6 +216,7 @@
     if (!boot || boot.status === "loading") {
       appStatus.set("error");
       appError.set("Sidecar failed to start after 30 seconds.");
+      setTimeout(() => getCurrentWindow().show(), 50);
       return;
     }
 
@@ -191,6 +226,7 @@
       appError.set(
         `Devo Desktop requires devo-cli ${boot.required} or newer (found ${boot.found}).`,
       );
+      setTimeout(() => getCurrentWindow().show(), 50);
       return;
     }
 
@@ -221,11 +257,29 @@
       // user can still use the app via the regular pages.
       onboardingChecked = true;
     }
+
+    // Unhide the window now that the UI is fully set up
+    setTimeout(() => getCurrentWindow().show(), 50);
+
+    // Prefetch data in the background so tabs are instantly ready
+    profilesApi
+      .list()
+      .then((p) => profilesCache.set(p))
+      .catch(() => {});
+    Promise.all([codeartifactApi.domains(), codeartifactApi.tokens()])
+      .then(([d, t]) => registryCache.set({ domains: d, tokens: t }))
+      .catch(() => {});
+    configApi
+      .get()
+      .then((c) => configCache.set(c))
+      .catch(() => {});
   });
 
   onDestroy(() => {
     window.removeEventListener("keydown", handleKeydown, true);
     window.removeEventListener("keydown", handleGlobalShortcut, true);
+    window.removeEventListener("keydown", blockBrowserShortcuts, true);
+    window.removeEventListener("contextmenu", blockContextMenu, true);
     window.removeEventListener("focusin", recordFocus, true);
     window.removeEventListener("input", recordInput, true);
     window.removeEventListener("onboarding-complete", leaveOnboarding);
@@ -233,7 +287,6 @@
 </script>
 
 <TitleBar />
-<UpdateBanner />
 
 {#if $appStatus === "loading"}
   <div class="splash">
@@ -260,8 +313,8 @@
               class="err-copy"
               type="button"
               onclick={copyUpgrade}
-              aria-label="Copy upgrade command"
-            >{copyLabel}</button>
+              aria-label="Copy upgrade command">{copyLabel}</button
+            >
           </div>
           <p class="err-tray">Or quit via the system tray menu.</p>
         {:else}
@@ -273,35 +326,58 @@
 {:else if showOnboarding && onboardingChecked}
   <OnboardingPage />
 {:else}
-  <div class="layout">
+  <div class="layout" in:fade={{ duration: 600, delay: 300, easing: quintOut }}>
     <!-- Sidebar -->
     <nav class="sidebar">
-      {#each NAV_SECTIONS as section}
-        <div class="nav-section">
-          <div class="nav-section-title">{section.title}</div>
-          <ul>
-            {#each section.items as item}
-              <li>
-                <button
-                  class="nav-btn"
-                  class:active={$currentPage === item.id}
-                  onclick={() => currentPage.set(item.id)}
-                >
-                  <span class="nav-icon">{item.icon}</span>
-                  <span class="nav-label">{item.label}</span>
-                </button>
-              </li>
-            {/each}
-          </ul>
-        </div>
-      {/each}
+      <!-- Main Nav -->
+      <div class="nav-section" style="padding-top: 1rem;">
+        <ul>
+          {#each MAIN_NAV as item}
+            {@const Icon = item.icon}
+            <li>
+              <button
+                class="nav-btn"
+                class:active={$currentPage === item.id}
+                onclick={() => currentPage.set(item.id)}
+              >
+                <span class="nav-icon"><Icon size={16} strokeWidth={2} /></span>
+                <span class="nav-label">{item.label}</span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      </div>
+
+      <!-- Spacer -->
+      <div class="nav-spacer" style="flex: 1;"></div>
+
+      <!-- Bottom Nav -->
+      <div class="nav-section">
+        <ul>
+          {#each BOTTOM_NAV as item}
+            {@const Icon = item.icon}
+            <li>
+              <button
+                class="nav-btn"
+                class:active={$currentPage === item.id}
+                onclick={() => currentPage.set(item.id)}
+              >
+                <span class="nav-icon"><Icon size={16} strokeWidth={2} /></span>
+                <span class="nav-label">{item.label}</span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      </div>
       <div class="ws-status" class:connected={$wsConnected}>
         <span class="ws-state">{$wsConnected ? "● Live" : "○ Offline"}</span>
         {#if sidecarInfo}
           <span class="ws-version" title="devo CLI v{sidecarInfo.sidecar_version}">
             {formatSidecarVersion(sidecarInfo.sidecar_version)}
             {#if sidecarInfo.update_available}
-              <span class="ws-update" title="A newer version is available — run: devo upgrade">↑</span>
+              <span class="ws-update" title="A newer version is available — run: devo upgrade"
+                >↑</span
+              >
             {/if}
           </span>
         {/if}
@@ -310,16 +386,14 @@
 
     <!-- Main content -->
     <main class="content">
-      {#if $currentPage === "connections"}
-        <ConnectionsPage />
-      {:else if $currentPage === "databases"}
+      {#if $currentPage === "connections" || $currentPage === "databases"}
         <DatabasesPage />
       {:else if $currentPage === "profiles"}
         <ProfilesPage />
-      {:else if $currentPage === "hosts"}
-        <HostsPage />
       {:else if $currentPage === "config"}
         <ConfigPage />
+      {:else if $currentPage === "registry"}
+        <RegistryPage />
       {:else if $currentPage === "logs"}
         <LogsPage />
       {/if}
@@ -586,15 +660,6 @@
     padding: 0.2rem 0;
   }
 
-  .nav-section-title {
-    padding: 0.55rem 1.2rem 0.2rem;
-    font-size: 0.68rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-faint);
-  }
-
   .nav-btn {
     width: 100%;
     display: flex;
@@ -623,7 +688,11 @@
     color: var(--accent);
   }
   .nav-icon {
-    font-size: 1rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 20px;
+    flex-shrink: 0;
   }
 
   .ws-status {

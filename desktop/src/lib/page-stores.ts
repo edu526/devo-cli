@@ -17,3 +17,5 @@ export const instancesCache = writable<Record<string, InstanceRecord> | null>(nu
 export const databasesCache = writable<Record<string, DatabaseRecord> | null>(null);
 export const profilesCache = writable<ProfileRecord[] | null>(null);
 export const hostsCache = writable<HostRecord[] | null>(null);
+export const registryCache = writable<{ domains: any[]; tokens: any[] } | null>(null);
+export const configCache = writable<Record<string, unknown> | null>(null);

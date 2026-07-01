@@ -7,6 +7,9 @@ mod updater;
 
 use sidecar::SidecarInfo;
 
+#[cfg(windows)]
+mod elevated;
+
 pub const MIN_DEVO_CLI_VERSION: &str = env!("DEVO_CLI_MIN_VERSION");
 const DEVO_CLI_VERSION: &str = env!("DEVO_CLI_VERSION");
 
@@ -48,7 +51,9 @@ fn is_at_least(version: &str, min: &str) -> bool {
 #[tauri::command]
 async fn get_sidecar_info(state: State<'_, SidecarState>) -> Result<SidecarInfo, String> {
     let guard = state.0.lock().map_err(|e| e.to_string())?;
-    guard.clone().ok_or_else(|| "sidecar not ready yet".to_string())
+    guard
+        .clone()
+        .ok_or_else(|| "sidecar not ready yet".to_string())
 }
 
 #[tauri::command]
@@ -56,7 +61,73 @@ fn get_boot_status(state: State<'_, BootState>) -> BootStatus {
     state.0.lock().unwrap().clone()
 }
 
+#[tauri::command]
+fn run_elevated(args: Vec<String>) -> Result<u32, String> {
+    #[cfg(windows)]
+    {
+        elevated::run_elevated(&args).map_err(|e| e.to_string())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let cmd = args.join(" ");
+        let script = format!(
+            "do shell script \"{}\" with administrator privileges",
+            cmd.replace("\"", "\\\"")
+        );
+        let status = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&script)
+            .status()
+            .map_err(|e| e.to_string())?;
+
+        if status.success() {
+            Ok(0)
+        } else {
+            Err(format!("osascript failed with status: {}", status))
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let mut child = std::process::Command::new("pkexec")
+            .args(&args)
+            .spawn()
+            .or_else(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    // Fallback to sudo if pkexec is not installed (e.g. WSL)
+                    std::process::Command::new("sudo").args(&args).spawn()
+                } else {
+                    Err(e)
+                }
+            })
+            .map_err(|e| e.to_string())?;
+
+        let status = child.wait().map_err(|e| e.to_string())?;
+
+        if status.success() {
+            Ok(0)
+        } else {
+            Err(format!("elevation command failed with status: {}", status))
+        }
+    }
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+    {
+        let _ = args;
+        Err("run_elevated: not implemented for this platform".to_string())
+    }
+}
+
 async fn setup_sidecar(app: AppHandle) {
+    // Kill any orphaned sidecars from previous crashes before spawning a new one
+    #[cfg(windows)]
+    let _ = std::process::Command::new("taskkill")
+        .args(["/F", "/IM", "devo-sidecar*.exe", "/T"])
+        .output();
+
+    #[cfg(not(windows))]
+    let _ = std::process::Command::new("pkill")
+        .args(["-f", "devo-sidecar"])
+        .output();
+
     match sidecar::spawn_and_wait(&app).await {
         Ok(info) => {
             if let Some(state) = app.try_state::<SidecarState>() {
@@ -82,6 +153,7 @@ async fn setup_sidecar(app: AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(SidecarState(Mutex::new(None)))
@@ -117,7 +189,8 @@ pub fn run() {
             get_boot_status,
             updater::fetch_update,
             updater::install_update,
-            tray::hide_to_tray
+            tray::hide_to_tray,
+            run_elevated
         ])
         .run(tauri::generate_context!())
         .expect("error while running Devo");

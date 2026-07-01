@@ -252,3 +252,6 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "integration: Integration tests for CLI commands")
     config.addinivalue_line("markers", "platform: Platform-specific tests")
     config.addinivalue_line("markers", "slow: Slow tests (skipped by default)")
+
+
+# ============================================================================

@@ -19,8 +19,9 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
     let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show_item, &separator, &quit_item])?;
 
-    TrayIconBuilder::with_id(TRAY_ID)
+    match TrayIconBuilder::with_id(TRAY_ID)
         .tooltip("Devo Desktop")
+        .icon(app.default_window_icon().unwrap().clone())
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -43,22 +44,28 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
                 show_main_window(tray.app_handle());
             }
         })
-        .build(app)?;
-
-    // Override the default close behaviour: clicking the X hides the
-    // window instead of exiting the process. The user quits via the
-    // tray menu so the sidecar is still accessible from the next
-    // "Show" call.
-    if let Some(window) = app.get_webview_window("main") {
-        let app_clone = app.clone();
-        window.on_window_event(move |event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                if let Some(w) = app_clone.get_webview_window("main") {
-                    let _ = w.hide();
-                }
-                api.prevent_close();
+        .build(app)
+    {
+        Ok(_) => {
+            // Override the default close behaviour: clicking the X hides the
+            // window instead of exiting the process. The user quits via the
+            // tray menu so the sidecar is still accessible from the next
+            // "Show" call.
+            if let Some(window) = app.get_webview_window("main") {
+                let app_clone = app.clone();
+                window.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        if let Some(w) = app_clone.get_webview_window("main") {
+                            let _ = w.hide();
+                        }
+                        api.prevent_close();
+                    }
+                });
             }
-        });
+        }
+        Err(e) => {
+            eprintln!("Failed to create tray icon: {}. App will exit when window is closed.", e);
+        }
     }
 
     Ok(())

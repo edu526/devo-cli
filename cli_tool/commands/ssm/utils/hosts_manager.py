@@ -1,6 +1,7 @@
 """Manage /etc/hosts entries for SSM connections"""
 
 import ipaddress
+import os
 import platform
 import re
 import subprocess
@@ -195,6 +196,7 @@ class HostsManager:
         any path-manipulation attack via the mutable instance attribute.
         """
         system = platform.system()
+        is_sidecar = os.environ.get("DEVO_SIDECAR") == "1"
 
         if system == "Windows":
             hosts_path = Path(HostsManager.WINDOWS_HOSTS_FILE)
@@ -207,6 +209,12 @@ class HostsManager:
                     "  2. Select 'Run as administrator'\n"
                     "  3. Run the command again"
                 ) from e
+        elif is_sidecar:
+            hosts_path = self.get_hosts_file_path()
+            try:
+                hosts_path.write_text(content, encoding="utf-8")
+            except PermissionError as e:
+                raise PermissionError("Permission denied. Needs elevation.") from e
         else:
             # Use the class-level constant directly — never a variable derived
             # from user input — so the subprocess call is safe from injection.
@@ -255,6 +263,9 @@ class HostsManager:
         # Add loopback alias
         console.print(f"[dim]Configuring loopback alias {ip} on macOS...[/dim]")
         try:
+            is_sidecar = os.environ.get("DEVO_SIDECAR") == "1"
+            if is_sidecar:
+                raise PermissionError("Permission denied. Needs elevation to configure loopback alias.")
             subprocess.run(["sudo", "ifconfig", "lo0", "alias", ip, "up"], capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError as e:
             stderr = e.stderr if e.stderr else ""
@@ -269,6 +280,9 @@ class HostsManager:
                 return  # Not configured, nothing to remove
 
             # Remove loopback alias
+            is_sidecar = os.environ.get("DEVO_SIDECAR") == "1"
+            if is_sidecar:
+                raise PermissionError("Permission denied. Needs elevation to remove loopback alias.")
             subprocess.run(["sudo", "ifconfig", "lo0", "-alias", ip], capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError:
             # Ignore errors on cleanup

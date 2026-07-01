@@ -287,10 +287,9 @@ class TestRefreshProfile:
             "cli_tool.commands.aws_login.core.config.get_profile_config",
             return_value={"sso_session": "my-sso"},
         )
-        mocker.patch("subprocess.run", return_value=mocker.MagicMock(returncode=0))
         mocker.patch(
-            "cli_tool.commands.aws_login.core.credentials.verify_credentials",
-            return_value={"account": "123"},
+            "cli_tool.sidecar.services.sso_service.run_sso_login_sync",
+            return_value=True,
         )
 
         client, app_state = _make_client()

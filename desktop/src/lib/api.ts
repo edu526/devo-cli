@@ -1,6 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { logError } from "./error-log";
 
+// ponytail: structured hint returned by the sidecar when a hosts action needs
+// UAC. The frontend uses `action` + `params` to drive `run_elevated` instead of
+// asking the user to paste a command into a terminal. `command` is kept for
+// copy-to-clipboard fallback.
+export interface ElevationHint {
+  message: string;
+  command: string;
+  action: string;
+  params: Record<string, unknown>;
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface SidecarInfo {
@@ -13,6 +24,8 @@ export interface ConnectionRecord {
   state: "starting" | "connecting" | "connected" | "stopped" | "error" | "expired_credentials";
   local_port: number;
   error: string | null;
+  sso_required?: boolean;
+  profile?: string;
   uptime_seconds?: number;
   attempts?: number;
   last_error_at?: number | null;
@@ -57,6 +70,14 @@ export interface ProfileRecord {
   seconds_remaining: number | null;
   status: "valid" | "expiring" | "expired" | "unknown";
   is_default: boolean;
+  sso_token?: SsoTokenInfo | null;
+  sso_session?: string | null;
+}
+
+export interface SsoTokenInfo {
+  status: "valid" | "expiring" | "expired" | "missing";
+  expiration: string | null;
+  seconds_remaining: number | null;
 }
 
 export interface ProfileIn {
@@ -76,6 +97,17 @@ export interface SsoSessionRecord {
   name: string;
   sso_start_url: string;
   sso_region: string;
+}
+
+export interface SsoSessionInfo {
+  session: string;
+  start_url: string;
+  region: string;
+  status: "valid" | "expiring" | "expired" | "missing";
+  expiration: string | null;
+  seconds_remaining: number | null;
+  profile_count: number;
+  profiles: string[];
 }
 
 export interface SsoSessionIn {
@@ -105,6 +137,20 @@ export interface IdentityRecord {
 export interface HostRecord {
   ip: string;
   hostname: string;
+}
+
+export interface SsoLoginUrlReady {
+  profile: string;
+  source: string;
+  url: string;
+  code: string;
+}
+
+export interface SsoLoginCompleted {
+  profile: string;
+  source: string;
+  success: boolean;
+  error?: string;
 }
 
 // ── Client internals ──────────────────────────────────────────────────────────
@@ -247,7 +293,12 @@ async function _refreshToken(): Promise<string> {
   return _refreshInFlight;
 }
 
-async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function req<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  acceptStatuses?: number[],
+): Promise<T> {
   const send = () =>
     fetch(`${_baseUrl}${path}`, {
       method,
@@ -294,11 +345,18 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 
   if (res.status === 204) return undefined as T;
 
+  // Some endpoints use 202 to mean "accepted, here's the partial result" — let
+  // the caller opt-in to treating that as a successful response.
+  if (res.status === 202 && acceptStatuses?.includes(202)) {
+    _lastSuccessAt = Date.now();
+    return res.json() as Promise<T>;
+  }
+
   if (!res.ok) {
     let detail: unknown = res.statusText;
     try {
       const json = await res.json();
-      detail = json.detail ?? json;
+      detail = json.detail ?? json.error ?? json.message ?? json;
     } catch {
       // response body not parseable; fall through with statusText
     }
@@ -307,6 +365,82 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 
   return res.json() as Promise<T>;
 }
+
+// ── CodeArtifact ──────────────────────────────────────────────────────────────
+
+export interface CodeArtifactDomain {
+  domain: string;
+  repository: string;
+  namespace: string;
+  account_id: string;
+  profile: string;
+  region: string;
+}
+
+export interface CodeArtifactLoginResult {
+  tool: string;
+  registry_url: string;
+  expires_at: string;
+  profile_used: string;
+}
+
+export interface CodeArtifactSSORequired {
+  status: "sso_required";
+  profile: string;
+  message: string;
+  domain: string;
+  tool: string;
+}
+
+export interface CodeArtifactToken {
+  domain: string;
+  repository: string;
+  account_id: string;
+  region: string;
+  tool: string;
+  registry_url: string;
+  expires_at: string | null;
+}
+
+export interface CodeArtifactDomainIn {
+  domain: string;
+  repository: string;
+  namespace?: string;
+  account_id?: string;
+  profile?: string;
+  region?: string;
+}
+
+export interface CodeArtifactDomainPatch {
+  repository?: string;
+  namespace?: string;
+  account_id?: string;
+  profile?: string;
+  region?: string;
+}
+
+export const codeartifactApi = {
+  domains: () => req<CodeArtifactDomain[]>("GET", "/codeartifact/domains"),
+  create: (body: CodeArtifactDomainIn) =>
+    req<CodeArtifactDomain>("POST", "/codeartifact/domains", body),
+  update: (domain: string, body: CodeArtifactDomainPatch) =>
+    req<CodeArtifactDomain>("PATCH", `/codeartifact/domains/${domain}`, body),
+  remove: (domain: string) => req<void>("DELETE", `/codeartifact/domains/${domain}`),
+  tokens: () => req<CodeArtifactToken[]>("GET", "/codeartifact/tokens"),
+  login: (
+    domain: string,
+    tool: string,
+    profile?: string,
+  ): Promise<CodeArtifactLoginResult | CodeArtifactSSORequired> =>
+    req<CodeArtifactLoginResult | CodeArtifactSSORequired>(
+      "POST",
+      "/codeartifact/login",
+      { domain, tool, profile },
+      [200, 202],
+    ),
+  packages: (domain: string) =>
+    req<Record<string, string | null>>("GET", `/codeartifact/domains/${domain}/packages`),
+};
 
 // ── Endpoint groups ───────────────────────────────────────────────────────────
 
@@ -345,6 +479,11 @@ export const profilesApi = {
   refreshAll: () => req<{ status: string; message: string }>("POST", "/profiles:refresh_all"),
   refresh: (name: string) =>
     req<{ status: string; message: string }>("POST", `/profiles/${name}:refresh`),
+  refreshSsoToken: (name: string) =>
+    req<{ name: string; account: string; refreshed: boolean }>(
+      "POST",
+      `/profiles/${name}:refresh_sso_token`,
+    ),
   setDefault: (name: string) => req<{ name: string }>("POST", `/profiles/${name}:set_default`),
   getIdentity: (name: string) => req<IdentityRecord>("GET", `/profiles/${name}/identity`),
 };
@@ -352,6 +491,7 @@ export const profilesApi = {
 export const ssoSessionsApi = {
   list: () => req<SsoSessionRecord[]>("GET", "/profiles/sessions"),
   create: (body: SsoSessionIn) => req<SsoSessionRecord>("POST", "/profiles/sessions", body),
+  info: () => req<SsoSessionInfo[]>("GET", "/profiles/sessions/info"),
 };
 
 export const hostsApi = {

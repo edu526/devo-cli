@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build"
+    "beforeDevCommand": "pnpm kill-zombies && pnpm dev",
+    "beforeBuildCommand": "pnpm kill-zombies && pnpm build"
   },
   "bundle": {
     "active": true,
@@ -20,9 +20,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": [
-      "binaries/devo-sidecar"
-    ],
+    "externalBin": ["binaries/devo-sidecar"],
     "linux": {
       "appimage": {
         "bundleMediaFramework": false
@@ -32,9 +30,7 @@
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg2ODFCOTM3Njg1QzBFNEYKUldSUERseG9ON21CaHNIQkx1YTdsNDhMUTAyUnJWYlBST2FoWmFFZENva1NGT2l3eW9qVzBPLzgK",
-      "endpoints": [
-        "https://github.com/edu526/devo-cli/releases/download/app-alpha/latest.json"
-      ],
+      "endpoints": ["https://github.com/edu526/devo-cli/releases/download/app-alpha/latest.json"],
       "windows": {
         "installMode": "passive"
       }
@@ -48,7 +44,11 @@
         "height": 800,
         "resizable": true,
         "fullscreen": false,
-        "decorations": false
+        "decorations": false,
+        "center": true,
+        "visible": false,
+        "theme": "Dark",
+        "backgroundColor": "#0f0f0f"
       }
     ],
     "security": {

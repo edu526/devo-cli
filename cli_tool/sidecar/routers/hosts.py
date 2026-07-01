@@ -32,7 +32,12 @@ def create_host(body: HostIn) -> dict[str, Any]:
     except NeedsElevation as exc:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
-            detail={"message": "Elevated privileges required", "command": exc.command},
+            detail={
+                "message": "Elevated privileges required",
+                "command": exc.command,
+                "action": exc.action,
+                "params": exc.params,
+            },
         )
     return {"ip": body.ip, "hostname": body.hostname}
 
@@ -44,7 +49,12 @@ def setup_endpoint(body: SetupIn | None = None) -> dict[str, Any]:
     except NeedsElevation as exc:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
-            detail={"message": "Elevated privileges required", "command": exc.command},
+            detail={
+                "message": "Elevated privileges required",
+                "command": exc.command,
+                "action": exc.action,
+                "params": exc.params,
+            },
         )
 
 
@@ -55,5 +65,10 @@ def delete_host(hostname: str) -> None:
     except NeedsElevation as exc:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
-            detail={"message": "Elevated privileges required", "command": exc.command},
+            detail={
+                "message": "Elevated privileges required",
+                "command": exc.command,
+                "action": exc.action,
+                "params": exc.params,
+            },
         )

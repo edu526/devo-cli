@@ -1,5 +1,19 @@
 import os
+import sys
 
+# Force UTF-8 encoding for standard output and error to prevent UnicodeEncodeError
+# on Windows when printing symbols like '✓' (especially in non-TTY environments)
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
+try:
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 import click
 
 from cli_tool.commands.autocomplete import autocomplete
@@ -163,32 +177,53 @@ def _parse_command_name(argv: list) -> str | None:
 
 
 def main():
+    import os
+    import signal
+    import sys
+
+    def _handle_fatal_signal(signum, frame):
+        # Translate SIGHUP/SIGTERM into a clean exit so `finally` blocks and `atexit` run
+        sys.exit(128 + signum)
+
+    if hasattr(signal, "SIGHUP"):
+        signal.signal(signal.SIGHUP, _handle_fatal_signal)
+    signal.signal(signal.SIGTERM, _handle_fatal_signal)
+
+    is_autocomplete = "_DEVO_COMPLETE" in os.environ
+
     from cli_tool.core.utils.telemetry import capture_command, capture_error, show_first_run_notice
     from cli_tool.core.utils.version_check import show_update_notification
 
-    show_first_run_notice()
-
-    import sys
+    if not is_autocomplete:
+        show_first_run_notice()
 
     cmd_name = _parse_command_name(sys.argv[1:])
 
     telemetry_thread = None
     try:
         cli(obj={})
-        telemetry_thread = capture_command(cmd_name, success=True)
+        if not is_autocomplete:
+            telemetry_thread = capture_command(cmd_name, success=True)
     except SystemExit as e:
-        telemetry_thread = capture_command(cmd_name, success=(e.code == 0))
+        if not is_autocomplete:
+            telemetry_thread = capture_command(cmd_name, success=(e.code == 0))
         raise
+    except KeyboardInterrupt:
+        if not is_autocomplete:
+            telemetry_thread = capture_command(cmd_name, success=False)
+        sys.exit(130)
     except Exception as e:
-        telemetry_thread = capture_error(cmd_name, e)
+        if not is_autocomplete:
+            telemetry_thread = capture_error(cmd_name, e)
         raise
     finally:
-        try:
-            if telemetry_thread:
-                telemetry_thread.join(timeout=2)
-            show_update_notification()
-        except KeyboardInterrupt:
-            pass
+        if not is_autocomplete:
+            try:
+                if telemetry_thread:
+                    telemetry_thread.join(timeout=2)
+                show_update_notification()
+            except KeyboardInterrupt:
+                pass
 
 
 if __name__ == "__main__":

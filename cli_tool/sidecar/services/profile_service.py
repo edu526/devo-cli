@@ -38,6 +38,9 @@ def _build_profile_info(name: str, src: str, default_name: str | None, now: date
             status = "expiring"
         else:
             status = "valid"
+
+    sso_token = _get_sso_token_info(name)
+    sso_session = _get_sso_session_name(name)
     return {
         "name": name,
         "source": src,
@@ -45,6 +48,56 @@ def _build_profile_info(name: str, src: str, default_name: str | None, now: date
         "seconds_remaining": seconds_remaining,
         "status": status,
         "is_default": name == default_name,
+        "sso_token": sso_token,
+        "sso_session": sso_session,
+    }
+
+
+def _get_sso_session_name(profile_name: str) -> str | None:
+    """Return the [sso-session] name referenced by this profile, if any."""
+    from cli_tool.commands.aws_login.core.config import get_profile_config
+
+    cfg = get_profile_config(profile_name)
+    if not cfg:
+        return None
+    # The config has either `sso_session = NAME` (modern) or inline
+    # `sso_start_url` (legacy). Both resolve to the same SSO session.
+    return cfg.get("sso_session") or cfg.get("sso_start_url")
+
+
+def _get_sso_token_info(profile_name: str) -> dict[str, Any] | None:
+    """Read the underlying SSO access token expiration from ~/.aws/sso/cache/.
+
+    The SSO access token (~1h TTL) is what boto3 uses internally to refresh
+    the longer-lived AWS temporary credentials (~12h TTL). They expire
+    independently — this lets the UI warn about SSO expiry separately.
+    """
+    from cli_tool.commands.aws_login.core.config import get_profile_config
+    from cli_tool.commands.aws_login.core.credentials import get_sso_token_expiration
+
+    cfg = get_profile_config(profile_name)
+    if not cfg:
+        return None
+    sso_start_url = cfg.get("sso_start_url")
+    if not sso_start_url:
+        return None
+    expires = get_sso_token_expiration(sso_start_url)
+    if not expires:
+        return {"status": "missing", "expiration": None, "seconds_remaining": None}
+
+    now = datetime.now(timezone.utc)
+    diff = (expires - now).total_seconds()
+    if diff <= 0:
+        status = "expired"
+    elif diff <= _WARN_SECONDS:
+        status = "expiring"
+    else:
+        status = "valid"
+
+    return {
+        "status": status,
+        "expiration": expires.isoformat(),
+        "seconds_remaining": max(0, int(diff)),
     }
 
 
@@ -122,6 +175,78 @@ def create_profile(
         "status": "unknown",
         "is_default": False,
     }
+
+
+def list_sso_sessions_info() -> list[dict[str, Any]]:
+    """Return one entry per unique SSO session referenced by SSO profiles.
+
+    Each entry: {session, start_url, region, status, expiration, seconds_remaining,
+    profile_count}. Profiles that share an [sso-session] (or legacy
+    sso_start_url) are deduped so the UI can show a single SSO refresh button
+    per session instead of one per profile.
+    """
+    from datetime import timezone as _tz
+
+    from cli_tool.commands.aws_login.core.config import get_existing_sso_sessions, list_aws_profiles
+    from cli_tool.commands.aws_login.core.credentials import get_sso_token_expiration
+
+    try:
+        profiles = list_aws_profiles()
+    except Exception:
+        profiles = []
+
+    # Bucket profiles by session key (prefer [sso-session] name, fallback to start URL)
+    by_session: dict[str, list[str]] = {}
+    profile_session: dict[str, str] = {}
+    for name, src in profiles:
+        if src not in ("sso", "both"):
+            continue
+        session = _get_sso_session_name(name)
+        if not session:
+            continue
+        by_session.setdefault(session, []).append(name)
+        profile_session[name] = session
+
+    # Pull region/start_url from the [sso-session] blocks if available
+    try:
+        sso_session_blocks = get_existing_sso_sessions()
+    except Exception:
+        sso_session_blocks = {}
+
+    now = datetime.now(_tz.utc)
+    sessions: list[dict[str, Any]] = []
+    for session_key, profile_names in by_session.items():
+        block = sso_session_blocks.get(session_key, {})
+        start_url = block.get("sso_start_url", session_key)
+        region = block.get("sso_region", "")
+        expires = get_sso_token_expiration(start_url)
+        if expires:
+            diff = (expires - now).total_seconds()
+            seconds_remaining = max(0, int(diff))
+            if diff <= 0:
+                status = "expired"
+            elif diff <= _WARN_SECONDS:
+                status = "expiring"
+            else:
+                status = "valid"
+        else:
+            seconds_remaining = None
+            status = "missing"
+
+        sessions.append(
+            {
+                "session": session_key,
+                "start_url": start_url,
+                "region": region,
+                "status": status,
+                "expiration": expires.isoformat() if expires else None,
+                "seconds_remaining": seconds_remaining,
+                "profile_count": len(profile_names),
+                "profiles": profile_names,
+            }
+        )
+
+    return sorted(sessions, key=lambda s: s["session"].lower())
 
 
 def list_sso_sessions() -> list[dict[str, Any]]:
@@ -288,23 +413,51 @@ async def watch_profiles(hub: EventHub) -> None:
 
 def _tick(hub: EventHub, warned: set[str]) -> None:
     """Single iteration of the watch loop. Exposed for unit tests."""
+    from cli_tool.commands.aws_login.core.credentials import write_default_credentials
+
     try:
         profiles = get_profiles_info()
     except Exception:
         return
+
+    # Group profiles by SSO session to emit one notification per session
+    sso_sessions: dict[str, dict] = {}  # session_name -> {sso_secs, profile_names}
+
     for p in profiles:
         name = p["name"]
-        secs = p.get("seconds_remaining")
-        if secs is None:
+        sts_secs = p.get("seconds_remaining")
+        sso_info = p.get("sso_token") or {}
+        sso_secs = sso_info.get("seconds_remaining")
+        sso_session = p.get("sso_session") or name  # fallback to profile name for legacy
+
+        # 1. Check STS Auto-Refresh for Default Profile
+        is_default = p.get("is_default")
+        if is_default and sts_secs is not None and sso_secs is not None:
+            if sts_secs <= _WARN_SECONDS and sso_secs > _WARN_SECONDS:
+                logger.info("Auto-refreshing default credentials for '%s' (STS: %ss left)", name, sts_secs)
+                try:
+                    write_default_credentials(name)
+                except Exception as e:
+                    logger.error("Auto-refresh failed: %s", e)
+
+        # 2. Accumulate SSO session info (one entry per unique session)
+        if sso_secs is None:
             continue
-        if secs <= _WARN_SECONDS and name not in warned:
-            warned.add(name)
+        if sso_session not in sso_sessions or sso_sessions[sso_session]["sso_secs"] > sso_secs:
+            sso_sessions[sso_session] = {"sso_secs": sso_secs}
+
+    # 3. Emit/clear notifications per SSO session
+    for session_name, info in sso_sessions.items():
+        sso_secs = info["sso_secs"]
+        if sso_secs <= _WARN_SECONDS and session_name not in warned:
+            warned.add(session_name)
             hub.publish(
                 "profile.expiring",
                 {
-                    "name": name,
-                    "seconds_remaining": secs,
+                    "name": session_name,
+                    "seconds_remaining": sso_secs,
+                    "type": "sso",
                 },
             )
-        elif secs > _WARN_SECONDS and name in warned:
-            warned.discard(name)
+        elif sso_secs > _WARN_SECONDS and session_name in warned:
+            warned.discard(session_name)

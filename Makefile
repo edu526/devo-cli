@@ -65,8 +65,10 @@ endif
 
 # Install package in editable mode with dev dependencies
 install:
-	@echo "Installing package with all dependencies (dev + docs)..."
-	pip install -e ".[dev,docs]"
+	@echo "Installing package with all dependencies (dev + docs + sidecar)..."
+	pip install -e ".[dev,docs,sidecar]"
+	@echo "Installing pre-commit hooks..."
+	pre-commit install && pre-commit install --hook-type pre-push
 	@echo "✓ Package and all dependencies installed"
 
 # Run tests
@@ -76,6 +78,8 @@ test:
 		venv/bin/pytest tests/ -v; \
 	elif [ -f "venv/Scripts/pytest.exe" ]; then \
 		venv/Scripts/pytest.exe tests/ -v; \
+	elif [ -f ".venv/Scripts/pytest.exe" ]; then \
+		.venv/Scripts/pytest.exe tests/ -v; \
 	else \
 		echo "Error: pytest not found in venv. Run 'make install' first."; \
 		exit 1; \

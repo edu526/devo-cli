@@ -34,8 +34,12 @@ CODEARTIFACT_REQUIRED_ROLE = os.getenv(
 )
 
 # Load CodeArtifact domains from config
+# ponytail: domain dicts now carry optional account_id / profile / region overrides;
+# the global codeartifact.* values serve as defaults. CLI tuple format kept for
+# backward compat — commands that need the full dict should read config directly.
 _domains_config = get_config_value("codeartifact.domains", [])
-CODEARTIFACT_DOMAINS = [(d["domain"], d["repository"], d["namespace"]) for d in _domains_config] if _domains_config else []
+_CODEARTIFACT_DOMAINS_TUPLES = [(d["domain"], d["repository"], d.get("namespace", "")) for d in _domains_config] if _domains_config else []
+CODEARTIFACT_DOMAINS = _CODEARTIFACT_DOMAINS_TUPLES
 
 # PostHog telemetry
 POSTHOG_API_KEY = "phc_DGUSmVSQTZCtAWTaEiyppy6to6bHvUVX5MOwA18JktP"

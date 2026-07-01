@@ -1,12 +1,13 @@
 <script lang="ts">
   // First-run wizard. Shown when ~/.devo/config.json has no
-  // `onboarded: true`. Three steps:
-  //   1. Welcome + preflight (aws + session-manager-plugin + socat)
-  //   2. SSO login (uses /profiles/refresh)
-  //   3. Add first instance + first database
+  // `onboarded: true`.
+  // Runs preflight checks (aws + session-manager-plugin + socat).
   // On finish, PATCH /api/v1/config to set onboarded=true.
 
-  import { preflightApi, profilesApi, instancesApi, databasesApi, configApi, ApiError } from "../lib/api";
+  import { preflightApi, configApi, ApiError } from "../lib/api";
+  import { fade, slide } from "svelte/transition";
+  import { quintOut } from "svelte/easing";
+  import { Check, X, RefreshCw, ArrowRight } from "@lucide/svelte";
 
   interface PreflightResult {
     aws_cli?: { ok: boolean; version?: string | null };
@@ -20,22 +21,8 @@
     detail?: string;
   }
 
-  let step = $state<1 | 2 | 3>(1);
   let preflight = $state<PreflightResult | null>(null);
   let preflightLoading = $state(false);
-  let ssoInProgress = $state(false);
-  let ssoDone = $state(false);
-  let ssoError: string | null = $state(null);
-
-  let newInstance = $state({ name: "", instance_id: "", region: "us-east-1" });
-  let newDatabase = $state({
-    name: "",
-    bastion: "",
-    host: "",
-    port: 5432,
-    region: "us-east-1",
-  });
-
   let actionError: string | null = $state(null);
   let finishing = $state(false);
 
@@ -71,7 +58,7 @@
     try {
       const raw = await preflightApi.run();
       // Backend returns the dict directly (no wrapping).
-      preflight = (raw as unknown) as PreflightResult;
+      preflight = raw as unknown as PreflightResult;
     } catch (e) {
       actionError = String(e);
     } finally {
@@ -79,302 +66,339 @@
     }
   }
 
-  async function doSso() {
-    ssoInProgress = true;
-    ssoError = null;
-    try {
-      await profilesApi.refreshAll();
-      // The actual completion is async — the sidecar opens a browser
-      // window and the user has to approve. We optimistically advance;
-      // the WS event `profile.refreshed` will report success.
-      ssoDone = true;
-    } catch (e) {
-      ssoError = e instanceof ApiError ? String(e.detail) : String(e);
-    } finally {
-      ssoInProgress = false;
-    }
-  }
-
   async function finish() {
     actionError = null;
     finishing = true;
     try {
-      // Create instance + database if both names were provided.
-      if (newInstance.name && newInstance.instance_id) {
-        await instancesApi.create(newInstance.name, {
-          instance_id: newInstance.instance_id,
-          region: newInstance.region,
-        });
-      }
-      if (newDatabase.name && newDatabase.host && newDatabase.bastion) {
-        await databasesApi.create(newDatabase.name, {
-          bastion: newDatabase.bastion,
-          host: newDatabase.host,
-          port: Number(newDatabase.port),
-          region: newDatabase.region,
-        });
-      }
       // Mark the user as onboarded.
       await configApi.patch({ onboarded: true });
-      // Tell App.svelte to leave the wizard.
+      // Wait a tiny bit for UI update if needed, but the CustomEvent triggers the App re-render
       window.dispatchEvent(new CustomEvent("onboarding-complete"));
     } catch (e) {
-      actionError = e instanceof ApiError ? String(e.detail) : String(e);
+      actionError = e instanceof ApiError ? e.message : String(e);
     } finally {
       finishing = false;
     }
   }
 
-  function skip() {
-    window.dispatchEvent(new CustomEvent("onboarding-complete"));
-  }
-
   // Auto-run preflight on mount
   $effect(() => {
-    if (step === 1 && preflight === null && !preflightLoading) {
+    if (preflight === null && !preflightLoading) {
       runPreflight();
     }
   });
 </script>
 
-<div class="onboarding">
-  <header>
-    <h1>Welcome to Devo</h1>
-    <p class="muted">Let's get your developer environment set up.</p>
-  </header>
+<div class="onboarding-wrapper" out:fade={{ duration: 700, easing: quintOut }}>
+  <div class="onboarding-card" in:fade={{ duration: 400 }}>
+    <header>
+      <img class="ob-logo" src="/app-icon.png" alt="Devo" />
+      <h1>Welcome to Devo</h1>
+      <p class="muted">Let's get your developer environment set up.</p>
+    </header>
 
-  <ol class="steps">
-    <li class:active={step === 1} class:done={step > 1}>1 · Preflight</li>
-    <li class:active={step === 2} class:done={step > 2}>2 · SSO</li>
-    <li class:active={step === 3} class:done={false}>3 · First instance</li>
-  </ol>
+    {#if actionError}
+      <div class="alert-error" in:slide>{actionError}</div>
+    {/if}
 
-  {#if actionError}
-    <div class="alert-error">{actionError}</div>
-  {/if}
-
-  {#if step === 1}
-    <section>
-      <h2>Preflight check</h2>
-      <p class="muted">Verifying required CLI tools are installed.</p>
-      {#if preflightLoading}
-        <p class="muted">Running checks…</p>
-      {:else if preflight}
-        {@const checks = checksFrom(preflight)}
-        {@const allOk = checks.every((c) => c.present)}
+    <div class="step-content">
+      <section in:fade={{ duration: 300, delay: 100 }}>
+        <div class="section-header">
+          <h2>Preflight check</h2>
+          <p class="muted">Verifying required CLI tools are installed.</p>
+        </div>
         <ul class="checks">
-          {#each checks as check (check.name)}
-            <li class:fail={!check.present}>
-              <span class="icon">{check.present ? "✓" : "✗"}</span>
-              <span class="name">{check.name}</span>
-              {#if check.detail}<span class="detail muted">{check.detail}</span>{/if}
-            </li>
-          {/each}
+          {#if preflightLoading}
+            {#each ["aws", "session-manager-plugin", "socat"] as tool}
+              <li class="check-item loading">
+                <div class="check-icon spinner-container"><div class="spinner-small"></div></div>
+                <div class="check-info">
+                  <span class="name">{tool}</span>
+                  <span class="detail muted">Verifying installation...</span>
+                </div>
+              </li>
+            {/each}
+          {:else if preflight}
+            {@const checks = checksFrom(preflight)}
+            {#each checks as check (check.name)}
+              <li class="check-item" class:fail={!check.present}>
+                <div class="check-icon" style="display:inline-flex">
+                  {#if check.present}<Check size={18} strokeWidth={3} />{:else}<X
+                      size={18}
+                      strokeWidth={3}
+                    />{/if}
+                </div>
+                <div class="check-info">
+                  <span class="name">{check.name}</span>
+                  {#if check.detail}<span class="detail muted">{check.detail}</span>{/if}
+                </div>
+              </li>
+            {/each}
+          {/if}
         </ul>
-        {#if !allOk}
-          <div class="alert-warn">
-            One or more tools are missing. Devo will still launch but
-            some features will not work until you install them.
+
+        {#if preflight && !checksFrom(preflight).every((c) => c.present)}
+          <div class="alert-warn" in:slide>
+            <span class="warn-icon">!</span>
+            <p>
+              One or more tools are missing. Devo will still launch but some features will not work
+              until you install them.
+            </p>
           </div>
         {/if}
-      {/if}
-      <div class="actions">
-        <button class="btn-secondary" onclick={runPreflight} disabled={preflightLoading}>
-          ↺ Re-check
-        </button>
-        <button class="btn-primary" onclick={() => (step = 2)}>Next: SSO login →</button>
-      </div>
-    </section>
-  {:else if step === 2}
-    <section>
-      <h2>AWS SSO login</h2>
-      <p class="muted">
-        Refresh your SSO profiles. A browser window will open for each
-        profile that needs a fresh token.
-      </p>
-      {#if ssoError}
-        <div class="alert-error">{ssoError}</div>
-      {/if}
-      <div class="actions">
-        <button class="btn-secondary" onclick={() => (step = 1)}>← Back</button>
-        <button class="btn-primary" onclick={doSso} disabled={ssoInProgress}>
-          {ssoInProgress ? "Refreshing…" : ssoDone ? "Refresh again" : "Refresh SSO profiles"}
-        </button>
-        <button class="btn-primary" onclick={() => (step = 3)}>Next: First instance →</button>
-      </div>
-    </section>
-  {:else if step === 3}
-    <section>
-      <h2>Add your first bastion and database</h2>
-      <p class="muted">You can skip this and configure later from the side panel.</p>
-
-      <div class="form-grid">
-        <fieldset>
-          <legend>Bastion instance</legend>
-          <label>
-            Name
-            <input bind:value={newInstance.name} placeholder="prod-bastion" />
-          </label>
-          <label>
-            Instance ID
-            <input bind:value={newInstance.instance_id} placeholder="i-0abc123def456" />
-          </label>
-          <label>
-            Region
-            <input bind:value={newInstance.region} placeholder="us-east-1" />
-          </label>
-        </fieldset>
-
-        <fieldset>
-          <legend>Database (optional)</legend>
-          <label>
-            Name
-            <input bind:value={newDatabase.name} placeholder="mydb" />
-          </label>
-          <label>
-            Bastion
-            <input bind:value={newDatabase.bastion} placeholder="prod-bastion" />
-          </label>
-          <label>
-            Host
-            <input bind:value={newDatabase.host} placeholder="mydb.cluster.us-east-1.rds.amazonaws.com" />
-          </label>
-          <label>
-            Port
-            <input type="number" bind:value={newDatabase.port} />
-          </label>
-        </fieldset>
-      </div>
-
-      <div class="actions">
-        <button class="btn-secondary" onclick={() => (step = 2)}>← Back</button>
-        <button class="btn-secondary" onclick={skip} disabled={finishing}>Skip for now</button>
-        <button class="btn-primary" onclick={finish} disabled={finishing}>
-          {finishing ? "Finishing…" : "Finish setup"}
-        </button>
-      </div>
-    </section>
-  {/if}
+        <div class="actions">
+          <button
+            class="btn-secondary"
+            style="display:inline-flex; align-items:center; gap:0.4rem;"
+            onclick={runPreflight}
+            disabled={preflightLoading}
+          >
+            <RefreshCw size={16} /> Re-check
+          </button>
+          <button
+            class="btn-primary"
+            style="display:inline-flex; align-items:center; gap:0.4rem;"
+            onclick={finish}
+            disabled={finishing || preflightLoading}
+          >
+            {#if finishing}Starting...{:else}Start using Devo <ArrowRight size={16} />{/if}
+          </button>
+        </div>
+      </section>
+    </div>
+  </div>
 </div>
 
 <style>
-  .onboarding {
-    max-width: 720px;
-    margin: 1rem auto;
-    padding: 2rem;
-    background: var(--bg-surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
+  .onboarding-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 36px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    background: radial-gradient(circle at 50% -20%, rgba(79, 142, 247, 0.15), transparent 60%);
+    background-color: var(--bg-body, #0f0f0f);
+  }
+
+  .onboarding-card {
+    width: 100%;
+    max-width: 580px;
+    background: rgba(30, 30, 46, 0.4);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 2.5rem;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+
+  .ob-logo {
+    width: 54px;
+    height: 54px;
+    margin-bottom: 1rem;
+    border-radius: 14px;
+    box-shadow: 0 4px 15px rgba(79, 142, 247, 0.2);
   }
 
   header h1 {
-    font-size: 1.5rem;
-    margin-bottom: 0.25rem;
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem 0;
+    background: linear-gradient(135deg, #4f8ef7, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.5px;
   }
 
-  .steps {
-    list-style: none;
+  header p {
+    font-size: 0.95rem;
+    margin: 0;
+  }
+
+  .step-content {
     display: flex;
-    gap: 1.5rem;
-    padding: 0;
-    margin: 1.5rem 0;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 0.75rem;
-    color: var(--text-muted);
-    font-size: 0.85rem;
-  }
-  .steps li.active {
-    color: var(--accent);
-    font-weight: 600;
-  }
-  .steps li.done {
-    color: var(--success);
+    flex-direction: column;
   }
 
-  section h2 {
-    font-size: 1.1rem;
-    margin-bottom: 0.4rem;
+  section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .section-header {
+    margin-bottom: 1.5rem;
+  }
+
+  .section-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0 0 0.25rem 0;
+    color: #fff;
   }
 
   .checks {
     list-style: none;
     padding: 0;
-    margin: 1rem 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
   }
-  .checks li {
+
+  .check-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    transition: border-color 0.2s;
+  }
+
+  .check-item:hover {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .check-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(46, 213, 115, 0.1);
+    color: #2ed573;
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    padding: 0.4rem 0;
+    justify-content: center;
     font-size: 0.9rem;
+    font-weight: bold;
+    flex-shrink: 0;
   }
-  .checks .icon {
-    width: 1.2rem;
-    text-align: center;
-    color: var(--success);
+
+  .check-item.fail .check-icon {
+    background: rgba(255, 71, 87, 0.1);
+    color: #ff4757;
   }
-  .checks li.fail .icon {
-    color: var(--danger);
+
+  .check-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
   }
-  .checks .name {
+
+  .check-info .name {
     font-family: "JetBrains Mono", monospace;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #e0e0e0;
   }
-  .checks .detail {
+
+  .check-info .detail {
     font-size: 0.8rem;
   }
 
-  .form-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-    margin: 1rem 0;
+  .spinner-small {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(79, 142, 247, 0.2);
+    border-top-color: #4f8ef7;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
   }
-  fieldset {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 0.75rem;
+
+  .check-item.loading .check-icon {
+    background: rgba(255, 255, 255, 0.05);
   }
-  legend {
-    color: var(--text-secondary);
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .alert-warn {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background: rgba(251, 191, 36, 0.1);
+    border: 1px solid rgba(251, 191, 36, 0.2);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-top: 1.5rem;
+  }
+
+  .warn-icon {
+    width: 20px;
+    height: 20px;
+    background: #fbbf24;
+    color: #000;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
     font-size: 0.8rem;
-    padding: 0 0.4rem;
+    flex-shrink: 0;
   }
-  fieldset label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-  }
-  fieldset input {
-    width: 100%;
-    background: var(--bg-surface-2);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-primary);
-    padding: 0.35rem 0.5rem;
+
+  .alert-warn p {
+    margin: 0;
+    color: #fcd34d;
     font-size: 0.85rem;
-    margin-top: 0.2rem;
-  }
-  fieldset input:focus {
-    outline: none;
-    border-color: var(--accent);
+    line-height: 1.4;
   }
 
   .actions {
     display: flex;
-    gap: 0.5rem;
-    margin-top: 1.25rem;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
     justify-content: flex-end;
   }
 
-  .alert-warn {
-    background: #2a1a00;
-    border: 1px solid var(--warning);
+  .btn-primary {
+    background: linear-gradient(135deg, #4f8ef7, #a78bfa);
+    color: #fff;
+    border: none;
     border-radius: 6px;
-    padding: 0.6rem 0.8rem;
-    color: var(--warning);
-    font-size: 0.85rem;
-    margin: 0.75rem 0;
+    padding: 0.5rem 1.25rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    background: rgba(255, 255, 255, 0.05);
+    color: #e0e0e0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 0.5rem 1.25rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
   }
 </style>

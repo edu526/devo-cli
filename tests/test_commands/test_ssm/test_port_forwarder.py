@@ -208,6 +208,7 @@ def test_start_forward_unix_stops_existing_before_restart(mocker):
     """Stops an existing forward on the same key before starting a new one."""
     pf = _make_forwarder("Linux")
     existing_proc = MagicMock()
+    existing_proc.pid = 12345
     pf.processes["127.0.0.2:5432"] = existing_proc
 
     mock_new_proc = MagicMock()
@@ -217,10 +218,13 @@ def test_start_forward_unix_stops_existing_before_restart(mocker):
     mocker.patch.object(pf, "_kill_orphaned_socat")
     mocker.patch("subprocess.Popen", return_value=mock_new_proc)
     mocker.patch("time.sleep")
+    mock_killpg = mocker.patch("os.killpg", create=True)
+    mocker.patch("os.getpgid", return_value=12345, create=True)
 
     pf.start_forward("127.0.0.2", 5432, 15432)
 
-    existing_proc.terminate.assert_called_once()
+    mock_killpg.assert_called_once()
+    pf.processes.clear()
 
 
 # ============================================================================
@@ -275,7 +279,7 @@ def test_start_forward_windows_success(mocker):
     pf = _make_forwarder("Windows")
     mocker.patch("subprocess.run")
 
-    result = pf.start_forward("127.0.0.2", 5432, 15432)
+    result = pf.start_forward("127.0.0.2", 5432, 15432, allow_uac_prompt=False)
 
     assert result is None
     assert "127.0.0.2:5432" in pf.processes
@@ -287,16 +291,17 @@ def test_start_forward_windows_clears_orphan_portproxy_first(mocker):
     pf = _make_forwarder("Windows")
     mock_run = mocker.patch("subprocess.run")
 
-    pf.start_forward("127.0.0.2", 5432, 15432)
+    pf.start_forward("127.0.0.2", 5432, 15432, allow_uac_prompt=False)
 
     assert mock_run.call_count == 2
-    delete_call, add_call = mock_run.call_args_list
-    delete_cmd = delete_call.args[0]
-    add_cmd = add_call.args[0]
-    assert delete_cmd[:5] == ["netsh", "interface", "portproxy", "delete", "v4tov4"]
-    assert "listenaddress=127.0.0.2" in delete_cmd
-    assert "listenport=5432" in delete_cmd
-    assert add_cmd[3] == "add"
+    show_call, combined_call = mock_run.call_args_list
+    assert show_call.args[0][:4] == ["netsh", "interface", "portproxy", "show"]
+
+    combined_cmd = combined_call.args[0]
+    assert combined_cmd[:2] == ["cmd.exe", "/c"]
+    command_str = combined_cmd[2]
+    assert "delete v4tov4 listenaddress=127.0.0.2 listenport=5432" in command_str
+    assert "add v4tov4 listenaddress=127.0.0.2 listenport=5432 connectaddress=127.0.0.1 connectport=15432" in command_str
 
 
 @pytest.mark.unit
@@ -313,7 +318,7 @@ def test_start_forward_windows_orphan_cleanup_failure_does_not_abort(mocker):
 
     mocker.patch("subprocess.run", side_effect=run_side_effect)
 
-    result = pf.start_forward("127.0.0.2", 5432, 15432)
+    result = pf.start_forward("127.0.0.2", 5432, 15432, allow_uac_prompt=False)
 
     assert result is None
     assert "127.0.0.2:5432" in pf.processes
@@ -330,7 +335,7 @@ def test_start_forward_windows_permission_error(mocker):
     mocker.patch("subprocess.run", side_effect=error)
 
     with pytest.raises(PermissionError, match="Permission denied"):
-        pf.start_forward("127.0.0.2", 5432, 15432)
+        pf.start_forward("127.0.0.2", 5432, 15432, allow_uac_prompt=False)
 
 
 @pytest.mark.unit
@@ -343,7 +348,7 @@ def test_start_forward_windows_generic_error(mocker):
     mocker.patch("subprocess.run", side_effect=error)
 
     with pytest.raises(RuntimeError, match="Failed to create port proxy"):
-        pf.start_forward("127.0.0.2", 5432, 15432)
+        pf.start_forward("127.0.0.2", 5432, 15432, allow_uac_prompt=False)
 
 
 # ============================================================================
@@ -353,28 +358,18 @@ def test_start_forward_windows_generic_error(mocker):
 
 @pytest.mark.unit
 def test_stop_forward_unix_terminates_process(mocker):
-    """stop_forward terminates the socat process on Linux."""
+    """stop_forward kills the socat process group on Linux."""
     pf = _make_forwarder("Linux")
     mock_proc = MagicMock()
+    mock_proc.pid = 12345
     pf.processes["127.0.0.2:5432"] = mock_proc
+
+    mock_killpg = mocker.patch("os.killpg", create=True)
+    mocker.patch("os.getpgid", return_value=12345, create=True)
 
     pf.stop_forward("127.0.0.2", 5432)
 
-    mock_proc.terminate.assert_called_once()
-    assert "127.0.0.2:5432" not in pf.processes
-
-
-@pytest.mark.unit
-def test_stop_forward_unix_kills_on_timeout(mocker):
-    """stop_forward kills the process if terminate times out."""
-    pf = _make_forwarder("Linux")
-    mock_proc = MagicMock()
-    mock_proc.wait.side_effect = subprocess.TimeoutExpired("socat", 5)
-    pf.processes["127.0.0.2:5432"] = mock_proc
-
-    pf.stop_forward("127.0.0.2", 5432)
-
-    mock_proc.kill.assert_called_once()
+    mock_killpg.assert_called_once()
     assert "127.0.0.2:5432" not in pf.processes
 
 
@@ -424,14 +419,18 @@ def test_stop_all_stops_all_processes(mocker):
     """stop_all terminates all registered forwarding processes."""
     pf = _make_forwarder("Linux")
     proc1 = MagicMock()
+    proc1.pid = 12345
     proc2 = MagicMock()
+    proc2.pid = 12346
     pf.processes["127.0.0.2:5432"] = proc1
     pf.processes["127.0.0.3:3306"] = proc2
 
+    mock_killpg = mocker.patch("os.killpg", create=True)
+    mocker.patch("os.getpgid", return_value=12345, create=True)
+
     pf.stop_all()
 
-    proc1.terminate.assert_called_once()
-    proc2.terminate.assert_called_once()
+    assert mock_killpg.call_count == 2
     assert pf.processes == {}
 
 
@@ -612,8 +611,9 @@ def test_register_signal_handlers_registered_on_linux(mocker):
         PortForwarder()
 
     registered_signals = [call[0][0] for call in mock_signal.call_args_list]
-    assert signal_module.SIGTERM in registered_signals
-    assert signal_module.SIGHUP in registered_signals
+    assert getattr(signal_module, "SIGTERM", None) in registered_signals
+    if hasattr(signal_module, "SIGHUP"):
+        assert signal_module.SIGHUP in registered_signals
 
 
 @pytest.mark.unit

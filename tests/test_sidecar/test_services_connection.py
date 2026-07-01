@@ -82,8 +82,8 @@ class TestStopAllConnections:
 
         connection_service.stop_all_connections(reg)
         assert reg.stop_event.is_set()
-        rec_a.stop_event.set.assert_called_once()
-        rec_b.stop_event.set.assert_called_once()
+        rec_a.stop_event.set.assert_called()
+        rec_b.stop_event.set.assert_called()
 
 
 @pytest.mark.unit

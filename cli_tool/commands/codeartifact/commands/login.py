@@ -6,20 +6,42 @@ import click
 from rich.console import Console
 
 from cli_tool.commands.codeartifact.core.authenticator import CodeArtifactAuthenticator
-from cli_tool.config import AWS_ACCOUNT_ID as REQUIRED_ACCOUNT
-from cli_tool.config import AWS_REQUIRED_ROLE as REQUIRED_ROLE
-from cli_tool.config import (
-    AWS_SSO_URL,
-    CODEARTIFACT_DOMAINS,
-    CODEARTIFACT_REGION,
-)
-from cli_tool.core.utils.aws import check_aws_cli, verify_aws_credentials
+from cli_tool.core.utils.aws import check_aws_cli
 
 console = Console()
 
 
+def _load_domain_configs():
+    """Load full domain configs from ~/.devo/config.json. Returns list of dicts with keys:
+    domain, repository, namespace, account_id, profile, region."""
+    from cli_tool.core.utils.config_manager import get_config_value
+
+    global_region = get_config_value("codeartifact.region", "us-east-1")
+    domains = get_config_value("codeartifact.domains", [])
+    result = []
+    for d in domains:
+        result.append(
+            {
+                "domain": d["domain"],
+                "repository": d["repository"],
+                "namespace": d.get("namespace", ""),
+                "account_id": d.get("account_id", ""),
+                "profile": d.get("profile", ""),
+                "region": d.get("region", global_region),
+            }
+        )
+    return result
+
+
+def _resolve_profile(domain_cfg: dict, cli_profile: str | None) -> str | None:
+    return domain_cfg.get("profile") or cli_profile
+
+
+def _resolve_region(domain_cfg: dict) -> str:
+    return domain_cfg["region"]
+
+
 def _display_failed_domains(failed_domains: list) -> None:
-    """Print failure summary and troubleshooting tips."""
     click.echo(click.style(f"Failed: {len(failed_domains)}", fg="red"))
     click.echo("")
     click.echo("Failed domains:")
@@ -27,25 +49,32 @@ def _display_failed_domains(failed_domains: list) -> None:
         click.echo(f"  - {domain}")
     click.echo("")
     click.echo("Troubleshooting:")
-    click.echo(f"  1. Verify you're using account {REQUIRED_ACCOUNT}: aws sts get-caller-identity")
-    click.echo(f"  2. Ensure you have the {REQUIRED_ROLE} role with CodeArtifact permissions")
-    click.echo("  3. Check IAM permissions for CodeArtifact (GetAuthorizationToken, ReadFromRepository)")
-    click.echo("  4. Ensure the domains and repositories exist")
+    click.echo("  1. Verify your profile has valid SSO credentials: devo aws-login refresh")
+    click.echo("  2. Ensure the profile has CodeArtifact permissions (GetAuthorizationToken)")
+    click.echo("  3. Ensure the domain and repository exist in the target account")
     click.echo("")
-    click.echo(click.style("Get fresh credentials from:", fg="blue"))
-    click.echo(f"  {AWS_SSO_URL}")
 
 
-def _list_available_packages(authenticator, profile) -> None:
-    """Print available packages from each configured domain."""
+def _list_available_packages(auth, domain_cfgs: list[dict], cli_profile: str | None) -> None:
     click.echo(click.style("=== Available Packages ===", fg="green"))
     click.echo("")
 
-    for domain, repository, namespace in CODEARTIFACT_DOMAINS:
-        click.echo(click.style(f"Domain: {domain} ({namespace})", fg="blue"))
+    for dc in domain_cfgs:
+        profile = _resolve_profile(dc, cli_profile)
+        region = _resolve_region(dc)
+        label = f"{dc['domain']}/{dc['repository']}"
+        if dc["namespace"]:
+            label += f" ({dc['namespace']})"
+        click.echo(click.style(f"Domain: {label}", fg="blue"))
 
-        with console.status(f"[blue]Fetching packages from {domain}...", spinner="dots"):
-            packages_with_versions = authenticator.list_packages_with_versions(domain, repository, namespace, profile)
+        with console.status(f"[blue]Fetching packages from {dc['domain']}...", spinner="dots"):
+            packages_with_versions = auth.list_packages_with_versions(
+                dc["domain"],
+                dc["repository"],
+                dc["namespace"],
+                profile,
+                region,
+            )
 
         if packages_with_versions:
             for package, version in sorted(packages_with_versions.items()):
@@ -59,59 +88,13 @@ def _list_available_packages(authenticator, profile) -> None:
         click.echo("")
 
 
-def _verify_credentials_or_exit(profile) -> tuple:
-    """Verify AWS credentials and account, exit on failure. Returns (account_id, user_arn)."""
-    with console.status("[blue]Verifying AWS credentials...", spinner="dots"):
-        account_id, user_arn = verify_aws_credentials(profile)
-
-    if not account_id:
-        click.echo(click.style("No AWS credentials found", fg="red"))
-        click.echo("")
-        click.echo(click.style("Get your AWS credentials from:", fg="blue"))
-        click.echo(f"  {AWS_SSO_URL}")
-        sys.exit(1)
-
-    if account_id != REQUIRED_ACCOUNT:
-        click.echo(click.style(f"Current credentials are for account: {account_id}", fg="yellow"))
-        click.echo(click.style(f"Required account: {REQUIRED_ACCOUNT}", fg="yellow"))
-        click.echo("")
-        click.echo(click.style("Get credentials for the correct account from:", fg="blue"))
-        click.echo(f"  {AWS_SSO_URL}")
-        sys.exit(1)
-
-    return account_id, user_arn
-
-
-def _authenticate_all_domains(authenticator, profile) -> tuple:
-    """Authenticate with all configured domains. Returns (success_count, failed_domains)."""
-    success_count = 0
-    failed_domains = []
-
-    for domain, repository, namespace in CODEARTIFACT_DOMAINS:
-        with console.status(f"[yellow]Authenticating with {domain}/{repository} ({namespace})...", spinner="dots"):
-            success, error = authenticator.authenticate_domain(domain, repository, namespace, profile)
-
-        if success:
-            click.echo(click.style(f"✓ Successfully authenticated with {domain}/{repository} ({namespace})", fg="green"))
-            success_count += 1
-        else:
-            click.echo(click.style(f"✗ Failed to authenticate with {domain}/{repository} ({namespace})", fg="red"))
-            if error:
-                click.echo(error)
-            failed_domains.append(f"{domain}/{repository} ({namespace})")
-
-        click.echo("")
-
-    return success_count, failed_domains
-
-
 @click.command()
 @click.pass_context
 def codeartifact_login(ctx):
     """Login to AWS CodeArtifact for npm access.
 
     Authenticates with configured CodeArtifact domains and repositories.
-    Supports multiple domains with different namespaces.
+    Supports multi-account: each domain can specify its own profile and region.
 
     Examples:
       devo codeartifact-login
@@ -119,41 +102,56 @@ def codeartifact_login(ctx):
     """
     from cli_tool.core.utils.aws import select_profile
 
-    profile = select_profile(ctx.obj.get("profile"))
+    cli_profile = select_profile(ctx.obj.get("profile"))
+    domain_cfgs = _load_domain_configs()
+
+    if not domain_cfgs:
+        click.echo(click.style("No CodeArtifact domains configured.", fg="yellow"))
+        click.echo("Add domains to ~/.devo/config.json under codeartifact.domains")
+        sys.exit(1)
 
     click.echo(click.style("=== CodeArtifact Multi-Domain Login ===", fg="green"))
-    click.echo("")
-    click.echo(click.style(f"Required AWS Account: {REQUIRED_ACCOUNT}", fg="blue"))
-    click.echo(click.style(f"Required IAM Role: {REQUIRED_ROLE}", fg="blue"))
     click.echo("")
 
     if not check_aws_cli():
         sys.exit(1)
 
-    account_id, user_arn = _verify_credentials_or_exit(profile)
-
-    if profile:
-        click.echo(click.style(f"Using profile: {profile}", fg="green"))
-    else:
-        click.echo(click.style("Using active AWS credentials", fg="green"))
-
-    click.echo(click.style(f"Account: {account_id}", fg="blue"))
-    click.echo(click.style(f"User: {user_arn}", fg="blue"))
+    # Show what we're working with
+    if cli_profile:
+        click.echo(click.style(f"CLI profile: {cli_profile}", fg="green"))
+    click.echo(click.style(f"Domains configured: {len(domain_cfgs)}", fg="blue"))
     click.echo("")
 
-    if REQUIRED_ROLE not in user_arn:
-        click.echo(click.style(f"Warning: User ARN does not contain '{REQUIRED_ROLE}' role", fg="yellow"))
-        click.echo("Please ensure you have the necessary CodeArtifact permissions")
+    # Authenticate each domain with its own profile/region
+    success_count = 0
+    failed_domains = []
+
+    for dc in domain_cfgs:
+        profile = _resolve_profile(dc, cli_profile)
+        region = _resolve_region(dc)
+        label = f"{dc['domain']}/{dc['repository']}"
+        if dc["namespace"]:
+            label += f" ({dc['namespace']})"
+        extra = f" [profile={profile}, region={region}]" if profile else f" [region={region}]"
+
+        with console.status(f"[yellow]Authenticating with {label}{extra}...", spinner="dots"):
+            auth = CodeArtifactAuthenticator(region, [(dc["domain"], dc["repository"], dc["namespace"])])
+            success, error = auth.authenticate_domain(
+                dc["domain"],
+                dc["repository"],
+                dc["namespace"],
+                profile,
+                region,
+            )
+
+        if success:
+            click.echo(click.style(f"✓ {label}", fg="green"))
+            success_count += 1
+        else:
+            click.echo(click.style(f"✗ {label} — {error or 'Authentication failed'}", fg="red"))
+            failed_domains.append(label)
+
         click.echo("")
-        if not click.confirm("Continue anyway?"):
-            click.echo("Aborted")
-            sys.exit(1)
-
-    click.echo(click.style(f"Region: {CODEARTIFACT_REGION}", fg="blue"))
-    click.echo("")
-
-    authenticator = CodeArtifactAuthenticator(CODEARTIFACT_REGION, CODEARTIFACT_DOMAINS)
-    success_count, failed_domains = _authenticate_all_domains(authenticator, profile)
 
     click.echo(click.style("=== Authentication Summary ===", fg="green"))
     click.echo("")
@@ -168,4 +166,5 @@ def codeartifact_login(ctx):
         click.echo(click.style("Note: Tokens expire in 12 hours", fg="yellow"))
         click.echo(click.style("Note: pnpm will automatically use the npm configuration", fg="yellow"))
         click.echo("")
-        _list_available_packages(authenticator, profile)
+        # Reuse the last authenticator (any region works for listing)
+        _list_available_packages(auth, domain_cfgs, cli_profile)

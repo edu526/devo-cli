@@ -15,6 +15,18 @@ _TOKEN_EXPIRED_PATTERNS = [
     "token has expired",
     "credentials have expired",
     "authfailure",
+    "sso session associated with this profile has expired",
+    "sso session has expired",
+    "is otherwise invalid",
+    "the security token included in the request is invalid",
+    "invalidclienttokenid",
+    "expiredtoken",
+    "ssotokenloaderror",
+    "tokenretrievalerror",
+    "credentialretrievalerror",
+    "unauthorizedssotokenerror",
+    "nocredentialserror",
+    "error loading sso token",
 ]
 
 
@@ -59,16 +71,25 @@ class SSMSession:
         Returns True only when the STS call explicitly indicates token expiry.
         Returns False on network errors or any other non-expiry failures so that
         reconnect attempts are not incorrectly suppressed.
+        We use the AWS CLI via export-credentials rather than boto3 to ensure
+        we share the same credential cache as the AWS CLI.
         """
-        cmd = ["aws", "sts", "get-caller-identity", "--region", region]
-        if profile:
-            cmd.extend(["--profile", profile])
+        if not profile:
+            # If no profile is provided, we can't easily check via export-credentials
+            # but usually profile is provided for SSO sessions.
+            return False
+
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, shell=platform.system() == "Windows")
-            if result.returncode == 0:
+            from cli_tool.commands.aws_login.core.credentials import check_profile_credentials_available
+
+            available, error_msg = check_profile_credentials_available(profile)
+            if available:
                 return False
-            error_text = (result.stderr + result.stdout).lower()
-            return any(pattern in error_text for pattern in _TOKEN_EXPIRED_PATTERNS)
+
+            if error_msg:
+                error_text = error_msg.lower()
+                return any(pattern in error_text for pattern in _TOKEN_EXPIRED_PATTERNS)
+            return False
         except Exception:
             return False
 
@@ -108,19 +129,32 @@ class SSMSession:
         region: str = "us-east-1",
         profile: Optional[str] = None,
         local_address: str = "127.0.0.1",
+        capture_output: bool = True,
     ) -> subprocess.Popen:
         """Same as start_port_forwarding_to_remote but returns the live Popen handle.
 
         Caller is responsible for plugin preflight. Use stop_one() / proc.terminate()
         to end the session without touching other active connections.
+        capture_output=True (sidecar): pipes stdout/stderr for programmatic handling.
+        capture_output=False (CLI): lets AWS print directly to the terminal.
         """
         cmd = SSMSession._build_port_forwarding_cmd(bastion, host, port, local_port, region, profile)
+
+        # Start the AWS process in a new session (process group) on Unix so it doesn't receive
+        # SIGINT directly when the user presses Ctrl+C. The parent process will catch SIGINT
+        # and cleanly terminate the child process instead, preventing ugly tracebacks.
+        start_new_session = platform.system() != "Windows"
+
+        stdout = subprocess.PIPE if capture_output else None
+        stderr = subprocess.PIPE if capture_output else None
+
         return subprocess.Popen(
             cmd,
             shell=platform.system() == "Windows",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=stdout,
+            stderr=stderr,
             text=True,
+            start_new_session=start_new_session,
         )
 
     @staticmethod

@@ -1,10 +1,17 @@
 """Tests for HostsManager — /etc/hosts management for SSM connections."""
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from cli_tool.commands.ssm.utils.hosts_manager import HostsManager
+
+
+@pytest.fixture(autouse=True)
+def _clear_sidecar_env(monkeypatch):
+    monkeypatch.delenv("DEVO_SIDECAR", raising=False)
+
 
 # ---------------------------------------------------------------------------
 # Helpers

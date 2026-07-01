@@ -24,6 +24,8 @@ import {
   hostsApi,
   configApi,
   logsApi,
+  codeartifactApi,
+  ssoSessionsApi,
 } from "../api";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -63,8 +65,10 @@ const SIDECAR_ENDPOINTS: SidecarEndpoint[] = [
   { method: "GET", path: "/api/v1/profiles/{name}" },
   { method: "POST", path: "/api/v1/profiles:refresh_all" },
   { method: "POST", path: "/api/v1/profiles/{name}:refresh" },
+  { method: "POST", path: "/api/v1/profiles/{name}:refresh_sso_token" },
   { method: "POST", path: "/api/v1/profiles/{name}:set_default" },
   { method: "GET", path: "/api/v1/profiles/{name}/identity" },
+  { method: "GET", path: "/api/v1/profiles/sessions/info" },
   { method: "GET", path: "/api/v1/connections" },
   { method: "POST", path: "/api/v1/connections:start_all" },
   { method: "DELETE", path: "/api/v1/connections" },
@@ -72,6 +76,13 @@ const SIDECAR_ENDPOINTS: SidecarEndpoint[] = [
   { method: "DELETE", path: "/api/v1/connections/{name}" },
   { method: "GET", path: "/api/v1/logs" },
   { method: "DELETE", path: "/api/v1/logs" },
+  { method: "GET", path: "/api/v1/codeartifact/domains" },
+  { method: "POST", path: "/api/v1/codeartifact/domains" },
+  { method: "PATCH", path: "/api/v1/codeartifact/domains/{domain}" },
+  { method: "DELETE", path: "/api/v1/codeartifact/domains/{domain}" },
+  { method: "GET", path: "/api/v1/codeartifact/tokens" },
+  { method: "POST", path: "/api/v1/codeartifact/login" },
+  { method: "GET", path: "/api/v1/codeartifact/domains/{domain}/packages" },
 ];
 
 // Path patterns that the frontend's `req()` helper should hit. The
@@ -133,6 +144,7 @@ describe("sidecar ↔ frontend contract", () => {
     await profilesApi.get("dev");
     await profilesApi.refreshAll();
     await profilesApi.refresh("dev");
+    await profilesApi.refreshSsoToken("dev");
     await profilesApi.setDefault("dev");
     await profilesApi.getIdentity("dev");
     await hostsApi.list();
@@ -147,6 +159,14 @@ describe("sidecar ↔ frontend contract", () => {
     await versionApi.get();
     await preflightApi.run();
     await authApi.refresh();
+    await ssoSessionsApi.info();
+    await codeartifactApi.domains();
+    await codeartifactApi.create({ domain: "d", repository: "r" });
+    await codeartifactApi.update("d", { profile: "p" });
+    await codeartifactApi.remove("d");
+    await codeartifactApi.tokens();
+    await codeartifactApi.login("d", "npm");
+    await codeartifactApi.packages("d");
 
     // Each URL should contain a path that matches some sidecar route
     const patterns = SIDECAR_ENDPOINTS.map((e) => ({
