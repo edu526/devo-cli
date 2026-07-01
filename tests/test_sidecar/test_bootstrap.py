@@ -92,4 +92,4 @@ class TestRun:
 
         _, kwargs = mock_uvicorn.call_args
         assert kwargs["host"] == "0.0.0.0"
-        assert kwargs["log_level"] == "info"
+        assert kwargs["log_level"] == "warning"

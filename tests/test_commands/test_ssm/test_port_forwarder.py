@@ -364,8 +364,8 @@ def test_stop_forward_unix_terminates_process(mocker):
     mock_proc.pid = 12345
     pf.processes["127.0.0.2:5432"] = mock_proc
 
-    mock_killpg = mocker.patch("os.killpg")
-    mocker.patch("os.getpgid", return_value=12345)
+    mock_killpg = mocker.patch("os.killpg", create=True)
+    mocker.patch("os.getpgid", return_value=12345, create=True)
 
     pf.stop_forward("127.0.0.2", 5432)
 
@@ -425,8 +425,8 @@ def test_stop_all_stops_all_processes(mocker):
     pf.processes["127.0.0.2:5432"] = proc1
     pf.processes["127.0.0.3:3306"] = proc2
 
-    mock_killpg = mocker.patch("os.killpg")
-    mocker.patch("os.getpgid", return_value=12345)
+    mock_killpg = mocker.patch("os.killpg", create=True)
+    mocker.patch("os.getpgid", return_value=12345, create=True)
 
     pf.stop_all()
 
