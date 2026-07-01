@@ -218,12 +218,13 @@ def test_start_forward_unix_stops_existing_before_restart(mocker):
     mocker.patch.object(pf, "_kill_orphaned_socat")
     mocker.patch("subprocess.Popen", return_value=mock_new_proc)
     mocker.patch("time.sleep")
-    mock_killpg = mocker.patch("os.killpg")
-    mocker.patch("os.getpgid", return_value=12345)
+    mock_killpg = mocker.patch("os.killpg", create=True)
+    mocker.patch("os.getpgid", return_value=12345, create=True)
 
     pf.start_forward("127.0.0.2", 5432, 15432)
 
     mock_killpg.assert_called_once()
+    pf.processes.clear()
 
 
 # ============================================================================
