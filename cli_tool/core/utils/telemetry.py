@@ -120,3 +120,5 @@ def show_first_run_notice() -> None:
             padding=(0, 2),
         )
     )
+    # Create the telemetry ID file so the notice is not shown again
+    _get_or_create_anonymous_id()
