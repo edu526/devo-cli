@@ -2,6 +2,77 @@
 
 <!-- version list -->
 
+## v3.13.0 (2026-07-01)
+
+### Bug Fixes
+
+- Add sidecar dependency to install target and update process cleanup to include vite dev server
+  ([`e3c66f0`](https://github.com/edu526/devo-cli/commit/e3c66f00814cd9a75825736481650325228bfb91))
+
+- Implement cross-platform elevation support using pkexec and native macOS shell scripts to manage
+  host files and configurations
+  ([`ad03dfc`](https://github.com/edu526/devo-cli/commit/ad03dfc964c1146289879a28a9f4112c27b51270))
+
+- Pass capture_output=False to port forwarding and cleanup error matching list
+  ([`a110562`](https://github.com/edu526/devo-cli/commit/a110562cb9bbae84bd81948fbbf00783dae8805d))
+
+- Resolve cross-platform os.killpg AttributeError on Windows tests
+  ([`85455d7`](https://github.com/edu526/devo-cli/commit/85455d7e1a177a8d3650b706e2f9beda1bb82c15))
+
+- Resolve cross-platform signal.SIGKILL AttributeError on Windows tests
+  ([`c710968`](https://github.com/edu526/devo-cli/commit/c71096892b1eb4ff17c3b9ca8adc3d266cd739d7))
+
+- Resolve pre-push formatting and test issues
+  ([`e70582d`](https://github.com/edu526/devo-cli/commit/e70582d3721f9ed786caf4b32c25b2a407e09b80))
+
+- Stabilize ssm connections, resolve orphaned processes, and fix token expiry caching
+  ([`d362c8d`](https://github.com/edu526/devo-cli/commit/d362c8db5a55f8e116f618fce62f02f2219ed485))
+
+- **cli**: Skip telemetry and version checks during autocomplete to prevent shell startup pollution
+  ([`48535af`](https://github.com/edu526/devo-cli/commit/48535af9ecd8cf3831646a5229753935297fe552))
+
+### Chores
+
+- Make local pre-commit hooks cross-platform for Windows
+  ([`31133f5`](https://github.com/edu526/devo-cli/commit/31133f5ba8b71cf89ed7d7ab25b93076b2d62cff))
+
+### Continuous Integration
+
+- Fix desktop pipeline by installing pre-commit and adding cleanup job
+  ([`edfc8d5`](https://github.com/edu526/devo-cli/commit/edfc8d5de933ec81da802077e7e0b9c9a9fc2fea))
+
+### Features
+
+- Add SSM connection error handling with retry logic and improve tray initialization robustness
+  ([`8529a55`](https://github.com/edu526/devo-cli/commit/8529a55eb85b4675f2bd3ddd200fd540e0aa8806))
+
+- Implement doctor command to diagnose environment health and configuration status
+  ([`fc4ed1a`](https://github.com/edu526/devo-cli/commit/fc4ed1a2780c34a51787125cb7002a3ccc8cd5e3))
+
+- Initialize anonymous ID file upon telemetry notice display
+  ([`07a4d5c`](https://github.com/edu526/devo-cli/commit/07a4d5cce81d7a2796187be7dfc312870f9f1c8a))
+
+- **cli**: Add multi-domain support for codeartifact login and ssm port forwarding fixes
+  ([`7c9a732`](https://github.com/edu526/devo-cli/commit/7c9a7320b12c6e43639e7cf97863a66db34b508c))
+
+- **desktop**: Sso expiration notifications and sts auto-refresh
+  ([`edf0a74`](https://github.com/edu526/devo-cli/commit/edf0a741c815999094db422943d931b86e0f986b))
+
+- **desktop**: UAC elevation for hosts management via dedicated helper
+  ([`cecacaa`](https://github.com/edu526/devo-cli/commit/cecacaa281d86ba221d58331c5b8bbbeca023695))
+
+### Refactoring
+
+- Simplify token expiration check by removing verbose debug logging
+  ([`0193e86`](https://github.com/edu526/devo-cli/commit/0193e8668428b2d27a372949251c4123c3e71eec))
+
+### Testing
+
+- Add integration test for CORS headers on 429 errors and update Makefile to detect .venv pytest
+  path
+  ([`fe0501b`](https://github.com/edu526/devo-cli/commit/fe0501b66b2b17c08d73ec5279afe8c1c376ac41))
+
+
 ## v3.12.0 (2026-06-24)
 
 ### Features
