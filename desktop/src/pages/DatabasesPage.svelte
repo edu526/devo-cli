@@ -132,7 +132,7 @@
 
           let args = [];
           if (configDir && useEnv) {
-            args.push("env", `DEVO_CONFIG_DIR=${configDir}`);
+            args.push("/usr/bin/env", `DEVO_CONFIG_DIR=${configDir}`);
           }
           args.push(pythonBin, "-m", "cli_tool.cli", "ssm", "hosts", "setup");
 

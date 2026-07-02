@@ -4,12 +4,13 @@
   import { ws, type WsMessage } from "../lib/ws";
   import { errorLog, clearErrorLog } from "../lib/error-log";
   import SearchInput from "../lib/SearchInput.svelte";
-  import { Play, Pause, RefreshCw } from "@lucide/svelte";
+  import { Play, Pause, RefreshCw, Copy, Check } from "@lucide/svelte";
   import { parseLogLine, groupLogLines, type LogLevel, type LogEntry } from "../lib/log-parser";
 
   let nextId = 1;
   let logEntries: LogEntry[] = $state([]);
   let expandedLogs = $state<Set<number>>(new Set());
+  let copiedId = $state<number | null>(null);
 
   function toggleLog(id: number) {
     const next = new Set(expandedLogs);
@@ -183,6 +184,14 @@
     } finally {
       clearing = false;
     }
+  }
+
+  async function handleCopy(id: number, text: string) {
+    await copyToClipboard(text);
+    copiedId = id;
+    setTimeout(() => {
+      if (copiedId === id) copiedId = null;
+    }, 1500);
   }
 
   function getLevelClass(levelOrLine: string): string {
@@ -394,7 +403,11 @@
           <button
             type="button"
             class="log-toggle"
-            onclick={() => toggleLog(entry.id)}
+            onclick={() => {
+              // Prevent toggle if the user is selecting text
+              if (window.getSelection()?.toString().trim().length) return;
+              toggleLog(entry.id);
+            }}
             aria-expanded={expandedLogs.has(entry.id)}
           >
             <span class="chev">{expandedLogs.has(entry.id) ? "▾" : "▸"}</span>
@@ -404,6 +417,18 @@
               <span class="log-msg">{entry.msg}</span>
             {:else}
               <span class="log-msg {getLevelClass(entry.raw)}">{entry.raw}</span>
+            {/if}
+          </button>
+          <button
+            class="log-copy-btn"
+            title="Copy log entry"
+            onclick={(e) => { e.stopPropagation(); handleCopy(entry.id, entry.raw); }}
+            aria-label="Copy log"
+          >
+            {#if copiedId === entry.id}
+              <Check size={12} color="#4ade80" />
+            {:else}
+              <Copy size={12} />
             {/if}
           </button>
         </div>
@@ -538,10 +563,13 @@
     overflow-y: auto;
     max-height: calc(100vh - 260px);
     margin: 0;
+    user-select: text;
+    -webkit-user-select: text;
   }
 
   .log-row {
     border-bottom: 1px solid transparent;
+    position: relative;
   }
   .log-row:last-child {
     border-bottom: 0;
@@ -565,6 +593,33 @@
   }
   .log-row.expanded .log-toggle {
     background: #111;
+  }
+
+  .log-copy-btn {
+    position: absolute;
+    right: 8px;
+    top: 4px;
+    opacity: 0;
+    background: #2a2a2a;
+    border: 1px solid #555;
+    color: #e2e8f0;
+    padding: 4px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    z-index: 2;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.6);
+  }
+  .log-copy-btn:hover {
+    background: #3a3a3a;
+    border-color: #777;
+    color: #fff;
+  }
+  .log-row:hover .log-copy-btn {
+    opacity: 1;
   }
 
   .log-ts {
