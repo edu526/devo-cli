@@ -126,6 +126,11 @@ def start_all_connections(
             logger.info("start_all: started '%s' on port %s", name, info.get("local_port"))
             results.append(info)
         except (ValueError, KeyError) as exc:
-            logger.error("start_all: could not start '%s': %s", name, exc)
-            results.append({"name": name, "state": "error", "error": str(exc)})
+            msg = str(exc)
+            if "already active" in msg:
+                logger.info("start_all: '%s' is already active", name)
+                results.append({"name": name, "state": "connected"})
+            else:
+                logger.error("start_all: could not start '%s': %s", name, exc)
+                results.append({"name": name, "state": "error", "error": msg})
     return results

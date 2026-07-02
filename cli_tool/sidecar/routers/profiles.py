@@ -172,8 +172,11 @@ def _do_refresh_all(hub: EventHub) -> None:
             hub.publish("profile.refreshed", {"names": [], "success": True})
             return
         logger.info("refresh_all: refreshing %d profile(s)", len(to_refresh))
+        hub.publish("profile.refreshing", {"name": f"{len(to_refresh)} profile(s)"})
+
         session_profiles = _group_profiles_by_session(to_refresh)
         _, _, verified = _refresh_all_sessions(session_profiles)
+
         logger.info("refresh_all: verified %d profile(s)", len(verified))
         hub.publish("profile.refreshed", {"names": verified, "success": True})
     except Exception as exc:

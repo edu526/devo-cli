@@ -2,6 +2,16 @@
 
 import sys
 
+# Force UTF-8 encoding for standard output and error to prevent UnicodeEncodeError
+# on Windows when printing symbols like '✓'
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 from cli_tool.sidecar.bootstrap import run
 
 if __name__ == "__main__":

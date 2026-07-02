@@ -324,23 +324,27 @@ def _run_attempt(
             rc = proc.returncode
             logger.info("SSM process for %s exited with code %s", db_config["host"], rc)
             if rc != 0 and stderr:
-                logger.error(f"SSM Error: {stderr.strip()}")
-                error_lower = stderr.lower()
-                if "sessionmanagerplugin is not found" in error_lower or "session-manager-plugin" in error_lower:
-                    SSMSession._show_plugin_installation_guide()
+                # Code 15 (SIGTERM) or 130 (SIGINT) is standard when we manually stop the connection
+                if rc in (15, 130, -15) or "exit status 15" in stderr:
+                    logger.info(f"SSM connection closed (SIGTERM): {stderr.strip()}")
                 else:
-                    from rich.panel import Panel
+                    logger.error(f"SSM Error: {stderr.strip()}")
+                    error_lower = stderr.lower()
+                    if "sessionmanagerplugin is not found" in error_lower or "session-manager-plugin" in error_lower:
+                        SSMSession._show_plugin_installation_guide()
+                    else:
+                        from rich.panel import Panel
 
-                    console.print(
-                        Panel(
-                            stderr.strip(),
-                            title=f"[bold red]AWS Error — {db_config['host']}[/bold red]",
-                            border_style="red",
-                            padding=(0, 1),
+                        console.print(
+                            Panel(
+                                stderr.strip(),
+                                title=f"[bold red]AWS Error — {db_config['host']}[/bold red]",
+                                border_style="red",
+                                padding=(0, 1),
+                            )
                         )
-                    )
-                    if "accessdenied" in error_lower or "could not be found" in error_lower:
-                        record.error_message = stderr.strip()
+                        if "accessdenied" in error_lower or "could not be found" in error_lower:
+                            record.error_message = stderr.strip()
             record.ssm_proc = None
             return rc
         else:

@@ -2,7 +2,18 @@
 
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
+
+# Force UTF-8 encoding for standard output and error to prevent UnicodeEncodeError
+# on Windows when printing symbols like '✓'
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
