@@ -457,9 +457,21 @@
     offUrlReady();
     offDiscoverStarting();
     offDiscoverCompleted();
+    if (autoRefreshInterval !== null) clearInterval(autoRefreshInterval);
   });
 
-  onMount(load);
+  // seconds_remaining is a server-side snapshot taken at fetch time — without
+  // a periodic reload the countdown only updates on navigation or WS events.
+  // Same safety-net pattern as LogsPage. Skipped while an SSO login/refresh is
+  // in flight; those flows own the UI via WS events.
+  let autoRefreshInterval: ReturnType<typeof setInterval> | null = null;
+
+  onMount(() => {
+    load();
+    autoRefreshInterval = setInterval(() => {
+      if (!anyBusyRefresh) load();
+    }, 30000);
+  });
 
   function formatSeconds(s: number | null): string {
     if (s === null) return "—";
