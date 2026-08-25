@@ -215,6 +215,10 @@ code {
   background: #2a1010;
   color: #f87171;
 }
+.badge-blue {
+  background: #0d2a4a;
+  color: #60a5fa;
+}
 .badge-gray {
   background: #222;
   color: #8a8a8a;

@@ -824,6 +824,148 @@ class TestReconnectCounterSidecar:
         assert record.state == "stopped"
 
 
+@pytest.mark.unit
+class TestReconnectReason:
+    """_run_attempt populates record.last_attempt_reason with a human-readable
+    description of the failure, and _run_connection_loop forwards it as the
+    'error' kwarg on the RECONNECTING emit so the UI can show why the tunnel
+    dropped."""
+
+    def _setup_record(self):
+        from cli_tool.commands.ssm.core.connection_runner import (
+            ConnectionRecord,
+            ForwarderRegistry,
+        )
+
+        registry = ForwarderRegistry()
+        record = ConnectionRecord(name="mydb", local_port=15432)
+        registry.register("mydb", record)
+        return registry, record
+
+    def test_session_ended_records_clean_reason(self, mocker):
+        """rc=0 (plugin exited cleanly, e.g. user closed browser tab)."""
+        from cli_tool.commands.ssm.core.connection_runner import _run_attempt
+
+        registry, record = self._setup_record()
+        mock_proc = mocker.MagicMock()
+        mock_proc.pid = 12345
+        mock_proc.poll.return_value = 0  # already exited cleanly
+        mock_proc.returncode = 0
+        mock_proc.communicate.return_value = ("", "")
+        mocker.patch(
+            "cli_tool.commands.ssm.core.connection_runner.SSMSession.spawn_port_forwarding_to_remote",
+            return_value=mock_proc,
+        )
+
+        rc = _run_attempt(
+            {"host": "db", "port": 5432, "bastion": "i-1", "region": "us-east-1", "profile": "p"},
+            15432,
+            use_hostname_forwarding=False,
+            registry=registry,
+            record=record,
+        )
+        assert rc == 0
+        assert record.last_attempt_reason == "Session ended"
+
+    def test_stderr_first_line_is_the_reason(self, mocker):
+        """Non-quiet rc with stderr: use the first non-empty line as reason."""
+        from cli_tool.commands.ssm.core.connection_runner import _run_attempt
+
+        registry, record = self._setup_record()
+        mock_proc = mocker.MagicMock()
+        mock_proc.pid = 12345
+        mock_proc.poll.return_value = 1
+        mock_proc.returncode = 1
+        mock_proc.communicate.return_value = (
+            "",
+            "An error occurred (AccessDenied) when calling the GetCallerIdentity operation\nDetails: ...",
+        )
+        mocker.patch(
+            "cli_tool.commands.ssm.core.connection_runner.SSMSession.spawn_port_forwarding_to_remote",
+            return_value=mock_proc,
+        )
+
+        rc = _run_attempt(
+            {"host": "db", "port": 5432, "bastion": "i-1", "region": "us-east-1", "profile": "p"},
+            15432,
+            use_hostname_forwarding=False,
+            registry=registry,
+            record=record,
+        )
+        assert rc == 1
+        assert record.last_attempt_reason is not None
+        assert "AccessDenied" in record.last_attempt_reason
+        # First line, not the whole stderr blob.
+        assert "\n" not in record.last_attempt_reason
+
+    def test_unexpected_rc_with_no_stderr_falls_back_to_code(self, mocker):
+        from cli_tool.commands.ssm.core.connection_runner import _run_attempt
+
+        registry, record = self._setup_record()
+        mock_proc = mocker.MagicMock()
+        mock_proc.pid = 12345
+        mock_proc.poll.return_value = 42
+        mock_proc.returncode = 42
+        mock_proc.communicate.return_value = ("", "")
+        mocker.patch(
+            "cli_tool.commands.ssm.core.connection_runner.SSMSession.spawn_port_forwarding_to_remote",
+            return_value=mock_proc,
+        )
+
+        rc = _run_attempt(
+            {"host": "db", "port": 5432, "bastion": "i-1", "region": "us-east-1", "profile": "p"},
+            15432,
+            use_hostname_forwarding=False,
+            registry=registry,
+            record=record,
+        )
+        assert rc == 42
+        assert record.last_attempt_reason == "SSM exited with code 42"
+
+    def test_loop_forwards_reason_to_reconnecting_emit(self, mocker):
+        """End-to-end: the RECONNECTING WS event includes the attempt's reason."""
+        registry, record = self._setup_record()
+
+        events = []
+
+        def capture(event, payload):
+            events.append((event, payload))
+
+        registry.add_observer(capture)
+
+        # First attempt: rc=0 (clean exit) → loop falls into RECONNECTING.
+        # Set last_attempt_reason to a known value before the next iteration.
+        # Second attempt: KeyboardInterrupt so the loop exits cleanly.
+        def first_attempt(*_a, **_kw):
+            record.last_attempt_reason = "Session ended"
+            return 0
+
+        mocker.patch(
+            f"{_RUNNER}._run_attempt",
+            side_effect=[first_attempt(), KeyboardInterrupt],
+        )
+        mock_session_cls = mocker.patch(f"{_RUNNER}.SSMSession")
+        mock_session_cls._is_token_expired.return_value = False
+        mocker.patch(
+            f"{_RUNNER}._wait_before_reconnect",
+            return_value=True,
+        )
+
+        with patch(f"{_RUNNER}.console"):
+            _run_connection_loop(
+                "mydb",
+                _make_db_config(),
+                15432,
+                use_hostname_forwarding=False,
+                registry=registry,
+                record=record,
+            )
+
+        reconnecting = [p for e, p in events if p.get("state") == "reconnecting"]
+        assert reconnecting, f"no reconnecting event found in {events}"
+        assert reconnecting[0]["error"] == "Session ended"
+
+
 # ---------------------------------------------------------------------------
 # _connect_databases
 # ---------------------------------------------------------------------------

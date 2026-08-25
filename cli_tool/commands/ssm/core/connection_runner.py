@@ -54,6 +54,7 @@ class ConnectionRecord:
         self.started_at: Optional[float] = None  # time.monotonic() at first start
         self.attempts: int = 0  # number of SSM connect attempts so far
         self.last_error_at: Optional[float] = None  # wall-clock epoch of last failure
+        self.last_attempt_reason: Optional[str] = None  # human-readable reason for the most recent attempt failure
         self.probe_thread: Optional[threading.Thread] = None
 
 
@@ -354,6 +355,26 @@ def _run_attempt(
             stdout, stderr = _communicate_interruptible(proc, record, registry)
             rc = proc.returncode
             logger.info("SSM process for %s exited with code %s", db_config["host"], rc)
+            # Capture a human-readable reason for why this attempt ended, so
+            # the connection loop can include it in the next RECONNECTING
+            # emit (the UI uses it to tell the user why the tunnel dropped).
+            if record is not None:
+                if rc == 0:
+                    record.last_attempt_reason = "Session ended"
+                elif rc in (15, 130, -15, -9):
+                    # Quiet shutdown — the loop's _should_stop() check
+                    # immediately after this will short-circuit to STOPPED,
+                    # so this reason won't surface as RECONNECTING.
+                    record.last_attempt_reason = None
+                else:
+                    first_line = ""
+                    if stderr:
+                        for ln in stderr.splitlines():
+                            stripped = ln.strip()
+                            if stripped:
+                                first_line = stripped
+                                break
+                    record.last_attempt_reason = first_line or f"SSM exited with code {rc}"
             if rc != 0 and stderr:
                 # Code 15 (SIGTERM), -9 (SIGKILL) or 130 (SIGINT) is standard when we manually stop the connection
                 if rc in (15, 130, -15, -9) or "exit status 15" in stderr:
@@ -617,7 +638,7 @@ def _run_connection_loop(
             _join_probe()
             return
 
-        _emit_state(RECONNECTING)
+        _emit_state(RECONNECTING, error=(record.last_attempt_reason if record is not None else None))
         if not _wait_before_reconnect(name, per_stop or global_stop):
             _emit_state(STOPPED)
             _join_probe()

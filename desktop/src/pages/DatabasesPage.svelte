@@ -496,6 +496,7 @@
   function stateClass(state: string): string {
     if (state === "connected") return "badge-green";
     if (state === "error" || state === "expired_credentials") return "badge-red";
+    if (state === "reconnecting") return "badge-blue";
     if (state === "starting" || state === "connecting") return "badge-yellow";
     return "badge-gray";
   }
@@ -648,7 +649,9 @@
               <td class="host-cell truncate"><code>{row.db.host}</code></td>
               <td>{row.db.port} → {row.conn?.local_port ?? row.db.local_port ?? "auto"}</td>
               <td class="uptime-cell">{formatUptime(row.conn?.uptime_seconds)}</td>
-              <td class="error-cell truncate">{row.conn?.error ?? ""}</td>
+              <td class="error-cell truncate" title={row.conn?.error ?? ""}>
+                {connState(row) === "reconnecting" && row.conn?.error ? "↻ " : ""}{row.conn?.error ?? ""}
+              </td>
               <td class="actions-cell">
                 <div class="actions-wrap">
                   {#if canStart(row)}
@@ -721,7 +724,9 @@
               </span>
             </div>
             {#if row.conn?.error}
-              <div class="lc-error">{row.conn.error}</div>
+              <div class="lc-error" title={row.conn.error}>
+                {connState(row) === "reconnecting" ? "Reconnecting: " : ""}{row.conn.error}
+              </div>
             {/if}
           </div>
           <div class="lc-actions">
