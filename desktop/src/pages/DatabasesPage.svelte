@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { get } from "svelte/store";
   import {
     databasesApi,
@@ -491,6 +491,14 @@
   });
 
   onMount(load);
+
+  // Without this, navigating away while an SSO login is in flight would
+  // leave the listener registered in ws.handlers — a late sso.login.completed
+  // event would then call startOne(name) on a component that's no longer
+  // mounted (or one the user already left).
+  onDestroy(() => {
+    ssoLoginUnsubscribe?.();
+  });
 
   // --- Display Helpers ---
   function stateClass(state: string): string {

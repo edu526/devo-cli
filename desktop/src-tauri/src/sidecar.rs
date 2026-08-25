@@ -71,6 +71,13 @@ pub async fn spawn_and_wait(app: &AppHandle) -> Result<SidecarInfo, String> {
         }
     };
 
+    // Keep the child in an Option so we can guarantee it gets killed on
+    // every error path below (timeout, sidecar error, terminated early,
+    // stdout-closed-before-ready). Without this, a failing boot would
+    // leave a zombie sidecar holding port 8000 and the next retry would
+    // hit EADDRINUSE.
+    let mut child = Some(child);
+
     let deadline = Duration::from_secs(30);
     let result = timeout(deadline, async {
         while let Some(event) = rx.recv().await {
@@ -112,9 +119,12 @@ pub async fn spawn_and_wait(app: &AppHandle) -> Result<SidecarInfo, String> {
             use std::io::Write;
 
             let app_handle = app.clone();
+            // Hand the child over to the keepalive task — drops here would
+            // kill the sidecar. The error arms below explicitly kill it.
+            let keepalive_child = child.take().expect("child present on success path");
             tauri::async_runtime::spawn(async move {
                 // Keep `child` alive for the lifetime of this task
-                let mut _keepalive_child = child;
+                let mut _keepalive_child = keepalive_child;
 
                 // log_path was already computed in spawn_and_wait, but we recompute it
                 // here for the background thread to avoid moving it if not needed.
@@ -177,8 +187,18 @@ pub async fn spawn_and_wait(app: &AppHandle) -> Result<SidecarInfo, String> {
 
             Ok(info)
         },
-        Ok(Err(e)) => Err(e),
-        Err(_) => Err("timed out waiting for DEVO_SIDECAR_READY (30s)".to_string()),
+        Ok(Err(e)) => {
+            if let Some(c) = child.take() {
+                let _ = c.kill();
+            }
+            Err(e)
+        }
+        Err(_) => {
+            if let Some(c) = child.take() {
+                let _ = c.kill();
+            }
+            Err("timed out waiting for DEVO_SIDECAR_READY (30s)".to_string())
+        }
     }
 }
 

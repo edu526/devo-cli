@@ -149,6 +149,24 @@
     selectedRole = "";
     profileForm.sso_account_id = "";
     profileForm.sso_role_name = "";
+
+    // Safety net: if the sso.discover.completed WS event never arrives
+    // (sidecar restart mid-discovery, message dropped on WS reconnect,
+    // user backgrounds the window for too long), the wizard would stay
+    // stuck showing the spinner forever with no Retry button. Bail out
+    // after 5 minutes so the user can retry without restarting Devo.
+    const timeoutHandle = setTimeout(
+      () => {
+        if (discoverInProgress) {
+          discoverInProgress = false;
+          discoverAttempt = 0;
+          discoverError =
+            "SSO discovery did not complete in 5 minutes — please retry.";
+        }
+      },
+      5 * 60 * 1000,
+    );
+
     try {
       await retryNetworkErrors(
         async () => {
@@ -175,6 +193,8 @@
       discoverErrorRaw = diag ? `${raw}\n\n${diag}` : raw;
       discoverInProgress = false;
       discoverAttempt = 0;
+    } finally {
+      clearTimeout(timeoutHandle);
     }
   }
 
@@ -378,87 +398,15 @@
     }
   }
 
-  // WS: sidecar signals that the browser SSO flow is open for this profile
-  const offRefreshing = ws.on("profile.refreshing", (msg: WsMessage) => {
-    ssoInProgress = (msg.name as string) ?? null;
-  });
-
-  const offRefreshed = ws.on("profile.refreshed", (msg: WsMessage) => {
-    ssoInProgress = null;
-    ssoManualUrl = null;
-    refreshing = false;
-    busyRefresh = new Set();
-
-    if (!msg.success) {
-      actionError = (msg.error as string) ?? "Refresh failed";
-      load();
-      return;
-    }
-
-    const names = (msg.names as string[]) ?? [];
-    if (names.length === 0) {
-      load();
-      return;
-    }
-    updateProfiles(names);
-  });
-
-  const offExpiring = ws.on("profile.expiring", async (msg: WsMessage) => {
-    load();
-    const payload = msg as any;
-    if (payload.type === "sso") {
-      try {
-        let permissionGranted = await isPermissionGranted();
-        if (!permissionGranted) {
-          const permission = await requestPermission();
-          permissionGranted = permission === "granted";
-        }
-        if (permissionGranted) {
-          sendNotification({
-            title: "AWS SSO Expiring",
-            body: `Your SSO session for '${payload.name}' is expiring. Click Refresh in Devo to renew it.`,
-          });
-        }
-      } catch (err) {
-        console.error("Failed to send desktop notification:", err);
-      }
-    }
-  });
-
-  const offUrlReady = ws.on("sso.login.url_ready", (msg: WsMessage) => {
-    const m = msg as { profile?: string; source?: string; url?: string; code?: string };
-    if (m.source === "profile" && m.profile === ssoInProgress) {
-      ssoManualUrl = { url: m.url!, code: m.code! };
-    }
-  });
-
-  // WS: sidecar signals completion of the discovery pipeline started by
-  // the Add Profile wizard. Only acts when the modal is open so a stale
-  // late event from a previous attempt cannot mutate the form.
-  const offDiscoverStarting = ws.on("sso.discover.starting", () => {
-    if (showCreateModal) discoverInProgress = true;
-  });
-
-  const offDiscoverCompleted = ws.on("sso.discover.completed", (msg: WsMessage) => {
-    if (!showCreateModal) return;
-    discoverInProgress = false;
-    if (!msg.success) {
-      discoverError = (msg.error as string) ?? "SSO discovery failed";
-      return;
-    }
-    discoverError = null;
-    discoveredAccounts = (msg.accounts as DiscoveredAccount[]) ?? [];
-  });
-
-  onDestroy(() => {
-    offRefreshing();
-    offRefreshed();
-    offExpiring();
-    offUrlReady();
-    offDiscoverStarting();
-    offDiscoverCompleted();
-    if (autoRefreshInterval !== null) clearInterval(autoRefreshInterval);
-  });
+  // WS subscriptions captured in onMount so the page re-subscribes on
+  // remount. Earlier these were registered at top-level, so the first
+  // onDestroy tore them down and subsequent visits never re-subscribed.
+  let offRefreshing: (() => void) | null = null;
+  let offRefreshed: (() => void) | null = null;
+  let offExpiring: (() => void) | null = null;
+  let offUrlReady: (() => void) | null = null;
+  let offDiscoverStarting: (() => void) | null = null;
+  let offDiscoverCompleted: (() => void) | null = null;
 
   // seconds_remaining is a server-side snapshot taken at fetch time — without
   // a periodic reload the countdown only updates on navigation or WS events.
@@ -471,6 +419,79 @@
     autoRefreshInterval = setInterval(() => {
       if (!anyBusyRefresh) load();
     }, 30000);
+
+    offRefreshing = ws.on("profile.refreshing", (msg: WsMessage) => {
+      ssoInProgress = (msg.name as string) ?? null;
+    });
+    offRefreshed = ws.on("profile.refreshed", (msg: WsMessage) => {
+      ssoInProgress = null;
+      ssoManualUrl = null;
+      refreshing = false;
+      busyRefresh = new Set();
+
+      if (!msg.success) {
+        actionError = (msg.error as string) ?? "Refresh failed";
+        load();
+        return;
+      }
+
+      const names = (msg.names as string[]) ?? [];
+      if (names.length === 0) {
+        load();
+        return;
+      }
+      updateProfiles(names);
+    });
+    offExpiring = ws.on("profile.expiring", async (msg: WsMessage) => {
+      load();
+      const payload = msg as any;
+      if (payload.type === "sso") {
+        try {
+          let permissionGranted = await isPermissionGranted();
+          if (!permissionGranted) {
+            const permission = await requestPermission();
+            permissionGranted = permission === "granted";
+          }
+          if (permissionGranted) {
+            sendNotification({
+              title: "AWS SSO Expiring",
+              body: `Your SSO session for '${payload.name}' is expiring. Click Refresh in Devo to renew it.`,
+            });
+          }
+        } catch (err) {
+          console.error("Failed to send desktop notification:", err);
+        }
+      }
+    });
+    offUrlReady = ws.on("sso.login.url_ready", (msg: WsMessage) => {
+      const m = msg as { profile?: string; source?: string; url?: string; code?: string };
+      if (m.source === "profile" && m.profile === ssoInProgress) {
+        ssoManualUrl = { url: m.url!, code: m.code! };
+      }
+    });
+    offDiscoverStarting = ws.on("sso.discover.starting", () => {
+      if (showCreateModal) discoverInProgress = true;
+    });
+    offDiscoverCompleted = ws.on("sso.discover.completed", (msg: WsMessage) => {
+      if (!showCreateModal) return;
+      discoverInProgress = false;
+      if (!msg.success) {
+        discoverError = (msg.error as string) ?? "SSO discovery failed";
+        return;
+      }
+      discoverError = null;
+      discoveredAccounts = (msg.accounts as DiscoveredAccount[]) ?? [];
+    });
+  });
+
+  onDestroy(() => {
+    offRefreshing?.();
+    offRefreshed?.();
+    offExpiring?.();
+    offUrlReady?.();
+    offDiscoverStarting?.();
+    offDiscoverCompleted?.();
+    if (autoRefreshInterval !== null) clearInterval(autoRefreshInterval);
   });
 
   function formatSeconds(s: number | null): string {

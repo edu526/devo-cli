@@ -3,6 +3,7 @@
   import {
     initApi,
     bootApi,
+    versionApi,
     type BootStatus,
     type VersionInfo,
     profilesApi,
@@ -180,6 +181,25 @@
     e.preventDefault();
   }
 
+  function handleWindowError(e: ErrorEvent) {
+    logError("window", e.message || "Uncaught error", e.error?.stack);
+  }
+
+  function handleUnhandledRejection(e: PromiseRejectionEvent) {
+    const reason = e.reason instanceof Error ? e.reason.message : String(e.reason);
+    logError(
+      "unhandledrejection",
+      reason,
+      e.reason instanceof Error ? e.reason.stack : undefined,
+    );
+  }
+
+  // Captured unsubscribe handles so onDestroy can clean up after the
+  // WS connections and global error listeners — without these, HMR
+  // remounts and any future re-mount path would stack handlers.
+  let offConnected: (() => void) | null = null;
+  let offDisconnected: (() => void) | null = null;
+
   onMount(async () => {
     window.addEventListener("keydown", handleKeydown, true);
     window.addEventListener("keydown", handleGlobalShortcut, true);
@@ -188,17 +208,8 @@
     window.addEventListener("focusin", recordFocus, true);
     window.addEventListener("input", recordInput, true);
     window.addEventListener("onboarding-complete", leaveOnboarding);
-    window.addEventListener("error", (e) => {
-      logError("window", e.message || "Uncaught error", e.error?.stack);
-    });
-    window.addEventListener("unhandledrejection", (e) => {
-      const reason = e.reason instanceof Error ? e.reason.message : String(e.reason);
-      logError(
-        "unhandledrejection",
-        reason,
-        e.reason instanceof Error ? e.reason.stack : undefined,
-      );
-    });
+    window.addEventListener("error", handleWindowError);
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
     // Poll the Rust boot status. The version check happens in setup()
     // before the sidecar is spawned, so a stale bundle never produces
     // a half-running app.
@@ -233,17 +244,29 @@
     const info = boot.sidecar_info;
     sidecar.set(info);
     await initApi();
-    ws.on("$connected", () => wsConnected.set(true));
-    ws.on("$disconnected", () => wsConnected.set(false));
+    offConnected = ws.on("$connected", () => wsConnected.set(true));
+    offDisconnected = ws.on("$disconnected", () => wsConnected.set(false));
     ws.connect(info.port);
     appStatus.set("ready");
 
+    // Initialise sidecarInfo from the boot version, then overwrite with
+    // /version once it returns so the sidebar ↑ indicator shows up when
+    // a newer devo-cli is available (was hardcoded false before — H8).
     sidecarInfo = {
       sidecar_version: boot.version,
       server_version: boot.version,
       build_date: null,
       update_available: false,
     };
+    versionApi
+      .get()
+      .then((v) => {
+        sidecarInfo = v;
+      })
+      .catch(() => {
+        // /version failing is non-fatal — the sidebar still shows the
+        // boot version. The update indicator just won't appear.
+      });
 
     // Check if the user has been onboarded; if not, show the wizard.
     try {
@@ -283,6 +306,10 @@
     window.removeEventListener("focusin", recordFocus, true);
     window.removeEventListener("input", recordInput, true);
     window.removeEventListener("onboarding-complete", leaveOnboarding);
+    window.removeEventListener("error", handleWindowError);
+    window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+    offConnected?.();
+    offDisconnected?.();
   });
 </script>
 

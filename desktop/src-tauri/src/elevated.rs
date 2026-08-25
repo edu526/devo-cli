@@ -79,15 +79,19 @@ pub fn run_elevated(args: &[String]) -> Result<u32, ElevationError> {
     let proc: HANDLE = info.hProcess;
     let wait = unsafe { WaitForSingleObject(proc, ELEVATION_TIMEOUT_MS) };
     if wait.0 != 0 {
+        // Don't leak the process handle on timeout.
+        unsafe { CloseHandle(proc).ok() };
         return Err(ElevationError::Timeout(Duration::from_millis(
             ELEVATION_TIMEOUT_MS as u64,
         )));
     }
 
     let mut exit_code: u32 = 1;
-    unsafe { GetExitCodeProcess(proc, &mut exit_code) }
-        .map_err(|e| ElevationError::ShellExecute(e.message().into()))?;
+    let exit_result = unsafe { GetExitCodeProcess(proc, &mut exit_code) };
+    // Close the handle regardless of whether GetExitCodeProcess succeeded —
+    // the process is gone either way.
     unsafe { CloseHandle(proc).ok() };
+    exit_result.map_err(|e| ElevationError::ShellExecute(e.message().into()))?;
     Ok(exit_code)
 }
 

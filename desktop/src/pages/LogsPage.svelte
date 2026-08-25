@@ -202,38 +202,11 @@
     return "level-debug";
   }
 
-  // WS: append incoming log lines in real-time
-  const off = ws.on("log.line", (msg: WsMessage) => {
-    if (paused) return;
-    const raw = (msg.line as string) ?? "";
-    if (!raw) return;
-
-    let next = [...logEntries];
-    const entry = parseLogLine(raw, nextId);
-
-    if (entry.ts) {
-      next.push(entry);
-      nextId++;
-    } else {
-      if (next.length > 0) {
-        const lastIdx = next.length - 1;
-        const last = { ...next[lastIdx]! };
-        last.raw += "\n" + raw;
-        if (last.msg !== undefined) {
-          last.msg += "\n" + raw;
-        }
-        next[lastIdx] = last;
-      } else {
-        next.push(entry);
-        nextId++;
-      }
-    }
-
-    // Cap the in-memory buffer at 5000 lines so a runaway producer
-    // does not balloon the renderer.
-    if (next.length >= 5000) next = next.slice(-4500);
-    logEntries = next;
-  });
+  // WS: append incoming log lines in real-time. Registered in onMount
+  // (not at module top-level) so the subscription survives remount —
+  // earlier the `off` was captured once at import time and removed on
+  // first unmount, leaving the Logs page frozen on subsequent visits.
+  let offLogLine: (() => void) | null = null;
 
   function togglePause() {
     paused = !paused;
@@ -257,6 +230,37 @@
       // ignore
     }
     load();
+    offLogLine = ws.on("log.line", (msg: WsMessage) => {
+      if (paused) return;
+      const raw = (msg.line as string) ?? "";
+      if (!raw) return;
+
+      let next = [...logEntries];
+      const entry = parseLogLine(raw, nextId);
+
+      if (entry.ts) {
+        next.push(entry);
+        nextId++;
+      } else {
+        if (next.length > 0) {
+          const lastIdx = next.length - 1;
+          const last = { ...next[lastIdx]! };
+          last.raw += "\n" + raw;
+          if (last.msg !== undefined) {
+            last.msg += "\n" + raw;
+          }
+          next[lastIdx] = last;
+        } else {
+          next.push(entry);
+          nextId++;
+        }
+      }
+
+      // Cap the in-memory buffer at 5000 lines so a runaway producer
+      // does not balloon the renderer.
+      if (next.length >= 5000) next = next.slice(-4500);
+      logEntries = next;
+    });
     // Periodic snapshot as a safety net: WS may miss lines if the
     // sidecar is restarted while we're connected. Every 30 s we
     // re-fetch the tail and merge.
@@ -266,7 +270,7 @@
   });
 
   onDestroy(() => {
-    off();
+    offLogLine?.();
     if (autoRefreshInterval !== null) clearInterval(autoRefreshInterval);
   });
 </script>
