@@ -38,8 +38,11 @@ class TestDoRefreshAll:
         hub = EventHub()
         q = hub.subscribe()
         profiles_router._do_refresh_all(hub)
-        msg = q.get_nowait()
-        assert msg == {"event": "profile.refreshed", "names": ["dev"], "success": True}
+        msgs = []
+        while not q.empty():
+            msgs.append(q.get_nowait())
+        assert msgs[0] == {"event": "profile.refreshing", "name": "1 profile(s)"}
+        assert msgs[1] == {"event": "profile.refreshed", "names": ["dev"], "success": True}
 
     def test_short_circuits_when_nothing_to_refresh(self, mocker):
         mocker.patch(
