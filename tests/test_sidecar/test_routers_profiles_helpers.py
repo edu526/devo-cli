@@ -130,3 +130,174 @@ class TestDoRefreshOne:
             msgs.append(q.get_nowait())
         assert msgs[0] == {"event": "profile.refreshing", "name": "dev"}
         assert msgs[1] == {"event": "profile.refreshed", "names": ["dev"], "success": True}
+
+    def test_writes_default_credentials_when_refreshed_profile_is_default(self, mocker):
+        mocker.patch(
+            "cli_tool.commands.aws_login.core.config.get_profile_config",
+            return_value={"region": "us-east-1"},
+        )
+        mocker.patch(
+            "cli_tool.sidecar.services.sso_service.run_sso_login_sync",
+            return_value=True,
+        )
+        mocker.patch(
+            "cli_tool.core.utils.config_manager.get_config_value",
+            return_value="dev",
+        )
+        mock_write = mocker.patch(
+            "cli_tool.sidecar.routers.profiles.write_default_credentials",
+            return_value={"expiration": "2099-01-01T00:00:00+00:00"},
+        )
+
+        profiles_router._do_refresh_one(EventHub(), "dev")
+        mock_write.assert_called_once_with("dev")
+
+    def test_does_not_write_default_when_refreshed_profile_is_not_default(self, mocker):
+        mocker.patch(
+            "cli_tool.commands.aws_login.core.config.get_profile_config",
+            return_value={"region": "us-east-1"},
+        )
+        mocker.patch(
+            "cli_tool.sidecar.services.sso_service.run_sso_login_sync",
+            return_value=True,
+        )
+        mocker.patch(
+            "cli_tool.core.utils.config_manager.get_config_value",
+            return_value="other-profile",
+        )
+        mock_write = mocker.patch(
+            "cli_tool.sidecar.routers.profiles.write_default_credentials",
+        )
+
+        profiles_router._do_refresh_one(EventHub(), "dev")
+        mock_write.assert_not_called()
+
+    def test_does_not_write_default_when_no_default_profile_is_configured(self, mocker):
+        mocker.patch(
+            "cli_tool.commands.aws_login.core.config.get_profile_config",
+            return_value={"region": "us-east-1"},
+        )
+        mocker.patch(
+            "cli_tool.sidecar.services.sso_service.run_sso_login_sync",
+            return_value=True,
+        )
+        mocker.patch(
+            "cli_tool.core.utils.config_manager.get_config_value",
+            return_value=None,
+        )
+        mock_write = mocker.patch(
+            "cli_tool.sidecar.routers.profiles.write_default_credentials",
+        )
+
+        profiles_router._do_refresh_one(EventHub(), "dev")
+        mock_write.assert_not_called()
+
+    def test_swallows_write_default_failure(self, mocker):
+        mocker.patch(
+            "cli_tool.commands.aws_login.core.config.get_profile_config",
+            return_value={"region": "us-east-1"},
+        )
+        mocker.patch(
+            "cli_tool.sidecar.services.sso_service.run_sso_login_sync",
+            return_value=True,
+        )
+        mocker.patch(
+            "cli_tool.core.utils.config_manager.get_config_value",
+            return_value="dev",
+        )
+        mocker.patch(
+            "cli_tool.sidecar.routers.profiles.write_default_credentials",
+            side_effect=RuntimeError("boom"),
+        )
+
+        # Must not raise — the refresh is the user-visible operation.
+        profiles_router._do_refresh_one(EventHub(), "dev")
+
+
+@pytest.mark.unit
+class TestDoRefreshAllDefaultSync:
+    def test_writes_default_when_default_profile_is_in_verified(self, mocker):
+        mocker.patch(
+            "cli_tool.commands.aws_login.core.config.list_aws_profiles",
+            return_value=[("dev", "sso"), ("prod", "sso")],
+        )
+        mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._classify_profiles",
+            return_value=([("dev", "sso"), ("prod", "sso")], []),
+        )
+        mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._group_profiles_by_session",
+            return_value={"session-1": ["dev", "prod"]},
+        )
+        mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._refresh_all_sessions",
+            return_value=(None, None, ["dev", "prod"]),
+        )
+        mocker.patch(
+            "cli_tool.core.utils.config_manager.get_config_value",
+            return_value="dev",
+        )
+        mock_write = mocker.patch(
+            "cli_tool.sidecar.routers.profiles.write_default_credentials",
+            return_value={"expiration": "2099-01-01T00:00:00+00:00"},
+        )
+
+        profiles_router._do_refresh_all(EventHub())
+        mock_write.assert_called_once_with("dev")
+
+    def test_does_not_write_default_when_default_profile_not_verified(self, mocker):
+        mocker.patch(
+            "cli_tool.commands.aws_login.core.config.list_aws_profiles",
+            return_value=[("dev", "sso"), ("prod", "sso")],
+        )
+        mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._classify_profiles",
+            return_value=([("dev", "sso"), ("prod", "sso")], []),
+        )
+        mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._group_profiles_by_session",
+            return_value={"session-1": ["dev", "prod"]},
+        )
+        # Default profile (dev) FAILED verification, prod succeeded.
+        mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._refresh_all_sessions",
+            return_value=(None, None, ["prod"]),
+        )
+        mocker.patch(
+            "cli_tool.core.utils.config_manager.get_config_value",
+            return_value="dev",
+        )
+        mock_write = mocker.patch(
+            "cli_tool.sidecar.routers.profiles.write_default_credentials",
+        )
+
+        profiles_router._do_refresh_all(EventHub())
+        mock_write.assert_not_called()
+
+    def test_does_not_write_default_when_no_default_configured(self, mocker):
+        mocker.patch(
+            "cli_tool.commands.aws_login.core.config.list_aws_profiles",
+            return_value=[("dev", "sso")],
+        )
+        mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._classify_profiles",
+            return_value=([("dev", "sso")], []),
+        )
+        mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._group_profiles_by_session",
+            return_value={"session-1": ["dev"]},
+        )
+        mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._refresh_all_sessions",
+            return_value=(None, None, ["dev"]),
+        )
+        mocker.patch(
+            "cli_tool.core.utils.config_manager.get_config_value",
+            return_value=None,
+        )
+        mock_write = mocker.patch(
+            "cli_tool.sidecar.routers.profiles.write_default_credentials",
+        )
+
+        profiles_router._do_refresh_all(EventHub())
+        mock_write.assert_not_called()

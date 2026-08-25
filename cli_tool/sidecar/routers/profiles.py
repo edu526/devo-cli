@@ -178,10 +178,45 @@ def _do_refresh_all(hub: EventHub) -> None:
         _, _, verified = _refresh_all_sessions(session_profiles)
 
         logger.info("refresh_all: verified %d profile(s)", len(verified))
+        # Mirror CLI's refresh_all: if the configured default profile was
+        # among the refreshed-and-verified profiles, rewrite [default]
+        # credentials so anything that uses them (env, scripts, other
+        # tooling) gets fresh STS credentials too.
+        _sync_default_credentials_if_in(verified)
         hub.publish("profile.refreshed", {"names": verified, "success": True})
     except Exception as exc:
         logger.exception("refresh_all failed")
         hub.publish("profile.refreshed", {"names": [], "success": False, "error": str(exc)})
+
+
+def _sync_default_credentials_if_in(refreshed_profiles: list[str]) -> None:
+    """Rewrite [default] in ~/.aws/credentials when the default profile was refreshed.
+
+    Looks up `aws_login.default_credentials_profile` from the user config
+    and, if present in `refreshed_profiles`, exports fresh STS credentials
+    via `aws configure export-credentials` and writes them as [default].
+    Best-effort: failures are logged and swallowed so the refresh path
+    is never broken by a default-credentials rewrite issue.
+    """
+    try:
+        from cli_tool.core.utils.config_manager import get_config_value
+
+        default_profile = get_config_value("aws_login.default_credentials_profile")
+    except Exception as exc:
+        logger.warning("Could not read default_credentials_profile: %s", exc)
+        return
+
+    if not default_profile or default_profile not in refreshed_profiles:
+        return
+
+    try:
+        result = write_default_credentials(default_profile)
+        if result:
+            logger.info("Updated [default] credentials from '%s'", default_profile)
+        else:
+            logger.warning("Could not update [default] credentials for '%s'", default_profile)
+    except Exception as exc:
+        logger.error("Failed to update [default] credentials for '%s': %s", default_profile, exc)
 
 
 @router.post(":refresh_all", status_code=status.HTTP_202_ACCEPTED)
@@ -224,6 +259,10 @@ def _do_refresh_one(hub: EventHub, name: str) -> None:
     success = run_sso_login_sync(hub, name, source="profile")
     if success:
         hub.publish("profile.refreshed", {"names": [name], "success": True})
+        # If this profile is the configured default, rewrite [default]
+        # credentials so they reflect the just-refreshed STS keys (the
+        # CLI's login/refresh commands do the same).
+        _sync_default_credentials_if_in([name])
     else:
         hub.publish("profile.refreshed", {"names": [], "success": False, "error": f"Refresh failed for {name}"})
 
