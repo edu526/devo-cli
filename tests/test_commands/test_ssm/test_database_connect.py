@@ -15,7 +15,9 @@ from cli_tool.commands.ssm.commands.database.connect import (
     connect_database,
 )
 from cli_tool.commands.ssm.core.connection_runner import (
+    ConnectionRecord,
     ForwarderRegistry,
+    _communicate_interruptible,
     _databases_needing_setup,
     _find_free_port,
     _is_port_bindable,
@@ -696,6 +698,130 @@ class TestWaitBeforeReconnectStopEvent:
                 elapsed = time.time() - start
         assert result is False
         assert elapsed < 1.0  # woke up quickly, did not wait the full delay
+
+
+# ---------------------------------------------------------------------------
+# _communicate_interruptible
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestCommunicateInterruptible:
+    def _make_proc(self):
+        proc = MagicMock()
+        proc.pid = 12345
+        proc.poll.return_value = None  # still running
+        proc.communicate.return_value = ("out", "err")
+        return proc
+
+    def test_returns_output_when_process_already_exited(self):
+        proc = self._make_proc()
+        proc.poll.return_value = 0
+        record = ConnectionRecord(name="mydb", local_port=15432)
+        with patch(f"{_RUNNER}._terminate_proc") as mock_kill:
+            out, err = _communicate_interruptible(proc, record, None)
+        assert (out, err) == ("out", "err")
+        mock_kill.assert_not_called()
+
+    def test_kills_process_when_per_record_stop_fires(self):
+        """Stop pressed while communicate() would block: kill the proc immediately."""
+        proc = self._make_proc()
+        record = ConnectionRecord(name="mydb", local_port=15432)
+        threading.Thread(target=lambda: (time.sleep(0.05), record.stop_event.set()), daemon=True).start()
+        with patch(f"{_RUNNER}._terminate_proc") as mock_kill:
+            out, err = _communicate_interruptible(proc, record, ForwarderRegistry())
+        mock_kill.assert_called_once_with(proc)
+        assert (out, err) == ("out", "err")
+
+    def test_kills_process_when_global_stop_fires(self):
+        proc = self._make_proc()
+        record = ConnectionRecord(name="mydb", local_port=15432)
+        registry = ForwarderRegistry()
+        threading.Thread(target=lambda: (time.sleep(0.05), registry.stop_event.set()), daemon=True).start()
+        with patch(f"{_RUNNER}._terminate_proc") as mock_kill:
+            _communicate_interruptible(proc, record, registry)
+        mock_kill.assert_called_once_with(proc)
+
+
+# ---------------------------------------------------------------------------
+# ForwarderRegistry.stop_one — immediate stopped state
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestStopOneImmediateState:
+    def test_emits_stopped_and_marks_record(self):
+        """stop_one must reflect STOPPED synchronously — the loop thread may be
+        blocked (e.g. token check with network down) and take a while to notice."""
+        registry = ForwarderRegistry()
+        record = ConnectionRecord(name="mydb", local_port=15432)
+        record.state = "reconnecting"
+        registry.register("mydb", record)
+        events = []
+        registry.add_observer(lambda ev, payload: events.append((ev, payload)))
+
+        registry.stop_one("mydb")
+
+        assert record.state == "stopped"
+        assert record.stop_event.is_set()
+        assert ("connection.state_changed", {"name": "mydb", "state": "stopped", "local_port": 15432}) in events
+
+    def test_stop_one_without_proc_or_forwarder_is_safe(self):
+        registry = ForwarderRegistry()
+        record = ConnectionRecord(name="mydb", local_port=15432)
+        registry.register("mydb", record)
+        registry.stop_one("mydb")  # ssm_proc=None, pf=None — must not raise
+        assert record.state == "stopped"
+
+
+# ---------------------------------------------------------------------------
+# _run_connection_loop — reconnect counter (sidecar path)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestReconnectCounterSidecar:
+    def test_never_connected_attempts_abort_after_max(self):
+        """Network down: attempts hang and fail without ever reaching CONNECTED —
+        the loop must abort with ERROR after MAX_RECONNECT_ATTEMPTS instead of
+        reconnecting forever."""
+        db_config = _make_db_config()
+        registry = ForwarderRegistry()
+        record = ConnectionRecord(name="mydb", local_port=15432)
+        registry.register("mydb", record)
+        with patch(f"{_RUNNER}._run_attempt", return_value=1) as mock_attempt:
+            with patch(f"{_RUNNER}.SSMSession") as mock_session:
+                mock_session._is_token_expired.return_value = False
+                with patch(f"{_RUNNER}._wait_before_reconnect", return_value=True):
+                    with patch(f"{_RUNNER}.console"):
+                        _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False, registry=registry, record=record)
+        assert mock_attempt.call_count == 5  # MAX_RECONNECT_ATTEMPTS
+        assert record.state == "error"
+
+    def test_attempt_reaching_connected_resets_counter(self):
+        """A connection that came up and later dropped is a genuine drop — it
+        must not count toward MAX_RECONNECT_ATTEMPTS."""
+        db_config = _make_db_config()
+        registry = ForwarderRegistry()
+        record = ConnectionRecord(name="mydb", local_port=15432)
+        registry.register("mydb", record)
+        calls = []
+
+        def attempt_reached_connected(*_a, **_kw):
+            record.state = "connected"  # probe emitted CONNECTED before the drop
+            calls.append(1)
+            if len(calls) >= 7:
+                record.stop_event.set()
+            return 1
+
+        with patch(f"{_RUNNER}._run_attempt", side_effect=attempt_reached_connected) as mock_attempt:
+            with patch(f"{_RUNNER}.SSMSession") as mock_session:
+                mock_session._is_token_expired.return_value = False
+                with patch(f"{_RUNNER}._wait_before_reconnect", return_value=True):
+                    with patch(f"{_RUNNER}.console"):
+                        _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False, registry=registry, record=record)
+        assert mock_attempt.call_count == 7  # survived past MAX_RECONNECT_ATTEMPTS
+        assert record.state == "stopped"
 
 
 # ---------------------------------------------------------------------------

@@ -75,6 +75,11 @@ def start_connection(
 
     registry.register(name, record)
 
+    # The global stop_event is set by stop_all_connections() and never
+    # cleared; without this, any connection started after a "Stop All"
+    # would see _should_stop() true and exit immediately.
+    registry.stop_event.clear()
+
     if not registry._observers:
         registry.add_observer(_hub_observer(hub))
 

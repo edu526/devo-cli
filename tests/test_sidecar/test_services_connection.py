@@ -166,6 +166,24 @@ class TestStartConnection:
         connection_service.start_connection("mydb", reg, EventHub())
         assert len(reg._observers) == 1
 
+    def test_start_clears_global_stop_event(self, mocker):
+        """After 'Stop All' set the global stop_event, a new start must clear it —
+        otherwise the connection loop would see _should_stop() true and exit."""
+        rec = ConnectionRecord(name="mydb", local_port=15432)
+        rec.state = "stopped"
+        reg = _make_registry({"mydb": rec})
+        reg.stop_event.set()
+
+        mock_cfg = MagicMock()
+        mock_cfg.get_database.return_value = _db_config("mydb")
+        mocker.patch.object(connection_service, "SSMConfigManager", return_value=mock_cfg)
+        mocker.patch.object(connection_service, "HostsManager")
+        mocker.patch.object(connection_service, "_find_free_port", return_value=15432)
+        mocker.patch.object(connection_service, "_run_connection_loop")
+
+        connection_service.start_connection("mydb", reg, EventHub())
+        assert not reg.stop_event.is_set()
+
     def test_does_not_register_second_observer(self, mocker):
         rec = ConnectionRecord(name="mydb", local_port=15432)
         rec.state = "stopped"

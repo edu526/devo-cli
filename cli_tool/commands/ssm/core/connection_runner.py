@@ -124,45 +124,14 @@ class ForwarderRegistry:
         proc = record.ssm_proc
         pf = record.pf
         if proc is not None:
-            import sys
-
-            try:
-                if sys.platform == "win32":
-                    import psutil
-
-                    try:
-                        parent = psutil.Process(proc.pid)
-                        for child in parent.children(recursive=True):
-                            try:
-                                child.terminate()
-                            except psutil.NoSuchProcess:
-                                pass
-                        parent.terminate()
-                    except psutil.NoSuchProcess:
-                        pass
-                else:
-                    import os
-                    import signal
-
-                    try:
-                        if proc.pid > 1:
-                            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-            except Exception:
-                try:
-                    import os
-                    import signal
-
-                    if sys.platform != "win32":
-                        if proc.pid > 1:
-                            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                    else:
-                        proc.terminate()
-                except Exception:
-                    pass
+            _terminate_proc(proc)
         if pf is not None:
             pf.stop_all()
+        # Reflect the stop immediately: the connection loop may be blocked
+        # (e.g. in a token check with the network down) and take a moment to
+        # notice stop_event and emit its own terminal state.
+        record.state = STOPPED
+        self.emit("connection.state_changed", {"name": name, "state": STOPPED, "local_port": record.local_port})
 
     # --- Sidecar path: observer fan-out ---
 
@@ -183,6 +152,44 @@ class ForwarderRegistry:
 # ---------------------------------------------------------------------------
 # Port helpers
 # ---------------------------------------------------------------------------
+
+
+def _terminate_proc(proc: subprocess.Popen) -> None:
+    """Kill proc's whole process group (Unix) or process tree (Windows).
+
+    The `aws ssm start-session` wrapper spawns session-manager-plugin as a
+    child; killing only the wrapper leaves the plugin orphaned and holding
+    the stdout/stderr pipes open, which makes a bare proc.communicate()
+    block forever. Best-effort: every failure is swallowed — the process
+    may already be gone.
+    """
+    import sys
+
+    try:
+        if sys.platform == "win32":
+            import psutil
+
+            try:
+                parent = psutil.Process(proc.pid)
+                for child in parent.children(recursive=True):
+                    try:
+                        child.terminate()
+                    except psutil.NoSuchProcess:
+                        pass
+                parent.terminate()
+            except psutil.NoSuchProcess:
+                pass
+        else:
+            import os
+            import signal
+
+            try:
+                if proc.pid > 1:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    except Exception:
+        pass
 
 
 def _find_free_port(preferred_port: int) -> int:
@@ -280,6 +287,30 @@ def _wait_before_reconnect(name: str, stop_event: Optional[threading.Event] = No
 # ---------------------------------------------------------------------------
 
 
+def _communicate_interruptible(
+    proc: subprocess.Popen,
+    record: ConnectionRecord,
+    registry: Optional[ForwarderRegistry],
+) -> tuple:
+    """proc.communicate() that aborts as soon as a stop is requested.
+
+    A bare communicate() blocks until the process exits AND its pipes hit
+    EOF — with the network down that can take minutes (AWS CLI retries), or
+    forever if an orphaned session-manager-plugin keeps the pipes open.
+    Meanwhile stop_one() only killed record.ssm_proc if it happened to be
+    assigned at that instant, leaving the loop stuck in RECONNECTING.
+    Poll instead and kill the process group the moment a stop arrives, so
+    Stop works no matter when it is pressed.
+    """
+    while proc.poll() is None:
+        if record.stop_event.is_set() or (registry is not None and registry.stop_event.is_set()):
+            logger.info("Stop requested — killing SSM process (pid=%s)", proc.pid)
+            _terminate_proc(proc)
+            break
+        time.sleep(0.3)
+    return proc.communicate()
+
+
 def _run_attempt(
     db_config: dict,
     actual_local_port: int,
@@ -320,12 +351,12 @@ def _run_attempt(
             )
             logger.info("[TIMING][%s] SSM process spawned in %.1fs (pid=%s)", db_config.get("host", "?"), time.monotonic() - _t1, proc.pid)
             record.ssm_proc = proc
-            stdout, stderr = proc.communicate()
+            stdout, stderr = _communicate_interruptible(proc, record, registry)
             rc = proc.returncode
             logger.info("SSM process for %s exited with code %s", db_config["host"], rc)
             if rc != 0 and stderr:
-                # Code 15 (SIGTERM) or 130 (SIGINT) is standard when we manually stop the connection
-                if rc in (15, 130, -15) or "exit status 15" in stderr:
+                # Code 15 (SIGTERM), -9 (SIGKILL) or 130 (SIGINT) is standard when we manually stop the connection
+                if rc in (15, 130, -15, -9) or "exit status 15" in stderr:
                     logger.info(f"SSM connection closed (SIGTERM): {stderr.strip()}")
                 else:
                     logger.error(f"SSM Error: {stderr.strip()}")
@@ -541,7 +572,17 @@ def _run_connection_loop(
                 _join_probe()
                 return
 
-            if _t.monotonic() - _attempt_start > 10:
+            if record is not None:
+                # Sidecar: count only attempts that never reached CONNECTED.
+                # With the network down every attempt hangs >10s inside
+                # communicate(), so the old duration-based reset never let
+                # MAX_RECONNECT_ATTEMPTS fire and the UI stayed in
+                # "reconnecting" forever.
+                if record.state == CONNECTED:
+                    reconnect_attempts = 0
+                else:
+                    reconnect_attempts += 1
+            elif _t.monotonic() - _attempt_start > 10:
                 reconnect_attempts = 0
             else:
                 reconnect_attempts += 1
