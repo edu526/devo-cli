@@ -438,7 +438,7 @@
 </div>
 
 {#if showConfirmClear}
-  <div class="modal-backdrop" role="presentation" onclick={() => (showConfirmClear = false)} onkeydown={() => (showConfirmClear = false)}>
+  <div class="modal-backdrop" role="presentation">
     <div
       class="modal modal-confirm"
       role="alertdialog"

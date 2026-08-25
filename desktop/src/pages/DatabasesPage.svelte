@@ -728,8 +728,6 @@
   <div
     class="modal-backdrop"
     role="presentation"
-    onclick={() => (showModal = false)}
-    onkeydown={() => (showModal = false)}
   >
     <div
       class="modal"

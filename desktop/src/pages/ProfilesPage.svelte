@@ -728,8 +728,6 @@
   <div
     class="modal-backdrop"
     role="presentation"
-    onclick={() => (showCreateModal = false)}
-    onkeydown={() => (showCreateModal = false)}
   >
     <div
       class="modal modal-wizard"
@@ -943,7 +941,7 @@
 {/if}
 
 {#if confirmDelete}
-  <div class="modal-backdrop" role="presentation" onclick={cancelDelete} onkeydown={cancelDelete}>
+  <div class="modal-backdrop" role="presentation">
     <div
       class="modal modal-confirm"
       role="alertdialog"
