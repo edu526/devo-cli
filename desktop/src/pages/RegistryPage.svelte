@@ -148,7 +148,32 @@
   type PendingSsoRetry = { domain: string; tool: string };
   const ssoPendingByProfile = new Map<string, PendingSsoRetry[]>();
 
+  // Profiles whose SSO just completed in this page session. A late 202
+  // (one that arrives after the listener already drained the queue for
+  // that profile) is retried inline instead of being orphaned in a queue
+  // that nothing will ever drain — the SSO session in the backend is
+  // still fresh for ~8h so the retry should mint a token directly.
+  const ssoFreshlyRefreshed = new Set<string>();
+
   function queueSsoRetry(profile: string, domain: string, tool: string) {
+    if (ssoFreshlyRefreshed.has(profile)) {
+      // The SSO listener already fired for this profile. Bypass the queue
+      // and re-issue login() directly — the backend's SSO check will
+      // either succeed (token minted) or re-raise SSOLoginRequired (then
+      // we fall back to queueing, which happens implicitly because
+      // ssoFreshlyRefreshed was never cleared on the previous success
+      // path; if SSO actually expired mid-page we'd handle the next 202
+      // normally via the listener re-queueing on its own drain).
+      (async () => {
+        try {
+          await codeartifactApi.login(domain, tool);
+          tokens = await codeartifactApi.tokens();
+        } catch (e) {
+          console.error(`Late login retry for ${domain} failed:`, e);
+        }
+      })();
+      return;
+    }
     if (!ssoPendingByProfile.has(profile)) ssoPendingByProfile.set(profile, []);
     ssoPendingByProfile.get(profile)!.push({ domain, tool });
     // Mirror the first queued entry into the banner so the existing UX
@@ -290,6 +315,10 @@
       const queue = ssoPendingByProfile.get(m.profile);
       if (!queue) return;
       ssoPendingByProfile.delete(m.profile);
+      // Mark the profile as freshly-refreshed BEFORE we start draining so
+      // any 202 that arrives mid-drain takes the fast inline-retry path
+      // instead of being queued behind us.
+      if (m.success) ssoFreshlyRefreshed.add(m.profile);
       if (m.success) {
         // Retry login for every queued domain — SSO is now fresh for the
         // shared session, so each re-login should mint a token directly.
