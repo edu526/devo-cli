@@ -38,8 +38,8 @@
       (d) =>
         d.domain.toLowerCase().includes(query.toLowerCase()) ||
         (d.namespace && d.namespace.toLowerCase().includes(query.toLowerCase())) ||
-        d.repository.toLowerCase().includes(query.toLowerCase())
-    )
+        d.repository.toLowerCase().includes(query.toLowerCase()),
+    ),
   );
   let loading = $state(!initialCache);
   let actionError: string | null = $state(null);
@@ -119,7 +119,7 @@
       const result = await codeartifactApi.login(domain.domain, tool);
       // Backend returns 202 + sso_required when the SSO session is dead
       if ("status" in result && result.status === "sso_required") {
-        handleSsoRequired(result.profile, domain.domain, tool);
+        queueSsoRetry(result.profile, domain.domain, tool);
         return;
       }
       tokens = await codeartifactApi.tokens();
@@ -141,25 +141,21 @@
     }
   }
 
-  function handleSsoRequired(profile: string, domain: string, tool: string) {
+  // Per-profile SSO retry queue. Bulk and single-domain refreshes funnel
+  // through here so that when `aws sso login --profile X` completes (once,
+  // because the backend dedupes the subprocess per profile), every domain
+  // that was waiting on it retries its CodeArtifact login.
+  type PendingSsoRetry = { domain: string; tool: string };
+  const ssoPendingByProfile = new Map<string, PendingSsoRetry[]>();
+
+  function queueSsoRetry(profile: string, domain: string, tool: string) {
+    if (!ssoPendingByProfile.has(profile)) ssoPendingByProfile.set(profile, []);
+    ssoPendingByProfile.get(profile)!.push({ domain, tool });
+    // Mirror the first queued entry into the banner so the existing UX
+    // (one banner per profile) keeps working.
     ssoLoginInProgress = { profile, domain, tool };
     ssoLoginError = null;
     ssoManualUrl = null;
-    // Subscribe once; the listener stays alive across retries until cleared
-    if (ssoLoginUnsubscribe) ssoLoginUnsubscribe();
-    ssoLoginUnsubscribe = ws.on("sso.login.completed", (msg) => {
-      const m = msg as { profile?: string; source?: string; success?: boolean; error?: string };
-      if (m.source !== "codeartifact" || m.profile !== profile) return;
-      ssoLoginInProgress = null;
-      ssoManualUrl = null;
-      if (m.success) {
-        // Auto-retry the original CodeArtifact login
-        const dom = domains.find((d) => d.domain === domain);
-        if (dom) doLogin(dom);
-      } else {
-        ssoLoginError = m.error ?? "Browser SSO login failed";
-      }
-    });
   }
 
   // In-memory cache of last login result (not the JWT, just metadata)
@@ -282,6 +278,38 @@
       ) {
         ssoManualUrl = { url: m.url!, code: m.code! };
       }
+    });
+    // Single global listener for SSO completion across every queued
+    // profile. Backend dedupes the underlying `aws sso login` per profile
+    // (one tab per SSO session, not per domain) so this fires exactly
+    // once per profile; we then retry CodeArtifact login for every
+    // domain that was waiting on it.
+    ssoLoginUnsubscribe = ws.on("sso.login.completed", async (msg) => {
+      const m = msg as { profile?: string; source?: string; success?: boolean; error?: string };
+      if (m.source !== "codeartifact" || !m.profile) return;
+      const queue = ssoPendingByProfile.get(m.profile);
+      if (!queue) return;
+      ssoPendingByProfile.delete(m.profile);
+      if (m.success) {
+        // Retry login for every queued domain — SSO is now fresh for the
+        // shared session, so each re-login should mint a token directly.
+        for (const p of queue) {
+          try {
+            await codeartifactApi.login(p.domain, p.tool);
+          } catch (e) {
+            console.error(`Retry login for ${p.domain} failed:`, e);
+          }
+        }
+        try {
+          tokens = await codeartifactApi.tokens();
+        } catch {
+          /* tokens refresh is best-effort */
+        }
+      } else {
+        ssoLoginError = m.error ?? "Browser SSO login failed";
+      }
+      ssoLoginInProgress = null;
+      ssoManualUrl = null;
     });
   });
   onDestroy(() => {
@@ -558,10 +586,7 @@
 </div>
 
 {#if showModal}
-  <div
-    class="modal-backdrop"
-    role="presentation"
-  >
+  <div class="modal-backdrop" role="presentation">
     <div
       class="modal"
       role="dialog"

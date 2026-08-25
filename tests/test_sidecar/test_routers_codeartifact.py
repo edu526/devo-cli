@@ -457,6 +457,135 @@ class TestSSOLoginChain:
         # This test is no longer relevant as the exception logic is handled in run_sso_login_sync
         pass
 
+    def test_sso_login_clears_inflight_slot_on_completion(self, mocker, _reset_sso_state):
+        """After the login completes, the dedupe slot must clear so the next
+        request for the same profile can spawn a fresh login (no leak)."""
+        from cli_tool.sidecar.routers import codeartifact
+        from cli_tool.sidecar.state import EventHub
+
+        mocker.patch(
+            "cli_tool.sidecar.services.sso_service.run_sso_login_sync",
+        )
+
+        codeartifact._ensure_single_sso_login(EventHub(), "p", "dom-a", "npm")
+        assert "p" in codeartifact._sso_login_threads
+        # Wait for the thread to finish, then assert cleanup.
+        thread = codeartifact._sso_login_threads["p"]
+        thread.join(timeout=2)
+        assert "p" not in codeartifact._sso_login_threads
+
+    def test_sso_login_clears_inflight_slot_on_exception(self, mocker, _reset_sso_state):
+        """If run_sso_login_sync raises, the dedupe slot must still clear so
+        the next request can retry the login (no permanent stuck)."""
+        from cli_tool.sidecar.routers import codeartifact
+        from cli_tool.sidecar.state import EventHub
+
+        mocker.patch(
+            "cli_tool.sidecar.services.sso_service.run_sso_login_sync",
+            side_effect=RuntimeError("boom"),
+        )
+
+        codeartifact._ensure_single_sso_login(EventHub(), "p", "dom-a", "npm")
+        thread = codeartifact._sso_login_threads["p"]
+        thread.join(timeout=2)
+        assert "p" not in codeartifact._sso_login_threads
+
+
+@pytest.fixture
+def _reset_sso_state():
+    """Reset module-level SSO login state between tests so the dedupe dict
+    doesn't leak across tests."""
+    from cli_tool.sidecar.routers import codeartifact
+
+    codeartifact._sso_login_threads.clear()
+    yield
+    codeartifact._sso_login_threads.clear()
+
+
+@pytest.mark.unit
+class TestEnsureSingleSsoLogin:
+    def test_spawns_one_thread_per_profile_when_no_login_inflight(self, mocker, _reset_sso_state):
+        from cli_tool.sidecar.routers import codeartifact
+        from cli_tool.sidecar.state import EventHub
+
+        # Stub Thread so we observe the constructor calls without spawning
+        # real threads (the .is_alive check would otherwise race with real ones).
+        threads = []
+
+        def fake_thread(*args, **kwargs):
+            t = mocker.MagicMock()
+            t.is_alive.return_value = False  # pretend it's not alive
+            threads.append(t)
+            return t
+
+        mocker.patch.object(codeartifact.threading, "Thread", side_effect=fake_thread)
+
+        codeartifact._ensure_single_sso_login(EventHub(), "p", "dom-a", "npm")
+        assert len(threads) == 1
+
+    def test_does_not_spawn_when_same_profile_is_alive(self, mocker, _reset_sso_state):
+        """Two domains for the same SSO profile must share ONE login thread,
+        not spawn two parallel aws sso login processes."""
+        from cli_tool.sidecar.routers import codeartifact
+        from cli_tool.sidecar.state import EventHub
+
+        threads = []
+
+        def fake_thread(*args, **kwargs):
+            t = mocker.MagicMock()
+            t.is_alive.return_value = True  # pretend it's still running
+            threads.append(t)
+            return t
+
+        mocker.patch.object(codeartifact.threading, "Thread", side_effect=fake_thread)
+
+        codeartifact._ensure_single_sso_login(EventHub(), "p", "dom-a", "npm")
+        codeartifact._ensure_single_sso_login(EventHub(), "p", "dom-b", "npm")
+        codeartifact._ensure_single_sso_login(EventHub(), "p", "dom-c", "pip")
+
+        assert len(threads) == 1, "second/third calls must piggyback on the in-flight login"
+
+    def test_allows_new_thread_after_previous_completed(self, mocker, _reset_sso_state):
+        """After the in-flight login completes (slot cleared), a new request
+        for the same profile must spawn a fresh login thread."""
+        from cli_tool.sidecar.routers import codeartifact
+        from cli_tool.sidecar.state import EventHub
+
+        threads = []
+
+        def fake_thread(*args, **kwargs):
+            t = mocker.MagicMock()
+            t.is_alive.return_value = False  # each completes immediately
+            threads.append(t)
+            return t
+
+        mocker.patch.object(codeartifact.threading, "Thread", side_effect=fake_thread)
+
+        codeartifact._ensure_single_sso_login(EventHub(), "p", "dom-a", "npm")
+        codeartifact._ensure_single_sso_login(EventHub(), "p", "dom-b", "npm")
+
+        assert len(threads) == 2
+
+    def test_different_profiles_are_independent(self, mocker, _reset_sso_state):
+        from cli_tool.sidecar.routers import codeartifact
+        from cli_tool.sidecar.state import EventHub
+
+        threads = []
+
+        def fake_thread(*args, **kwargs):
+            t = mocker.MagicMock()
+            t.is_alive.return_value = True  # keep all alive
+            threads.append(t)
+            return t
+
+        mocker.patch.object(codeartifact.threading, "Thread", side_effect=fake_thread)
+
+        codeartifact._ensure_single_sso_login(EventHub(), "p1", "dom-a", "npm")
+        codeartifact._ensure_single_sso_login(EventHub(), "p2", "dom-b", "npm")
+
+        # Different profiles must spawn independent threads.
+        assert len(threads) == 2
+
 
 @pytest.mark.unit
 class TestEnsureSsoFresh:
