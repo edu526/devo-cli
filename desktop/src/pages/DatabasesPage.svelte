@@ -9,12 +9,14 @@
     type DatabaseRecord,
     type DatabaseIn,
     type ConnectionRecord,
+    type ProfileRecord,
     ApiError,
   } from "../lib/api";
-  import { databasesCache, connectionsCache } from "../lib/page-stores";
+  import { databasesCache, connectionsCache, profilesCache } from "../lib/page-stores";
   import SearchInput from "../lib/SearchInput.svelte";
   import ViewToggle from "../lib/ViewToggle.svelte";
   import FormField from "../lib/FormField.svelte";
+  import SearchableSelect from "../lib/SearchableSelect.svelte";
   import { databaseSchema, validate, type DatabaseForm, type FieldErrors } from "../lib/forms";
   import { viewModes } from "../lib/stores";
   import { ws, type WsMessage } from "../lib/ws";
@@ -37,9 +39,11 @@
 
   const initialDatabases = get(databasesCache) ?? {};
   const initialConnections = (get(connectionsCache) ?? []) as ConnectionRecord[];
+  const initialProfiles = (get(profilesCache) ?? []) as ProfileRecord[];
 
   let databases: Record<string, DatabaseRecord> = $state(initialDatabases);
   let connections: ConnectionRecord[] = $state(initialConnections);
+  let profiles: ProfileRecord[] = $state(initialProfiles);
 
   let loading = $state(Object.keys(initialDatabases).length === 0);
   let actionError: string | null = $state(null);
@@ -198,11 +202,20 @@
   async function load() {
     refreshing = true;
     try {
+      // Profiles list is best-effort — a failure here must not block the
+      // page or block opening the DB edit modal.
+      const profilePromise = profilesApi.list()
+        .then((p) => {
+          profiles = p;
+          profilesCache.set(p);
+        })
+        .catch(() => {});
       const [dbData, connData] = await Promise.all([databasesApi.list(), connectionsApi.list()]);
       databases = dbData;
       connections = connData;
       databasesCache.set(dbData);
       connectionsCache.set(connData);
+      await profilePromise;
       await checkHosts();
     } catch (e) {
       actionError = String(e);
@@ -211,6 +224,18 @@
       refreshing = false;
     }
   }
+
+  // Options for the AWS profile autocomplete in the DB edit modal.
+  // Includes any value currently in the form (e.g. a profile loaded from
+  // disk that no longer appears in the live profiles list) so existing
+  // configs don't visually lose their value when the modal opens.
+  const profileOptions = $derived.by(() => {
+    const opts = profiles.map((p) => ({ value: p.name, label: p.name }));
+    if (form.profile && !opts.some((o) => o.value === form.profile)) {
+      opts.unshift({ value: form.profile, label: form.profile });
+    }
+    return opts;
+  });
 
   // --- CRUD Logic ---
   function openCreate() {
@@ -760,7 +785,12 @@
           <input bind:value={form.region} placeholder="us-east-1" />
         </FormField>
         <FormField label="Profile" hint="Optional" error={formErrors.profile}>
-          <input bind:value={form.profile} placeholder="default" />
+          <SearchableSelect
+            options={profileOptions}
+            value={form.profile ?? ""}
+            placeholder="default"
+            onchange={(v) => (form.profile = v)}
+          />
         </FormField>
         <FormField label="Local port" hint="Optional" error={formErrors.local_port}>
           <input type="number" bind:value={form.local_port} placeholder="auto" />

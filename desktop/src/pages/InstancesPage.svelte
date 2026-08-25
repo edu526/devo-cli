@@ -1,14 +1,24 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { get } from "svelte/store";
-  import { instancesApi, type InstanceRecord, type InstanceIn, ApiError } from "../lib/api";
-  import { instancesCache } from "../lib/page-stores";
+  import {
+    instancesApi,
+    profilesApi,
+    type InstanceRecord,
+    type InstanceIn,
+    type ProfileRecord,
+    ApiError,
+  } from "../lib/api";
+  import { instancesCache, profilesCache } from "../lib/page-stores";
   import SearchInput from "../lib/SearchInput.svelte";
   import FormField from "../lib/FormField.svelte";
+  import SearchableSelect from "../lib/SearchableSelect.svelte";
   import { instanceSchema, validate, type InstanceForm, type FieldErrors } from "../lib/forms";
 
   const initialInstances = Object.entries(get(instancesCache) ?? {}) as [string, InstanceRecord][];
+  const initialProfiles = (get(profilesCache) ?? []) as ProfileRecord[];
   let instances: [string, InstanceRecord][] = $state(initialInstances);
+  let profiles: ProfileRecord[] = $state(initialProfiles);
   let loading = $state(initialInstances.length === 0);
   let refreshing = $state(false);
   let actionError: string | null = $state(null);
@@ -42,9 +52,17 @@
   async function load() {
     refreshing = true;
     try {
+      // Profiles list is best-effort — a failure here must not block the page.
+      const profilePromise = profilesApi.list()
+        .then((p) => {
+          profiles = p;
+          profilesCache.set(p);
+        })
+        .catch(() => {});
       const data = await instancesApi.list();
       instances = Object.entries(data);
       instancesCache.set(data);
+      await profilePromise;
     } catch (e) {
       actionError = String(e);
     } finally {
@@ -52,6 +70,17 @@
       refreshing = false;
     }
   }
+
+  // Options for the AWS profile autocomplete in the instance modal.
+  // Includes any value currently in the form so existing configs don't
+  // visually lose their value when the modal opens.
+  const profileOptions = $derived.by(() => {
+    const opts = profiles.map((p) => ({ value: p.name, label: p.name }));
+    if (form.profile && !opts.some((o) => o.value === form.profile)) {
+      opts.unshift({ value: form.profile, label: form.profile });
+    }
+    return opts;
+  });
 
   function openCreate() {
     editingName = null;
@@ -220,7 +249,12 @@
         <input bind:value={form.region} placeholder="us-east-1" />
       </FormField>
       <FormField label="Profile" hint="Optional" error={formErrors.profile}>
-        <input bind:value={form.profile} placeholder="default" />
+        <SearchableSelect
+          options={profileOptions}
+          value={form.profile ?? ""}
+          placeholder="default"
+          onchange={(v) => (form.profile = v)}
+        />
       </FormField>
 
       <div class="modal-actions">
