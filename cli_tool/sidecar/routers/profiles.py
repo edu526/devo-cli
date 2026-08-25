@@ -150,8 +150,12 @@ def create_profile_endpoint(body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
-def _do_refresh_all(hub: EventHub) -> None:
+def _do_refresh_all(hub: EventHub, force: bool = False) -> None:
     """Synchronous body of the refresh_all background thread.
+
+    When `force` is False (the default) only profiles that are expired
+    or expiring are renewed — clicking "Refresh All" should refresh all
+    profiles, so the desktop passes force=True by default.
 
     Imports are kept inside the function so the heavy `aws_login` module
     tree is not loaded on sidecar startup.
@@ -164,9 +168,16 @@ def _do_refresh_all(hub: EventHub) -> None:
         )
         from cli_tool.commands.aws_login.core.config import list_aws_profiles
 
-        logger.info("Starting refresh_all — classifying profiles")
+        logger.info("Starting refresh_all (force=%s) — classifying profiles", force)
         profiles = list_aws_profiles()
-        to_refresh, _ = _classify_profiles(profiles)
+        to_refresh, valid = _classify_profiles(profiles)
+        if force:
+            # Same semantics as `devo aws-login refresh --force`: move the
+            # still-valid profiles onto the refresh list so the explicit
+            # user action renews everything, not just the expiring ones.
+            for prof, _src in valid:
+                to_refresh.append((prof, "Forced refresh"))
+            valid = []
         if not to_refresh:
             logger.info("refresh_all: all profiles valid, nothing to refresh")
             hub.publish("profile.refreshed", {"names": [], "success": True})
@@ -221,12 +232,22 @@ def _sync_default_credentials_if_in(refreshed_profiles: list[str]) -> None:
 
 @router.post(":refresh_all", status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("1/minute")
-def refresh_all(request: Request, response: Response) -> dict[str, Any]:
-    """Kick off refresh in background. Progress arrives via WS profile.refreshed."""
+def refresh_all(
+    request: Request,
+    response: Response,
+    body: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Kick off refresh in background. Progress arrives via WS profile.refreshed.
+
+    Body (optional): {"force": true} to renew every profile, not only
+    the ones that are expired or about to expire. Mirrors `devo aws-login
+    refresh --force`.
+    """
     app_state = _state(request)
     hub = app_state.event_hub
+    force = bool((body or {}).get("force", False))
 
-    t = threading.Thread(target=_do_refresh_all, args=(hub,), daemon=True)
+    t = threading.Thread(target=_do_refresh_all, args=(hub, force), daemon=True)
     t.start()
     return {"status": "accepted", "message": "Refresh started — watch WS for profile.refreshed"}
 

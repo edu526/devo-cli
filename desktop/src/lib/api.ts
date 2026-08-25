@@ -476,7 +476,8 @@ export const profilesApi = {
   create: (body: ProfileIn) => req<ProfileRecord>("POST", "/profiles", body),
   delete: (name: string) => req<void>("DELETE", `/profiles/${name}`),
   discover: (session: string) => req<DiscoverResponse>("POST", "/profiles:discover", { session }),
-  refreshAll: () => req<{ status: string; message: string }>("POST", "/profiles:refresh_all"),
+  refreshAll: (force = true) =>
+    req<{ status: string; message: string }>("POST", "/profiles:refresh_all", { force }),
   refresh: (name: string) =>
     req<{ status: string; message: string }>("POST", `/profiles/${name}:refresh`),
   refreshSsoToken: (name: string) =>

@@ -258,6 +258,41 @@ class TestRefreshAll:
         assert response.status_code == 202
         assert response.json()["status"] == "accepted"
 
+    def test_force_flag_default_false_passes_to_thread(self, mocker):
+        captured: list[dict] = []
+
+        def fake_thread(*args, **kwargs):
+            captured.append({"kwargs": kwargs})
+            return mocker.MagicMock()
+
+        mocker.patch("threading.Thread", side_effect=fake_thread)
+        client, _ = _make_client()
+        response = client.post("/profiles:refresh_all", headers=AUTH)
+        assert response.status_code == 202
+        # The thread is constructed with `args=(hub, force)` — that tuple
+        # lands in the kwargs["args"] of the patched Thread constructor.
+        thread_args = captured[0]["kwargs"]["args"]
+        # (hub, force) — index 0 is the hub, index 1 is the force flag.
+        assert thread_args[1] is False
+
+    def test_force_true_propagates_to_thread(self, mocker):
+        captured: list[dict] = []
+
+        def fake_thread(*args, **kwargs):
+            captured.append({"kwargs": kwargs})
+            return mocker.MagicMock()
+
+        mocker.patch("threading.Thread", side_effect=fake_thread)
+        client, _ = _make_client()
+        response = client.post(
+            "/profiles:refresh_all",
+            json={"force": True},
+            headers=AUTH,
+        )
+        assert response.status_code == 202
+        thread_args = captured[0]["kwargs"]["args"]
+        assert thread_args[1] is True
+
 
 @pytest.mark.unit
 class TestRefreshProfile:

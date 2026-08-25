@@ -301,3 +301,87 @@ class TestDoRefreshAllDefaultSync:
 
         profiles_router._do_refresh_all(EventHub())
         mock_write.assert_not_called()
+
+
+@pytest.mark.unit
+class TestDoRefreshAllForce:
+    def test_force_true_refreshes_valid_profiles_too(self, mocker):
+        """When force=True, profiles that are still valid must also be renewed.
+
+        Without force, _classify_profiles returns ([("dev", ...)], valid=[]);
+        the second profile is dropped because it's valid. With force=True
+        it must be added back to the refresh list and sent through.
+        """
+        mocker.patch(
+            "cli_tool.commands.aws_login.core.config.list_aws_profiles",
+            return_value=[("dev", "sso"), ("prod", "sso")],
+        )
+        # dev needs refresh, prod is still valid.
+        mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._classify_profiles",
+            return_value=([("dev", "sso")], [("prod", "sso")]),
+        )
+        mock_group = mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._group_profiles_by_session",
+            return_value={"session-1": ["dev", "prod"]},
+        )
+        mock_refresh = mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._refresh_all_sessions",
+            return_value=(None, None, ["dev", "prod"]),
+        )
+
+        profiles_router._do_refresh_all(EventHub(), force=True)
+
+        # Both profiles made it into the session group, not just dev.
+        grouped = mock_group.call_args[0][0]
+        assert ("dev", "sso") in grouped
+        # prod was added by the force branch with a "Forced refresh" reason.
+        assert any(name == "prod" for name, _ in grouped)
+        mock_refresh.assert_called_once()
+
+    def test_force_false_skips_valid_profiles(self, mocker):
+        """Default behaviour (force=False) must not refresh still-valid profiles."""
+        mocker.patch(
+            "cli_tool.commands.aws_login.core.config.list_aws_profiles",
+            return_value=[("dev", "sso"), ("prod", "sso")],
+        )
+        mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._classify_profiles",
+            return_value=([("dev", "sso")], [("prod", "sso")]),
+        )
+        mock_group = mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._group_profiles_by_session",
+            return_value={"session-1": ["dev"]},
+        )
+        mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._refresh_all_sessions",
+            return_value=(None, None, ["dev"]),
+        )
+
+        profiles_router._do_refresh_all(EventHub(), force=False)
+
+        grouped = mock_group.call_args[0][0]
+        assert ("dev", "sso") in grouped
+        assert not any(name == "prod" for name, _ in grouped)
+
+    def test_force_true_short_circuits_when_nothing_to_refresh(self, mocker):
+        """If classify says 'nothing to refresh' (empty list, no valids),
+        force must still produce the short-circuit 'nothing' outcome."""
+        mocker.patch(
+            "cli_tool.commands.aws_login.core.config.list_aws_profiles",
+            return_value=[],
+        )
+        mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._classify_profiles",
+            return_value=([], []),
+        )
+        mock_refresh = mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._refresh_all_sessions",
+        )
+        mocker.patch(
+            "cli_tool.commands.aws_login.commands.refresh._group_profiles_by_session",
+        )
+
+        profiles_router._do_refresh_all(EventHub(), force=True)
+
+        mock_refresh.assert_not_called()
