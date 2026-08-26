@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, type Component } from "svelte";
   import {
     initApi,
     bootApi,
@@ -29,13 +29,13 @@
 
   import { Database, KeyRound, Package, Settings, FileText } from "@lucide/svelte";
 
-  const MAIN_NAV: { id: Page; label: string; icon: any }[] = [
+  const MAIN_NAV: { id: Page; label: string; icon: Component }[] = [
     { id: "databases", label: "Databases", icon: Database },
     { id: "profiles", label: "Profiles", icon: KeyRound },
     { id: "registry", label: "Registry", icon: Package },
   ];
 
-  const BOTTOM_NAV: { id: Page; label: string; icon: any }[] = [
+  const BOTTOM_NAV: { id: Page; label: string; icon: Component }[] = [
     { id: "config", label: "Settings", icon: Settings },
     { id: "logs", label: "Logs", icon: FileText },
   ];

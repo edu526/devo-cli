@@ -105,9 +105,7 @@
   async function checkHosts() {
     try {
       const data = await hostsApi.setup();
-      missingHosts = data.succeeded
-        .filter((r: any) => r.action === "add" || r.action === "update")
-        .map((r: any) => r.hostname);
+      missingHosts = data.succeeded.map((r) => r.host);
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         // We know hosts are missing because the backend needs elevation to fix them.
