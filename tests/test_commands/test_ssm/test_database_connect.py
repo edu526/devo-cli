@@ -587,6 +587,11 @@ class TestProcessDbForTable:
 
 @pytest.mark.unit
 class TestRunConnectionLoop:
+    @pytest.fixture(autouse=True)
+    def mock_threading(self):
+        with patch(f"{_RUNNER}.threading.Thread"):
+            yield
+
     def test_exit_code_zero_triggers_reconnect(self):
         """Exit code 0 (session ended) should trigger reconnect, not stop."""
         db_config = _make_db_config()
@@ -781,6 +786,11 @@ class TestStopOneImmediateState:
 
 @pytest.mark.unit
 class TestReconnectCounterSidecar:
+    @pytest.fixture(autouse=True)
+    def mock_threading(self):
+        with patch(f"{_RUNNER}.threading.Thread"):
+            yield
+
     def test_never_connected_attempts_abort_after_max(self):
         """Network down: attempts hang and fail without ever reaching CONNECTED —
         the loop must abort with ERROR after MAX_RECONNECT_ATTEMPTS instead of

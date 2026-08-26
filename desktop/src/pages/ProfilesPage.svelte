@@ -444,7 +444,7 @@
     });
     offExpiring = ws.on("profile.expiring", async (msg: WsMessage) => {
       load();
-      const payload = msg as any;
+      const payload = msg as Record<string, unknown>;
       if (payload.type === "sso") {
         try {
           let permissionGranted = await isPermissionGranted();

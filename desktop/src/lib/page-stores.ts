@@ -10,6 +10,8 @@ import type {
   HostRecord,
   InstanceRecord,
   ProfileRecord,
+  CodeArtifactDomain,
+  CodeArtifactToken,
 } from "./api";
 
 export const connectionsCache = writable<ConnectionRecord[] | null>(null);
@@ -17,5 +19,5 @@ export const instancesCache = writable<Record<string, InstanceRecord> | null>(nu
 export const databasesCache = writable<Record<string, DatabaseRecord> | null>(null);
 export const profilesCache = writable<ProfileRecord[] | null>(null);
 export const hostsCache = writable<HostRecord[] | null>(null);
-export const registryCache = writable<{ domains: any[]; tokens: any[] } | null>(null);
+export const registryCache = writable<{ domains: CodeArtifactDomain[]; tokens: CodeArtifactToken[] } | null>(null);
 export const configCache = writable<Record<string, unknown> | null>(null);
