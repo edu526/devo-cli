@@ -1,10 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import {
-    isPermissionGranted,
-    requestPermission,
-    sendNotification,
-  } from "@tauri-apps/plugin-notification";
+  import { notifyUser } from "../lib/notifications";
   import { get } from "svelte/store";
   import {
     profilesApi,
@@ -442,25 +438,14 @@
       }
       updateProfiles(names);
     });
-    offExpiring = ws.on("profile.expiring", async (msg: WsMessage) => {
+    offExpiring = ws.on("profile.expiring", (msg: WsMessage) => {
       load();
       const payload = msg as Record<string, unknown>;
       if (payload.type === "sso") {
-        try {
-          let permissionGranted = await isPermissionGranted();
-          if (!permissionGranted) {
-            const permission = await requestPermission();
-            permissionGranted = permission === "granted";
-          }
-          if (permissionGranted) {
-            sendNotification({
-              title: "AWS SSO Expiring",
-              body: `Your SSO session for '${payload.name}' is expiring. Click Refresh in Devo to renew it.`,
-            });
-          }
-        } catch (err) {
-          console.error("Failed to send desktop notification:", err);
-        }
+        notifyUser(
+          "AWS SSO Expiring",
+          `Your SSO session for '${payload.name}' is expiring. Click Refresh in Devo to renew it.`,
+        );
       }
     });
     offUrlReady = ws.on("sso.login.url_ready", (msg: WsMessage) => {

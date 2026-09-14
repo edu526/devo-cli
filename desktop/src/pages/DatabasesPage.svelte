@@ -20,11 +20,7 @@
   import { databaseSchema, validate, type DatabaseForm, type FieldErrors } from "../lib/forms";
   import { viewModes } from "../lib/stores";
   import { ws, type WsMessage } from "../lib/ws";
-  import {
-    isPermissionGranted,
-    requestPermission,
-    sendNotification,
-  } from "@tauri-apps/plugin-notification";
+  import { notifyUser } from "../lib/notifications";
   import { invoke } from "@tauri-apps/api/core";
   import { Settings, RefreshCw, X } from "@lucide/svelte";
   import { open as openUrl } from "@tauri-apps/plugin-shell";
@@ -397,20 +393,13 @@
     }
   }
 
-  async function notifyUser(title: string, body: string) {
-    try {
-      let permissionGranted = await isPermissionGranted();
-      if (!permissionGranted) {
-        const permission = await requestPermission();
-        permissionGranted = permission === "granted";
-      }
-      if (permissionGranted) {
-        sendNotification({ title, body });
-      }
-    } catch (err) {
-      console.error("Failed to send desktop notification:", err);
-    }
-  }
+  // Tracks profiles we've already sent an "SSO token expired" notification
+  // for, so N connections sharing one profile (a common setup) don't each
+  // fire their own OS notification for what is really one shared event.
+  // Cleared when that profile's auto-triggered SSO login finishes (see the
+  // "sso.login.completed" / source "connection" handler below), so the next
+  // real expiry episode notifies again.
+  const notifiedExpiredProfiles = new Set<string>();
 
   onMount(() => {
     load();
@@ -442,12 +431,21 @@
           state === "expired_credentials" &&
           (!existing || existing.state !== "expired_credentials")
         ) {
-          notifyUser(
-            "Connection Lost",
-            `AWS SSO Token expired for ${name}. Please authenticate again.`,
-          );
+          const profile = databases[name]?.profile || "default";
+          if (!notifiedExpiredProfiles.has(profile)) {
+            notifiedExpiredProfiles.add(profile);
+            notifyUser(
+              "AWS SSO Expired",
+              `AWS SSO token expired for ${name}. Devo is opening your browser to refresh it.`,
+            );
+          }
         } else if (state === "error" && (!existing || existing.state !== "error")) {
           notifyUser("Connection Error", error || `Connection to ${name} failed unexpectedly.`);
+        } else if (state === "connected" && existing?.state === "expired_credentials") {
+          // Closes the loop on the "AWS SSO Expired" notification above: the
+          // background auto-refresh succeeded and the tunnel is back up
+          // without the user having to do anything in the app.
+          notifyUser("Reconnected", `${name} is back online after the SSO refresh.`);
         }
       }
       connectionsCache.set(connections);
@@ -479,16 +477,32 @@
       }
     });
 
+    // Backend-triggered auto-refresh for a connection whose tokens expired
+    // mid-session (see connection_service._ensure_single_connection_sso_login).
+    // Unlike handleSsoRequired's one-shot listener, this must stay subscribed
+    // for the page's whole lifetime since the backend can fire it at any time
+    // without the user having clicked anything.
+    const offConnSsoCompleted = ws.on("sso.login.completed", (msg: WsMessage) => {
+      const m = msg as { profile?: string; source?: string; success?: boolean; error?: string };
+      if (m.source !== "connection" || !m.profile) return;
+      notifiedExpiredProfiles.delete(m.profile);
+      if (!m.success) {
+        notifyUser(
+          "AWS SSO Refresh Failed",
+          m.error || `Automatic SSO refresh for '${m.profile}' failed. Reconnect manually once you've logged in.`,
+        );
+      }
+    });
+
     return () => {
       offDb();
       offConns();
       offState();
       offMetrics();
       offUrlReady();
+      offConnSsoCompleted();
     };
   });
-
-  onMount(load);
 
   // Without this, navigating away while an SSO login is in flight would
   // leave the listener registered in ws.handlers — a late sso.login.completed

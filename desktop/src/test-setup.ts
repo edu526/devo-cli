@@ -37,3 +37,9 @@ vi.mock("@tauri-apps/plugin-process", () => ({
 vi.mock("@tauri-apps/api/app", () => ({
   getVersion: vi.fn().mockResolvedValue("0.1.0-alpha.2"),
 }));
+
+vi.mock("@tauri-apps/plugin-notification", () => ({
+  isPermissionGranted: vi.fn().mockResolvedValue(true),
+  requestPermission: vi.fn().mockResolvedValue("granted"),
+  sendNotification: vi.fn(),
+}));
