@@ -554,7 +554,12 @@ export const versionApi = {
 
 export type BootStatus =
   | { status: "loading" }
-  | { status: "ready"; sidecar_info: SidecarInfo; version: string };
+  | {
+      status: "ready";
+      sidecar_info: SidecarInfo;
+      version: string;
+      launched_via_autostart: boolean;
+    };
 
 export const bootApi = {
   get: () => invoke<BootStatus>("get_boot_status"),

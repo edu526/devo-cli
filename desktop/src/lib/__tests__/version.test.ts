@@ -70,6 +70,7 @@ describe("bootApi", () => {
       status: "ready",
       sidecar_info: { port: 1234, token: "abc" },
       version: "3.10.0",
+      launched_via_autostart: false,
     };
     mockInvoke.mockResolvedValueOnce(ready);
     const result = await bootApi.get();

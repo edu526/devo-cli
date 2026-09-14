@@ -217,8 +217,12 @@
       onboardingChecked = true;
     }
 
-    // Unhide the window now that the UI is fully set up
-    setTimeout(() => getCurrentWindow().show(), 50);
+    // Unhide the window now that the UI is fully set up — unless this was a
+    // routine autostart launch of an already-onboarded user, in which case
+    // stay hidden in the tray (the tray icon lets them "Show Devo").
+    if (!(boot.launched_via_autostart && !showOnboarding)) {
+      setTimeout(() => getCurrentWindow().show(), 50);
+    }
 
     // Prefetch data in the background so tabs are instantly ready
     profilesApi

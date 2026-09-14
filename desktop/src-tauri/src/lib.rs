@@ -21,6 +21,7 @@ pub enum BootStatus {
     Ready {
         sidecar_info: SidecarInfo,
         version: String,
+        launched_via_autostart: bool,
     },
 }
 
@@ -94,7 +95,7 @@ fn run_elevated(args: Vec<String>) -> Result<u32, String> {
     }
 }
 
-async fn setup_sidecar(app: AppHandle) {
+async fn setup_sidecar(app: AppHandle, launched_via_autostart: bool) {
     // Kill any orphaned sidecars from previous crashes before spawning a new one
     #[cfg(windows)]
     let _ = std::process::Command::new("taskkill")
@@ -117,6 +118,7 @@ async fn setup_sidecar(app: AppHandle) {
                 *guard = BootStatus::Ready {
                     sidecar_info: info,
                     version: SIDECAR_VERSION.to_string(),
+                    launched_via_autostart,
                 };
             }
             app.emit("sidecar-ready", ()).ok();
@@ -136,7 +138,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
+            Some(vec!["--autostart"]),
         ))
         .manage(SidecarState(Mutex::new(None)))
         .manage(BootState(Mutex::new(BootStatus::Loading)))
@@ -147,8 +149,9 @@ pub fn run() {
             tray::install(app.handle())?;
 
             let handle = app.handle().clone();
+            let launched_via_autostart = std::env::args().any(|a| a == "--autostart");
             tauri::async_runtime::spawn(async move {
-                setup_sidecar(handle).await;
+                setup_sidecar(handle, launched_via_autostart).await;
             });
             Ok(())
         })
