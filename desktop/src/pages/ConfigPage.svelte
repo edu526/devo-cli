@@ -9,6 +9,7 @@
   import { get } from "svelte/store";
   import { configCache } from "../lib/page-stores";
   import { isAutostartEnabled, setAutostartEnabled } from "../lib/autostart";
+  import { theme, type Theme } from "../lib/theme";
 
   const initialCache = get(configCache);
   let config: Record<string, unknown> = $state(initialCache ?? {});
@@ -175,6 +176,15 @@
     {#if autostartError}
       <span class="autostart-error">{autostartError}</span>
     {/if}
+
+    <label class="theme-select">
+      Theme
+      <select value={$theme} onchange={(e) => theme.set(e.currentTarget.value as Theme)}>
+        <option value="dark">Dark</option>
+        <option value="light">Light</option>
+        <option value="system">System</option>
+      </select>
+    </label>
   </div>
 
   {#if loading}
@@ -214,6 +224,30 @@
   .autostart-error {
     color: var(--danger);
     font-size: 0.8rem;
+  }
+
+  .theme-select {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    user-select: none;
+  }
+
+  .theme-select select {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.2rem 0.4rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  .theme-select select:focus-visible {
+    outline: none;
+    border-color: var(--accent);
   }
 
   .hint {
