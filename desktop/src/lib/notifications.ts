@@ -1,4 +1,6 @@
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
+import { get } from "svelte/store";
+import { configCache } from "./page-stores";
 
 // Cached across the whole session so every notifyUser() call doesn't re-ask
 // the OS for permission — a plain repeated isPermissionGranted()/
@@ -28,6 +30,9 @@ async function ensurePermission(): Promise<boolean> {
 
 /** Show an OS-level desktop notification, if permission is (or becomes) granted. */
 export async function notifyUser(title: string, body: string): Promise<void> {
+  // Explicit opt-out only: an absent/undefined key (or no cached config yet)
+  // defaults to enabled, matching the config's own enabled-by-default treatment.
+  if (get(configCache)?.notifications_enabled === false) return;
   try {
     if (await ensurePermission()) {
       sendNotification({ title, body });

@@ -56,6 +56,25 @@
     }
   }
 
+  let notificationsEnabled = $state(true);
+  let notificationsBusy = $state(false);
+  let notificationsError: string | null = $state(null);
+
+  async function toggleNotifications() {
+    const next = !notificationsEnabled;
+    notificationsBusy = true;
+    notificationsError = null;
+    try {
+      config = await configApi.patch({ notifications_enabled: next });
+      configCache.set(config);
+      notificationsEnabled = config.notifications_enabled !== false;
+    } catch (e) {
+      notificationsError = e instanceof Error ? e.message : String(e);
+    } finally {
+      notificationsBusy = false;
+    }
+  }
+
   const configPath = navigator.userAgent.includes("Windows")
     ? "%USERPROFILE%\\.devo\\config.json"
     : "~/.devo/config.json";
@@ -103,6 +122,7 @@
     try {
       config = await configApi.get();
       configCache.set(config);
+      notificationsEnabled = config.notifications_enabled !== false;
       const text = JSON.stringify(config, null, 2);
       if (view) {
         view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
@@ -208,6 +228,19 @@
         <option value="system">System</option>
       </select>
     </label>
+
+    <label class="notifications-toggle" title="Show OS desktop notifications for background events.">
+      <input
+        type="checkbox"
+        checked={notificationsEnabled}
+        disabled={notificationsBusy}
+        onchange={toggleNotifications}
+      />
+      Desktop notifications
+    </label>
+    {#if notificationsError}
+      <span class="autostart-error">{notificationsError}</span>
+    {/if}
   </div>
 
   <div class="app-settings">
@@ -239,7 +272,8 @@
     margin-bottom: 0.75rem;
   }
 
-  .autostart-toggle {
+  .autostart-toggle,
+  .notifications-toggle {
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -249,7 +283,8 @@
     user-select: none;
   }
 
-  .autostart-toggle input {
+  .autostart-toggle input,
+  .notifications-toggle input {
     cursor: pointer;
   }
 

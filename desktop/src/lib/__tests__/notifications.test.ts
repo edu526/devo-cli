@@ -70,4 +70,20 @@ describe("notifyUser", () => {
     await expect(notifyUser("Title", "Body")).resolves.toBeUndefined();
     expect(mockSendNotification).not.toHaveBeenCalled();
   });
+
+  it("does not send (or touch permissions) when notifications are disabled in config", async () => {
+    // Reset once, then import page-stores and notifications from that same
+    // fresh registry generation so both resolve to the same configCache
+    // instance — a second resetModules() (e.g. inside freshNotifyUser())
+    // would give notifications.ts its own, disconnected copy of the store.
+    vi.resetModules();
+    const { configCache } = await import("../page-stores");
+    configCache.set({ notifications_enabled: false });
+    const { notifyUser } = await import("../notifications");
+
+    await expect(notifyUser("Title", "Body")).resolves.toBeUndefined();
+    expect(mockIsPermissionGranted).not.toHaveBeenCalled();
+    expect(mockRequestPermission).not.toHaveBeenCalled();
+    expect(mockSendNotification).not.toHaveBeenCalled();
+  });
 });
