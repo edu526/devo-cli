@@ -32,9 +32,9 @@ describe("versionApi", () => {
   });
 
   it("hits GET /version (no auth required)", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(JSON.stringify({}), { status: 200 }),
-    );
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200 }));
 
     await versionApi.get();
 
@@ -66,17 +66,14 @@ describe("bootApi", () => {
   });
 
   it("returns ready status with sidecar info and version", async () => {
-    const ready = { status: "ready", sidecar_info: { port: 1234, token: "abc" }, version: "3.10.0" };
+    const ready = {
+      status: "ready",
+      sidecar_info: { port: 1234, token: "abc" },
+      version: "3.10.0",
+    };
     mockInvoke.mockResolvedValueOnce(ready);
     const result = await bootApi.get();
     expect(result).toEqual(ready);
-  });
-
-  it("returns version_error with required and found", async () => {
-    const err = { status: "version_error", required: "3.10.0", found: "3.9.0" };
-    mockInvoke.mockResolvedValueOnce(err);
-    const result = await bootApi.get();
-    expect(result).toEqual(err);
   });
 
   it("invokes get_boot_status command", async () => {

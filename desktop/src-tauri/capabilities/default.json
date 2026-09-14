@@ -16,6 +16,7 @@
     "shell:allow-spawn",
     "shell:allow-open",
     "updater:default",
-    "notification:default"
+    "notification:default",
+    "autostart:default"
   ]
 }

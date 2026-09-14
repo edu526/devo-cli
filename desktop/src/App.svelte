@@ -10,6 +10,7 @@
     codeartifactApi,
     configApi,
   } from "./lib/api";
+  import { setAutostartEnabled } from "./lib/autostart";
   import { ws } from "./lib/ws";
   import { sidecar, appStatus, appError, currentPage, wsConnected, type Page } from "./lib/stores";
   import { profilesCache, registryCache, configCache } from "./lib/page-stores";
@@ -48,27 +49,12 @@
   let showOnboarding = $state(false);
   let onboardingChecked = $state(false);
   let sidecarInfo: VersionInfo | null = $state(null);
-  let versionCheck: { required: string; found: string } | null = $state(null);
-  let copyLabel = $state("Copy");
-
-  const UPGRADE_CMD = "devo upgrade";
-
-  async function copyUpgrade() {
-    try {
-      await navigator.clipboard.writeText(UPGRADE_CMD);
-      copyLabel = "Copied";
-      setTimeout(() => (copyLabel = "Copy"), 1500);
-    } catch {
-      copyLabel = "Press Ctrl+C";
-      setTimeout(() => (copyLabel = "Copy"), 2000);
-    }
-  }
 
   function formatSidecarVersion(v: string): string {
     const cleaned = v.split("+")[0] ?? v;
     const isDev = cleaned.includes(".dev");
     const base = cleaned.split(".dev")[0] ?? cleaned;
-    return isDev ? `CLI v${base}-dev` : `CLI v${base}`;
+    return isDev ? `Sidecar v${base}-dev` : `Sidecar v${base}`;
   }
 
   function leaveOnboarding() {
@@ -187,11 +173,7 @@
 
   function handleUnhandledRejection(e: PromiseRejectionEvent) {
     const reason = e.reason instanceof Error ? e.reason.message : String(e.reason);
-    logError(
-      "unhandledrejection",
-      reason,
-      e.reason instanceof Error ? e.reason.stack : undefined,
-    );
+    logError("unhandledrejection", reason, e.reason instanceof Error ? e.reason.stack : undefined);
   }
 
   // Captured unsubscribe handles so onDestroy can clean up after the
@@ -210,9 +192,7 @@
     window.addEventListener("onboarding-complete", leaveOnboarding);
     window.addEventListener("error", handleWindowError);
     window.addEventListener("unhandledrejection", handleUnhandledRejection);
-    // Poll the Rust boot status. The version check happens in setup()
-    // before the sidecar is spawned, so a stale bundle never produces
-    // a half-running app.
+    // Poll the Rust boot status until the sidecar is ready (or times out).
     let boot: BootStatus | null = null;
     for (let i = 0; i < 60; i++) {
       try {
@@ -231,16 +211,6 @@
       return;
     }
 
-    if (boot.status === "version_error") {
-      versionCheck = { required: boot.required, found: boot.found };
-      appStatus.set("error");
-      appError.set(
-        `Devo Desktop requires devo-cli ${boot.required} or newer (found ${boot.found}).`,
-      );
-      setTimeout(() => getCurrentWindow().show(), 50);
-      return;
-    }
-
     const info = boot.sidecar_info;
     sidecar.set(info);
     await initApi();
@@ -250,8 +220,7 @@
     appStatus.set("ready");
 
     // Initialise sidecarInfo from the boot version, then overwrite with
-    // /version once it returns so the sidebar ↑ indicator shows up when
-    // a newer devo-cli is available (was hardcoded false before — H8).
+    // /version once the sidecar has actually confirmed it.
     sidecarInfo = {
       sidecar_version: boot.version,
       server_version: boot.version,
@@ -264,8 +233,7 @@
         sidecarInfo = v;
       })
       .catch(() => {
-        // /version failing is non-fatal — the sidebar still shows the
-        // boot version. The update indicator just won't appear.
+        // /version failing is non-fatal — the sidebar still shows the boot version.
       });
 
     // Check if the user has been onboarded; if not, show the wizard.
@@ -273,6 +241,9 @@
       const cfg = await configApi.get();
       if (cfg.onboarded !== true) {
         showOnboarding = true;
+        // Default new installs to launch-at-login; the user can opt out
+        // from Settings at any point afterwards.
+        setAutostartEnabled(true).catch(() => {});
       }
       onboardingChecked = true;
     } catch {
@@ -325,28 +296,8 @@
     <div class="err-card" role="alert">
       <div class="err-icon" aria-hidden="true">!</div>
       <div class="err-text">
-        <h1 class="err-title">
-          {versionCheck ? "Devo Desktop needs an update" : "Devo Desktop couldn't start"}
-        </h1>
-        {#if versionCheck}
-          <p class="err-body">
-            You have <code class="err-ver">{versionCheck.found}</code>; the desktop requires
-            <code class="err-ver">{versionCheck.required}</code> or newer.
-          </p>
-          <p class="err-hint">Run this in your terminal, then relaunch:</p>
-          <div class="err-code-row">
-            <pre class="err-code">$ {UPGRADE_CMD}</pre>
-            <button
-              class="err-copy"
-              type="button"
-              onclick={copyUpgrade}
-              aria-label="Copy upgrade command">{copyLabel}</button
-            >
-          </div>
-          <p class="err-tray">Or quit via the system tray menu.</p>
-        {:else}
-          <p class="err-body">{$appError}</p>
-        {/if}
+        <h1 class="err-title">Devo Desktop couldn't start</h1>
+        <p class="err-body">{$appError}</p>
       </div>
     </div>
   </div>
@@ -397,15 +348,10 @@
         </ul>
       </div>
       <div class="ws-status" class:connected={$wsConnected}>
-        <span class="ws-state">{$wsConnected ? "● Live" : "○ Offline"}</span>
+        <span class="ws-state">{$wsConnected ? "● Connected" : "○ Disconnected"}</span>
         {#if sidecarInfo}
-          <span class="ws-version" title="devo CLI v{sidecarInfo.sidecar_version}">
+          <span class="ws-version" title="Sidecar v{sidecarInfo.sidecar_version}">
             {formatSidecarVersion(sidecarInfo.sidecar_version)}
-            {#if sidecarInfo.update_available}
-              <span class="ws-update" title="A newer version is available — run: devo upgrade"
-                >↑</span
-              >
-            {/if}
           </span>
         {/if}
       </div>
@@ -580,73 +526,6 @@
     margin-bottom: 0.6rem;
   }
 
-  .err-ver {
-    font-family: "JetBrains Mono", monospace;
-    font-size: 0.8rem;
-    padding: 0.05rem 0.35rem;
-    background: var(--bg-surface-2);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    color: var(--text-primary);
-  }
-
-  .err-hint {
-    color: var(--text-muted);
-    font-size: 0.8rem;
-    margin: 0.75rem 0 0.4rem;
-  }
-
-  .err-code-row {
-    display: flex;
-    align-items: stretch;
-    gap: 0.4rem;
-    margin-bottom: 0.75rem;
-  }
-
-  .err-code {
-    flex: 1;
-    min-width: 0;
-    margin: 0;
-    padding: 0.55rem 0.75rem;
-    background: var(--bg-base);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    color: var(--accent);
-    font-family: "JetBrains Mono", monospace;
-    font-size: 0.825rem;
-    overflow-x: auto;
-    white-space: nowrap;
-  }
-
-  .err-copy {
-    flex-shrink: 0;
-    padding: 0 0.85rem;
-    background: var(--bg-elevated);
-    color: var(--text-primary);
-    border: 1px solid var(--border-strong);
-    border-radius: 5px;
-    font-size: 0.8rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition:
-      background 0.12s,
-      border-color 0.12s;
-  }
-  .err-copy:hover {
-    background: var(--accent-soft);
-    border-color: var(--accent);
-  }
-  .err-copy:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-
-  .err-tray {
-    color: var(--text-faint);
-    font-size: 0.75rem;
-    margin: 0;
-  }
-
   .spinner {
     width: 36px;
     height: 36px;
@@ -753,13 +632,6 @@
     font-size: 0.7rem;
     font-weight: 500;
   }
-  .ws-update {
-    color: var(--warning);
-    margin-left: 0.15rem;
-    font-weight: 700;
-    cursor: help;
-  }
-
   .content {
     flex: 1;
     min-width: 0;

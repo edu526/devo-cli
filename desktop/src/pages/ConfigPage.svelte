@@ -8,6 +8,7 @@
   import { configApi, ApiError } from "../lib/api";
   import { get } from "svelte/store";
   import { configCache } from "../lib/page-stores";
+  import { isAutostartEnabled, setAutostartEnabled } from "../lib/autostart";
 
   const initialCache = get(configCache);
   let config: Record<string, unknown> = $state(initialCache ?? {});
@@ -15,6 +16,24 @@
   let saving = $state(false);
   let parseError: string | null = $state(null);
   let saveOk = $state(false);
+
+  let autostart = $state(false);
+  let autostartBusy = $state(false);
+  let autostartError: string | null = $state(null);
+
+  async function toggleAutostart() {
+    const next = !autostart;
+    autostartBusy = true;
+    autostartError = null;
+    try {
+      await setAutostartEnabled(next);
+      autostart = next;
+    } catch (e) {
+      autostartError = e instanceof Error ? e.message : String(e);
+    } finally {
+      autostartBusy = false;
+    }
+  }
 
   const configPath = navigator.userAgent.includes("Windows")
     ? "%USERPROFILE%\\.devo\\config.json"
@@ -114,6 +133,9 @@
   onMount(() => {
     createEditor("");
     load();
+    isAutostartEnabled().then((v) => {
+      autostart = v;
+    });
   });
 
   onDestroy(() => view?.destroy());
@@ -140,6 +162,21 @@
     <div class="alert-error">{parseError}</div>
   {/if}
 
+  <div class="app-settings">
+    <label class="autostart-toggle" title="Registers Devo to start automatically when you log in.">
+      <input
+        type="checkbox"
+        checked={autostart}
+        disabled={autostartBusy}
+        onchange={toggleAutostart}
+      />
+      Launch Devo at system startup
+    </label>
+    {#if autostartError}
+      <span class="autostart-error">{autostartError}</span>
+    {/if}
+  </div>
+
   {#if loading}
     <p class="muted">Loading…</p>
   {:else}
@@ -153,6 +190,32 @@
 </div>
 
 <style>
+  .app-settings {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .autostart-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .autostart-toggle input {
+    cursor: pointer;
+  }
+
+  .autostart-error {
+    color: var(--danger);
+    font-size: 0.8rem;
+  }
+
   .hint {
     margin-bottom: 0.5rem;
   }

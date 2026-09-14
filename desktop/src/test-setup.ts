@@ -43,3 +43,9 @@ vi.mock("@tauri-apps/plugin-notification", () => ({
   requestPermission: vi.fn().mockResolvedValue("granted"),
   sendNotification: vi.fn(),
 }));
+
+vi.mock("@tauri-apps/plugin-autostart", () => ({
+  isEnabled: vi.fn().mockResolvedValue(false),
+  enable: vi.fn().mockResolvedValue(undefined),
+  disable: vi.fn().mockResolvedValue(undefined),
+}));

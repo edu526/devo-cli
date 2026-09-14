@@ -1,16 +1,13 @@
 use std::fs;
 
-const MIN_VERSION: &str = "3.10.0";
-
 fn main() {
-    let version = read_devo_cli_version();
-    println!("cargo:rustc-env=DEVO_CLI_VERSION={version}");
-    println!("cargo:rustc-env=DEVO_CLI_MIN_VERSION={MIN_VERSION}");
+    let version = read_sidecar_version();
+    println!("cargo:rustc-env=SIDECAR_VERSION={version}");
     println!("cargo:rerun-if-changed=../../cli_tool/_version.py");
     tauri_build::build()
 }
 
-fn read_devo_cli_version() -> String {
+fn read_sidecar_version() -> String {
     let Ok(content) = fs::read_to_string("../../cli_tool/_version.py") else {
         return "0.0.0".into();
     };

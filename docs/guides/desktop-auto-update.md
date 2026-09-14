@@ -11,12 +11,13 @@ is hosted as a release asset on GitHub.
 2. The Tauri action generates a `latest.json` manifest (and per-platform
    `.sig` signature files) and attaches everything to a draft GitHub
    release.
-3. When Devo Desktop starts, `fetch_update` Tauri command polls the
-   manifest endpoint.
-4. If a newer version is available, `UpdateBanner.svelte` shows a dismissable
-   banner with a progress bar. Clicking **Download & Install** triggers
-   `install_update`, which streams chunks over a Tauri Channel, installs
-   the new bundle, and relaunches the app.
+3. When Devo Desktop starts, `TitleBar.svelte` calls `fetchUpdate()` (which
+   invokes the `fetch_update` Tauri command) once on mount and again every
+   `POLL_INTERVAL_MS` (6 hours) via `setInterval`.
+4. If a newer version is available, an **↑ update** badge appears next to
+   the app version in the title bar. Clicking it triggers `install_update`,
+   which streams chunks over a Tauri Channel, installs the new bundle, and
+   relaunches the app.
 
 ## Manifest format
 
@@ -90,15 +91,14 @@ key is passphrase-protected.
 > **Never commit the private key.** It cannot be recovered if lost — every
 > installed copy of the app would be unable to verify future updates.
 
-## Polling and dismiss behaviour
+## Polling behaviour
 
-- The frontend polls the manifest on `App.svelte` mount and every 6 hours
-  thereafter (`POLL_INTERVAL_MS` in `UpdateBanner.svelte`).
-- The banner can be dismissed for 24 hours by clicking **Later** — the
-  dismissal timestamp lives in `localStorage` under
-  `devo.update.dismissedAt`.
-- If `install_update` reports an error, the banner shows the error inline
-  and re-enables the action buttons.
+- `TitleBar.svelte` polls the manifest on mount and every 6 hours thereafter
+  (`POLL_INTERVAL_MS`).
+- There is no dismiss/snooze — the badge stays visible until the update is
+  installed.
+- If `install_update` reports an error, the button's `title` tooltip shows
+  the error and re-enables for another attempt.
 
 ## Release workflow
 

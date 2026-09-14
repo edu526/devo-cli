@@ -1,12 +1,15 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { updateAvailable, installUpdate, getAppVersion } from "./update";
+  import { updateAvailable, installUpdate, getAppVersion, fetchUpdate } from "./update";
+
+  const POLL_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
   let maximized = $state(false);
   let unlisten: (() => void) | null = null;
   let updateInstalling = $state(false);
   let updateError: string | null = $state(null);
   let appVersion: string | null = $state(null);
+  let pollInterval: ReturnType<typeof setInterval> | null = null;
 
   async function getWin() {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -61,9 +64,15 @@
       // not running inside Tauri (browser dev mode)
     }
     appVersion = await getAppVersion();
+
+    fetchUpdate();
+    pollInterval = setInterval(fetchUpdate, POLL_INTERVAL_MS);
   });
 
-  onDestroy(() => unlisten?.());
+  onDestroy(() => {
+    unlisten?.();
+    if (pollInterval) clearInterval(pollInterval);
+  });
 </script>
 
 <div class="titlebar" role="banner">
