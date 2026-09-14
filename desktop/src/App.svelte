@@ -3,16 +3,14 @@
   import {
     initApi,
     bootApi,
-    versionApi,
     type BootStatus,
-    type VersionInfo,
     profilesApi,
     codeartifactApi,
     configApi,
   } from "./lib/api";
   import { setAutostartEnabled } from "./lib/autostart";
   import { ws } from "./lib/ws";
-  import { sidecar, appStatus, appError, currentPage, wsConnected, type Page } from "./lib/stores";
+  import { sidecar, appStatus, appError, currentPage, type Page } from "./lib/stores";
   import { profilesCache, registryCache, configCache } from "./lib/page-stores";
   import { logError } from "./lib/error-log";
   import { theme, applyTheme } from "./lib/theme";
@@ -48,14 +46,6 @@
 
   let showOnboarding = $state(false);
   let onboardingChecked = $state(false);
-  let sidecarInfo: VersionInfo | null = $state(null);
-
-  function formatSidecarVersion(v: string): string {
-    const cleaned = v.split("+")[0] ?? v;
-    const isDev = cleaned.includes(".dev");
-    const base = cleaned.split(".dev")[0] ?? cleaned;
-    return isDev ? `Sidecar v${base}-dev` : `Sidecar v${base}`;
-  }
 
   function leaveOnboarding() {
     showOnboarding = false;
@@ -176,12 +166,6 @@
     logError("unhandledrejection", reason, e.reason instanceof Error ? e.reason.stack : undefined);
   }
 
-  // Captured unsubscribe handles so onDestroy can clean up after the
-  // WS connections and global error listeners — without these, HMR
-  // remounts and any future re-mount path would stack handlers.
-  let offConnected: (() => void) | null = null;
-  let offDisconnected: (() => void) | null = null;
-
   onMount(async () => {
     window.addEventListener("keydown", handleKeydown, true);
     window.addEventListener("keydown", handleGlobalShortcut, true);
@@ -214,27 +198,8 @@
     const info = boot.sidecar_info;
     sidecar.set(info);
     await initApi();
-    offConnected = ws.on("$connected", () => wsConnected.set(true));
-    offDisconnected = ws.on("$disconnected", () => wsConnected.set(false));
     ws.connect(info.port);
     appStatus.set("ready");
-
-    // Initialise sidecarInfo from the boot version, then overwrite with
-    // /version once the sidecar has actually confirmed it.
-    sidecarInfo = {
-      sidecar_version: boot.version,
-      server_version: boot.version,
-      build_date: null,
-      update_available: false,
-    };
-    versionApi
-      .get()
-      .then((v) => {
-        sidecarInfo = v;
-      })
-      .catch(() => {
-        // /version failing is non-fatal — the sidebar still shows the boot version.
-      });
 
     // Check if the user has been onboarded; if not, show the wizard.
     try {
@@ -279,8 +244,6 @@
     window.removeEventListener("onboarding-complete", leaveOnboarding);
     window.removeEventListener("error", handleWindowError);
     window.removeEventListener("unhandledrejection", handleUnhandledRejection);
-    offConnected?.();
-    offDisconnected?.();
   });
 </script>
 
@@ -346,14 +309,6 @@
             </li>
           {/each}
         </ul>
-      </div>
-      <div class="ws-status" class:connected={$wsConnected}>
-        <span class="ws-state">{$wsConnected ? "● Connected" : "○ Disconnected"}</span>
-        {#if sidecarInfo}
-          <span class="ws-version" title="Sidecar v{sidecarInfo.sidecar_version}">
-            {formatSidecarVersion(sidecarInfo.sidecar_version)}
-          </span>
-        {/if}
       </div>
     </nav>
 
@@ -601,37 +556,6 @@
     flex-shrink: 0;
   }
 
-  .ws-status {
-    margin-top: auto;
-    padding: 0.6rem 1.2rem;
-    font-size: 0.75rem;
-    color: #555;
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    min-width: 0;
-  }
-  .ws-state,
-  .ws-version {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .ws-state {
-    flex-shrink: 0;
-  }
-  .ws-status.connected {
-    color: var(--success);
-  }
-  .ws-version {
-    flex-shrink: 1;
-    min-width: 0;
-    margin-left: auto;
-    color: var(--text-faint);
-    font-family: "JetBrains Mono", monospace;
-    font-size: 0.7rem;
-    font-weight: 500;
-  }
   .content {
     flex: 1;
     min-width: 0;

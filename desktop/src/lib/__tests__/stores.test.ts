@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { get } from "svelte/store";
-import { sidecar, appStatus, appError, currentPage, wsConnected } from "../stores";
+import { sidecar, appStatus, appError, currentPage } from "../stores";
 import type { SidecarInfo } from "../api";
 
 describe("stores", () => {
@@ -18,10 +18,6 @@ describe("stores", () => {
 
   it("currentPage defaults to databases", () => {
     expect(get(currentPage)).toBe("databases");
-  });
-
-  it("wsConnected defaults to false", () => {
-    expect(get(wsConnected)).toBe(false);
   });
 
   it("sidecar updates when set", () => {

@@ -16,7 +16,6 @@ export const sidecar = writable<SidecarInfo | null>(null);
 export const appStatus = writable<AppStatus>("loading");
 export const appError = writable<string | null>(null);
 export const currentPage = writable<Page>("databases");
-export const wsConnected = writable<boolean>(false);
 function createViewModeStore(pageId: string) {
   const key = `devo_view_mode_${pageId}`;
   const store = writable<"table" | "card">(
