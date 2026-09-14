@@ -1,5 +1,7 @@
 """Unit tests for cli_tool.sidecar.services.connection_service."""
 
+import threading
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -201,6 +203,69 @@ class TestStartConnection:
         before = len(reg._observers)
         connection_service.start_connection("mydb", reg, EventHub())
         assert len(reg._observers) == before  # unchanged
+
+    def test_wires_on_tokens_expired_hook_to_sso_login(self, mocker):
+        """start_connection must pass a hook into _run_connection_loop that,
+        once a live connection's tokens expire, auto-launches the SSO
+        refresh instead of requiring the user to reconnect manually."""
+        rec = ConnectionRecord(name="mydb", local_port=15432)
+        rec.state = "stopped"
+        reg = _make_registry({"mydb": rec})
+
+        mock_cfg = MagicMock()
+        mock_cfg.get_database.return_value = _db_config("mydb", profile="dev")
+        mocker.patch.object(connection_service, "SSMConfigManager", return_value=mock_cfg)
+        mocker.patch.object(connection_service, "HostsManager")
+        mocker.patch.object(connection_service, "_find_free_port", return_value=15432)
+        mock_loop = mocker.patch.object(connection_service, "_run_connection_loop")
+        mock_ensure = mocker.patch.object(connection_service, "_ensure_single_connection_sso_login")
+
+        hub = EventHub()
+        connection_service.start_connection("mydb", reg, hub)
+
+        for _ in range(50):
+            if mock_loop.called:
+                break
+            time.sleep(0.01)
+        assert mock_loop.called
+        on_expired_cb = mock_loop.call_args.args[-1]
+        on_expired_cb("dev")
+        mock_ensure.assert_called_once_with(hub, "dev", "mydb")
+
+
+@pytest.mark.unit
+class TestEnsureSingleConnectionSsoLogin:
+    def test_noop_when_profile_is_none(self, mocker):
+        mock_thread_cls = mocker.patch.object(connection_service.threading, "Thread")
+        connection_service._ensure_single_connection_sso_login(EventHub(), None, "mydb")
+        mock_thread_cls.assert_not_called()
+
+    def test_launches_sso_login_for_profile(self, mocker):
+        launched = threading.Event()
+
+        def fake_run_sso_login_sync(hub, profile, source):
+            launched.set()
+
+        mocker.patch("cli_tool.sidecar.services.sso_service.run_sso_login_sync", side_effect=fake_run_sso_login_sync)
+        connection_service._ensure_single_connection_sso_login(EventHub(), "dev", "mydb")
+        assert launched.wait(timeout=2.0)
+
+    def test_dedupes_concurrent_calls_for_same_profile(self, mocker):
+        release = threading.Event()
+        calls = []
+
+        def fake_run_sso_login_sync(hub, profile, source):
+            calls.append(profile)
+            release.wait(timeout=2.0)
+
+        mocker.patch("cli_tool.sidecar.services.sso_service.run_sso_login_sync", side_effect=fake_run_sso_login_sync)
+        hub = EventHub()
+        connection_service._ensure_single_connection_sso_login(hub, "dev", "db-a")
+        time.sleep(0.05)  # let the first thread register itself
+        connection_service._ensure_single_connection_sso_login(hub, "dev", "db-b")  # should piggyback
+        release.set()
+        time.sleep(0.1)
+        assert calls == ["dev"]
 
 
 @pytest.mark.unit

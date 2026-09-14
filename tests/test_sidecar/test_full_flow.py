@@ -175,7 +175,7 @@ class TestConnectionLifecycleFlow:
         mocker.patch("cli_tool.sidecar.services.connection_service.HostsManager", return_value=mock_hosts)
 
         # Patch the connection loop to immediately mark "connected" and exit
-        def fake_loop(name, db_config, local_port, use_hostname_forwarding, registry, record):
+        def fake_loop(name, db_config, local_port, use_hostname_forwarding, registry, record, on_tokens_expired=None):
             record.state = "connected"
             registry.emit("connection.state_changed", {"name": name, "state": "connected", "local_port": local_port})
             return  # exits cleanly
@@ -239,7 +239,7 @@ class TestWebSocketEventsFlow:
         mocker.patch.object(cs, "HostsManager", return_value=mock_hosts)
 
         # The fake loop publishes a single event then returns
-        def fake_loop(name, db_config, local_port, use_hostname_forwarding, registry, record):
+        def fake_loop(name, db_config, local_port, use_hostname_forwarding, registry, record, on_tokens_expired=None):
             registry.emit("connection.state_changed", {"name": name, "state": "connected", "local_port": local_port})
 
         mocker.patch(

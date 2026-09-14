@@ -283,6 +283,127 @@ def _wait_before_reconnect(name: str, stop_event: Optional[threading.Event] = No
     return True
 
 
+_TOKEN_POLL_INTERVAL = 5  # seconds between token-expiry re-checks
+_TOKEN_WAIT_TIMEOUT = 1800  # seconds — safety cap so a caller that forgets to
+# wire up should_stop_fn/stop_event still can't block a thread forever on a
+# refresh that may never come.
+
+
+def _wait_for_valid_tokens(
+    name: str,
+    region: str,
+    profile: Optional[str],
+    emit_state_fn: Callable,
+    should_stop_fn: Callable[[], bool],
+    stop_event: Optional[threading.Event] = None,
+    on_expired: Optional[Callable[[], None]] = None,
+) -> bool:
+    """Block until AWS tokens are valid again, a stop is requested, or
+    _TOKEN_WAIT_TIMEOUT elapses.
+
+    Called when the loop detects expired credentials. Emits EXPIRED_CREDENTIALS
+    once, fires on_expired() once (if given — the caller's hook for launching
+    a browser SSO refresh so the user doesn't have to trigger one manually),
+    and then polls every _TOKEN_POLL_INTERVAL seconds. Returns True when
+    tokens are valid and the loop should resume. Returns False otherwise,
+    after emitting the terminal state itself (STOPPED for an explicit stop,
+    ERROR if _TOKEN_WAIT_TIMEOUT elapsed) — callers just check the return
+    value and stop looping.
+    """
+    emit_state_fn(EXPIRED_CREDENTIALS)
+    console.print(_TOKENS_EXPIRED_MSG)
+    console.print(_TOKENS_REFRESH_MSG)
+    if on_expired is not None:
+        try:
+            on_expired()
+        except Exception:
+            logger.exception("[%s] on_expired callback failed", name)
+    logger.info(
+        "[%s] Tokens expired — waiting for refresh (polling every %ds, giving up after %ds)",
+        name,
+        _TOKEN_POLL_INTERVAL,
+        _TOKEN_WAIT_TIMEOUT,
+    )
+    deadline = time.monotonic() + _TOKEN_WAIT_TIMEOUT
+
+    def _stopped() -> bool:
+        logger.info("[%s] Stop requested while waiting for token refresh", name)
+        emit_state_fn(STOPPED)
+        return False
+
+    def _gave_up() -> bool:
+        msg = f"Gave up waiting for AWS token refresh for '{name}' after {_TOKEN_WAIT_TIMEOUT}s"
+        logger.error("[%s] %s", name, msg)
+        console.print(f"[red]✗ {name}: {msg}[/red]")
+        emit_state_fn(ERROR, error=msg)
+        return False
+
+    while True:
+        if should_stop_fn():
+            return _stopped()
+        if time.monotonic() >= deadline:
+            return _gave_up()
+        if stop_event is not None:
+            if stop_event.wait(_TOKEN_POLL_INTERVAL):
+                return _stopped()
+        else:
+            time.sleep(_TOKEN_POLL_INTERVAL)
+        if should_stop_fn():
+            return _stopped()
+        if not SSMSession._is_token_expired(region=region, profile=profile):
+            logger.info("[%s] Tokens refreshed — resuming reconnect", name)
+            console.print(f"[green]✓ Tokens refreshed — reconnecting {name}...[/green]")
+            return True
+
+
+# Module-level state for in-flight `aws sso login` subprocesses spawned by the
+# CLI path, keyed by profile. Several DB connections commonly share one SSO
+# profile; without this, each of their loops would launch its own `aws sso
+# login --profile X` the moment tokens expire, opening N duplicate browser
+# tabs for the same SSO session instead of one. Mirrors the sidecar's
+# per-profile dedupe in sidecar/routers/codeartifact.py.
+_cli_sso_login_threads: dict[str, threading.Thread] = {}
+_cli_sso_login_lock = threading.Lock()
+_CLI_SSO_LOGIN_TIMEOUT = 120  # seconds — matches sidecar/services/sso_service.py's
+# run_sso_login_sync. Without a bound, an abandoned browser tab (or any hang
+# in the AWS CLI itself) would leave this dedupe slot occupied forever, since
+# it's only cleared in _run()'s finally once the subprocess returns — silently
+# blocking every future auto-refresh attempt for that profile until the CLI
+# process is restarted.
+
+
+def _launch_cli_sso_login(profile: Optional[str]) -> None:
+    """CLI on_expired hook: launch `aws sso login --profile <profile>` in the
+    background so the user doesn't have to remember to run it themselves.
+
+    Fire-and-forget and deduped per profile — see _cli_sso_login_threads.
+    Inherits the CLI's own stdout/stderr so the user sees the AWS CLI's own
+    prompt/URL (and its default browser auto-open) directly in the terminal.
+    """
+    if not profile:
+        return
+    with _cli_sso_login_lock:
+        existing = _cli_sso_login_threads.get(profile)
+        if existing is not None and existing.is_alive():
+            return
+
+        def _run() -> None:
+            try:
+                logger.info("Launching 'aws sso login --profile %s'", profile)
+                subprocess.run(["aws", "sso", "login", "--profile", profile], check=False, timeout=_CLI_SSO_LOGIN_TIMEOUT)
+            except subprocess.TimeoutExpired:
+                logger.error("'aws sso login --profile %s' timed out after %ds", profile, _CLI_SSO_LOGIN_TIMEOUT)
+            except Exception:
+                logger.exception("Failed to launch 'aws sso login --profile %s'", profile)
+            finally:
+                with _cli_sso_login_lock:
+                    _cli_sso_login_threads.pop(profile, None)
+
+        thread = threading.Thread(target=_run, daemon=True, name=f"sso-login-{profile}")
+        _cli_sso_login_threads[profile] = thread
+        thread.start()
+
+
 # ---------------------------------------------------------------------------
 # Core connection loop
 # ---------------------------------------------------------------------------
@@ -312,6 +433,34 @@ def _communicate_interruptible(
     return proc.communicate()
 
 
+_KEEPALIVE_INTERVAL = 240  # seconds — comfortably under AWS Session Manager's
+# default 20-minute idle timeout (with margin even if it's been raised, but
+# still lower than a shortened one). An SSM port-forwarding session is closed
+# server-side by AWS if no bytes cross its data channel for that long, which
+# is what causes an idle DB tunnel to drop with a clean "Session ended" exit.
+# Best-effort: a bare connect+close is enough to count as channel activity in
+# practice, but this isn't a documented AWS guarantee.
+
+
+def _start_keepalive_prober(name: str, port: int, stop_event: threading.Event) -> threading.Thread:
+    """Periodically open-and-close a connection to the forwarded local port
+    so the SSM session behind it never looks idle to AWS, even if nothing is
+    actually querying the database. Stops as soon as stop_event is set."""
+
+    def _loop() -> None:
+        while not stop_event.wait(_KEEPALIVE_INTERVAL):
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=3):
+                    pass
+                logger.debug("[KEEPALIVE][%s] Probed port %s to keep the SSM session active", name, port)
+            except OSError as exc:
+                logger.debug("[KEEPALIVE][%s] Probe failed (session may already be down): %s", name, exc)
+
+    thread = threading.Thread(target=_loop, daemon=True, name=f"keepalive-{name}")
+    thread.start()
+    return thread
+
+
 def _run_attempt(
     db_config: dict,
     actual_local_port: int,
@@ -337,6 +486,9 @@ def _run_attempt(
         logger.info("[TIMING][%s] portproxy done in %.1fs", db_config.get("host", "?"), time.monotonic() - _t0)
     if record is not None:
         record.pf = pf
+
+    keepalive_stop = threading.Event()
+    keepalive_thread = _start_keepalive_prober(db_config.get("host", "?"), actual_local_port, keepalive_stop)
 
     try:
         if record is not None:
@@ -441,6 +593,8 @@ def _run_attempt(
             rc = proc.returncode or 0
             return rc
     finally:
+        keepalive_stop.set()
+        keepalive_thread.join(timeout=1.0)
         if record is not None:
             record.pf = None
         if pf is not None:
@@ -456,17 +610,28 @@ def _run_connection_loop(
     use_hostname_forwarding: bool,
     registry: Optional[ForwarderRegistry] = None,
     record: Optional[ConnectionRecord] = None,
+    on_tokens_expired: Optional[Callable[[Optional[str]], None]] = None,
 ) -> None:
     """Core connection loop: optional socat + SSM + auto-reconnect.
 
     CLI path: record=None, uses global registry.stop_event for Ctrl+C shutdown.
     Sidecar path: record provided, also checks record.stop_event for per-connection stop.
+    on_tokens_expired: optional hook called once (with db_config's profile)
+    the moment expired tokens are detected, so a caller can auto-launch a
+    browser SSO refresh instead of making the user trigger one manually.
+    CLI and sidecar each wire in a different strategy (see _build_threads
+    and connection_service.start_connection) since the CLI can just shell
+    out directly while the sidecar needs to go through its WS-based flow.
     """
     global_stop = registry.stop_event if registry is not None else None
     per_stop = record.stop_event if record is not None else None
 
     def _should_stop() -> bool:
         return (global_stop is not None and global_stop.is_set()) or (per_stop is not None and per_stop.is_set())
+
+    def _on_expired() -> None:
+        if on_tokens_expired is not None:
+            on_tokens_expired(db_config.get("profile"))
 
     def _emit_state(state: str, **kwargs) -> None:
         if record is not None:
@@ -560,8 +725,10 @@ def _run_connection_loop(
     is_reconnect = False
     reconnect_attempts = 0
     MAX_RECONNECT_ATTEMPTS = 5
+    logger.info("[LOOP][%s] Connection loop started (port=%s)", name, actual_local_port)
     while True:
         if _should_stop():
+            logger.info("[LOOP][%s] Stop requested at top of loop — exiting", name)
             _emit_state(STOPPED)
             _join_probe()
             return
@@ -574,12 +741,31 @@ def _run_connection_loop(
             threading.Thread(target=_probe_then_emit_connected, args=(actual_local_port,), daemon=True).start()
         if record is not None:
             record.attempts += 1
+        logger.debug(
+            "[LOOP][%s] Attempt #%d starting (reconnect_attempts=%d, state=%s)",
+            name,
+            record.attempts if record is not None else -1,
+            reconnect_attempts,
+            record.state if record is not None else "n/a",
+        )
         if SSMSession._is_token_expired(region=db_config["region"], profile=db_config.get("profile")):
-            console.print(_TOKENS_EXPIRED_MSG)
-            console.print(_TOKENS_REFRESH_MSG)
-            _emit_state(EXPIRED_CREDENTIALS)
+            logger.warning("[TOKEN][%s] Tokens expired before attempt — entering wait loop", name)
             _join_probe()
-            return
+            if not _wait_for_valid_tokens(
+                name,
+                db_config["region"],
+                db_config.get("profile"),
+                _emit_state,
+                _should_stop,
+                per_stop or global_stop,
+                _on_expired,
+            ):
+                # _wait_for_valid_tokens already emitted its own terminal
+                # state (STOPPED or ERROR on timeout).
+                return
+            # Tokens refreshed — loop continues to next attempt
+            logger.info("[TOKEN][%s] Tokens valid again — continuing loop", name)
+            continue
 
         try:
             import time as _t
@@ -588,6 +774,7 @@ def _run_connection_loop(
             _run_attempt(db_config, actual_local_port, use_hostname_forwarding, registry, record)
 
             if record is not None and getattr(record, "error_message", None):
+                logger.error("[LOOP][%s] Permanent error from attempt: %s", name, record.error_message)
                 console.print(f"[red]✗ {name}: {record.error_message}[/red]")
                 _emit_state(ERROR, error=record.error_message)
                 _join_probe()
@@ -599,47 +786,96 @@ def _run_connection_loop(
                 # communicate(), so the old duration-based reset never let
                 # MAX_RECONNECT_ATTEMPTS fire and the UI stayed in
                 # "reconnecting" forever.
-                if record.state == CONNECTED:
+                #
+                # Also reset when exit code 0 ("Session ended"): the SSM session
+                # was established successfully but the server closed it cleanly.
+                # The probe thread runs concurrently and may not have emitted
+                # CONNECTED yet if the session was very short-lived, so we must
+                # not count this as a failed attempt — it was a valid session.
+                session_ended_cleanly = record.last_attempt_reason == "Session ended"
+                if record.state == CONNECTED or session_ended_cleanly:
+                    logger.debug(
+                        "[COUNTER][%s] Attempt counted as success (state=%s, reason=%r) — resetting reconnect_attempts %d→0",
+                        name,
+                        record.state,
+                        record.last_attempt_reason,
+                        reconnect_attempts,
+                    )
                     reconnect_attempts = 0
                 else:
                     reconnect_attempts += 1
+                    logger.warning(
+                        "[COUNTER][%s] Attempt failed (state=%s, reason=%r) — reconnect_attempts=%d/%d",
+                        name,
+                        record.state,
+                        record.last_attempt_reason,
+                        reconnect_attempts,
+                        MAX_RECONNECT_ATTEMPTS,
+                    )
             elif _t.monotonic() - _attempt_start > 10:
+                # CLI path has no record to read a "Session ended" reason
+                # from, so a session that ran a while before ending is the
+                # closest available signal that it was a clean idle-timeout
+                # close rather than an immediate connection failure.
+                session_ended_cleanly = True
                 reconnect_attempts = 0
             else:
+                session_ended_cleanly = False
                 reconnect_attempts += 1
 
             if reconnect_attempts >= MAX_RECONNECT_ATTEMPTS:
                 msg = f"Failed to connect after {MAX_RECONNECT_ATTEMPTS} attempts. Aborting."
+                logger.error("[LOOP][%s] MAX_RECONNECT_ATTEMPTS=%d reached — giving up", name, MAX_RECONNECT_ATTEMPTS)
                 console.print(f"[red]✗ {name}: {msg}[/red]")
                 _emit_state(ERROR, error=msg)
                 _join_probe()
                 return
 
         except KeyboardInterrupt:
+            logger.info("[LOOP][%s] KeyboardInterrupt — stopping", name)
             console.print("\n[green]Connection closed[/green]")
             _emit_state(STOPPED)
             _join_probe()
             return
         except Exception as e:
+            logger.exception("[LOOP][%s] Unhandled exception in attempt: %s", name, e)
             console.print(f"\n[red]Error: {e}[/red]")
             _emit_state(ERROR, error=str(e))
             _join_probe()
             return
 
         if _should_stop():
+            logger.info("[LOOP][%s] Stop requested after attempt — exiting", name)
             _emit_state(STOPPED)
             _join_probe()
             return
 
         if SSMSession._is_token_expired(region=db_config["region"], profile=db_config.get("profile")):
-            console.print(_TOKENS_EXPIRED_MSG)
-            console.print(_TOKENS_REFRESH_MSG)
-            _emit_state(EXPIRED_CREDENTIALS)
+            logger.warning("[TOKEN][%s] Tokens expired after attempt — entering wait loop", name)
             _join_probe()
-            return
+            if not _wait_for_valid_tokens(
+                name,
+                db_config["region"],
+                db_config.get("profile"),
+                _emit_state,
+                _should_stop,
+                per_stop or global_stop,
+                _on_expired,
+            ):
+                # _wait_for_valid_tokens already emitted its own terminal
+                # state (STOPPED or ERROR on timeout).
+                return
+            # Tokens refreshed — skip the reconnect delay and try immediately
+            is_reconnect = True
+            continue
 
         _emit_state(RECONNECTING, error=(record.last_attempt_reason if record is not None else None))
-        if not _wait_before_reconnect(name, per_stop or global_stop):
+        if session_ended_cleanly:
+            # A clean end (idle timeout closing the SSM session server-side,
+            # not a real failure) doesn't need the "connection lost, retrying
+            # in Ns" delay/message — reconnect immediately.
+            logger.info("[LOOP][%s] Session ended cleanly — reconnecting immediately, no delay", name)
+        elif not _wait_before_reconnect(name, per_stop or global_stop):
             _emit_state(STOPPED)
             _join_probe()
             return
@@ -793,7 +1029,7 @@ def _build_threads(
 
         thread = threading.Thread(
             target=_run_connection_loop,
-            args=(name, db_config, actual_local_port, use_hostname_forwarding, registry),
+            args=(name, db_config, actual_local_port, use_hostname_forwarding, registry, None, _launch_cli_sso_login),
             daemon=True,
         )
         thread.start()

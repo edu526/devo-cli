@@ -2,7 +2,7 @@
 
 import logging
 import threading
-from typing import Any
+from typing import Any, Optional
 
 from cli_tool.commands.ssm.core.config import SSMConfigManager
 from cli_tool.commands.ssm.core.connection_runner import (
@@ -30,6 +30,50 @@ def _hub_observer(hub: EventHub):
     return _emit
 
 
+# Module-level state for in-flight SSO logins triggered by a *live* connection
+# whose tokens expired mid-session, keyed by profile. Mirrors
+# sidecar/routers/codeartifact.py's _ensure_single_sso_login: several DB
+# connections commonly share one SSO profile, so if they all notice expired
+# tokens around the same time we want one browser tab, not one per
+# connection.
+_sso_login_threads: dict[str, threading.Thread] = {}
+_sso_login_lock = threading.Lock()
+
+
+def _do_connection_sso_login(hub: EventHub, profile: str) -> None:
+    from cli_tool.sidecar.services.sso_service import run_sso_login_sync
+
+    try:
+        run_sso_login_sync(hub, profile, source="connection")
+    finally:
+        with _sso_login_lock:
+            _sso_login_threads.pop(profile, None)
+
+
+def _ensure_single_connection_sso_login(hub: EventHub, profile: Optional[str], name: str) -> None:
+    """Auto-launch `aws sso login` when a live connection's tokens expire,
+    deduped per profile, so the user doesn't have to reconnect manually just
+    to trigger the browser flow. The connection loop itself keeps polling
+    and resumes on its own once _wait_for_valid_tokens sees valid tokens —
+    this only saves the user the step of starting the refresh.
+    """
+    if not profile:
+        return
+    with _sso_login_lock:
+        existing = _sso_login_threads.get(profile)
+        if existing is not None and existing.is_alive():
+            logger.info("SSO login for profile '%s' already in flight; connection '%s' will pick it up", profile, name)
+            return
+        thread = threading.Thread(
+            target=_do_connection_sso_login,
+            args=(hub, profile),
+            daemon=True,
+            name=f"sso-login-conn-{profile}",
+        )
+        _sso_login_threads[profile] = thread
+        thread.start()
+
+
 def start_connection(
     name: str,
     registry: ForwarderRegistry,
@@ -41,10 +85,18 @@ def start_connection(
     Returns a status dict with the local_port resolved.
     Raises ValueError if name is not in config or already connected.
     """
-    if registry.get(name) is not None:
-        existing = registry.get(name)
+    existing = registry.get(name)
+    if existing is not None:
         if existing.state not in ("stopped", "error", "expired_credentials"):
             raise ValueError(f"Connection '{name}' is already active (state: {existing.state})")
+        # A record in "expired_credentials" may still have a live loop thread
+        # blocked inside _wait_for_valid_tokens(), polling for token refresh.
+        # registry.register() below would overwrite this dict entry with a
+        # new record, making that thread's stop_event unreachable through
+        # the registry — an orphaned thread that keeps its own tunnel alive
+        # and can no longer be stopped from the API. Stop it explicitly
+        # first so it unblocks and exits before we replace it.
+        registry.stop_one(name)
 
     db_config = SSMConfigManager().get_database(name)
     if db_config is None:
@@ -85,7 +137,15 @@ def start_connection(
 
     thread = threading.Thread(
         target=_run_connection_loop,
-        args=(name, db_config, local_port, use_hostname_forwarding, registry, record),
+        args=(
+            name,
+            db_config,
+            local_port,
+            use_hostname_forwarding,
+            registry,
+            record,
+            lambda profile: _ensure_single_connection_sso_login(hub, profile, name),
+        ),
         daemon=True,
         name=f"conn-{name}",
     )

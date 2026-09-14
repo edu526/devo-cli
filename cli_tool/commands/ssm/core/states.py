@@ -14,8 +14,19 @@ Lifecycle:
                           CONNECTED (next attempt) or one of the terminal
                           states below.
 
-Terminal states (no further transitions out):
-    STOPPED, ERROR, EXPIRED_CREDENTIALS.
+    EXPIRED_CREDENTIALS is special: the connection loop's own thread keeps
+    running and polling in this state (_wait_for_valid_tokens() in
+    connection_runner.py) and transitions itself back into the loop once
+    tokens are valid again, with no external call needed. Anything that
+    wants to *replace* a record sitting in EXPIRED_CREDENTIALS (e.g. a
+    manual reconnect from the UI) must call ForwarderRegistry.stop_one()
+    on it first — its background thread may still be alive and holding
+    resources (ssm_proc, pf) that a fresh record won't know about.
+
+Terminal states (no further transitions out on their own):
+    STOPPED, ERROR, EXPIRED_CREDENTIALS. Note EXPIRED_CREDENTIALS can still
+    self-resume from inside its own thread; it is "terminal" only in that
+    nothing outside that thread can move it forward.
 
 Transient states (not yet considered stable by the probe-guard):
     STARTING, CONNECTING.

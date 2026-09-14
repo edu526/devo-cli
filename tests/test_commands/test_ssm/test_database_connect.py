@@ -1,5 +1,7 @@
 """Unit tests for SSM database connect command module."""
 
+import socket
+import subprocess
 import threading
 import time
 from unittest.mock import MagicMock, patch
@@ -17,17 +19,22 @@ from cli_tool.commands.ssm.commands.database.connect import (
 from cli_tool.commands.ssm.core.connection_runner import (
     ConnectionRecord,
     ForwarderRegistry,
+    _cli_sso_login_threads,
     _communicate_interruptible,
     _databases_needing_setup,
     _find_free_port,
     _is_port_bindable,
     _is_wildcard_bind_blocking,
+    _launch_cli_sso_login,
     _process_db_for_table,
     _run_attempt,
     _run_connection_loop,
+    _start_keepalive_prober,
     _validate_tokens,
     _wait_before_reconnect,
+    _wait_for_valid_tokens,
 )
+from cli_tool.commands.ssm.core.states import ERROR, STOPPED
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -616,15 +623,96 @@ class TestRunConnectionLoop:
         output = " ".join(str(c) for c in mock_console.print.call_args_list)
         assert "refused" in output
 
-    def test_expired_tokens_after_disconnect_stops_reconnect(self):
+    def test_expired_tokens_before_attempt_waits_and_stops(self):
+        """Expired tokens before an attempt defer to _wait_for_valid_tokens
+        instead of aborting outright. If that wait reports a stop request
+        (tokens never refreshed, user cancelled), the loop exits without
+        ever calling _run_attempt.
+
+        _wait_for_valid_tokens itself is mocked here: it polls in a real
+        while-True loop with no bound other than should_stop_fn/stop_event,
+        so exercising its actual polling would either need a real sleep per
+        iteration or a fake clock — out of scope for this test, which only
+        checks that _run_connection_loop honors its return value.
+        """
         db_config = _make_db_config()
-        with patch(f"{_RUNNER}._run_attempt", return_value=1):
+        with patch(f"{_RUNNER}._run_attempt") as mock_attempt:
             with patch(f"{_RUNNER}.SSMSession") as mock_session:
                 mock_session._is_token_expired.return_value = True
-                with patch(f"{_RUNNER}.console") as mock_console:
-                    _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False)
-        output = " ".join(str(c) for c in mock_console.print.call_args_list)
-        assert "expired" in output.lower()
+                with patch(f"{_RUNNER}._wait_for_valid_tokens", return_value=False) as mock_wait:
+                    with patch(f"{_RUNNER}.console"):
+                        _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False)
+        mock_wait.assert_called_once()
+        mock_attempt.assert_not_called()
+
+    def test_expired_tokens_before_attempt_resumes_after_refresh(self):
+        """Once _wait_for_valid_tokens reports tokens are valid again, the
+        loop continues to the next attempt instead of returning."""
+        db_config = _make_db_config()
+        with patch(f"{_RUNNER}._run_attempt", side_effect=KeyboardInterrupt) as mock_attempt:
+            with patch(f"{_RUNNER}.SSMSession") as mock_session:
+                mock_session._is_token_expired.side_effect = [True, False]
+                with patch(f"{_RUNNER}._wait_for_valid_tokens", return_value=True) as mock_wait:
+                    with patch(f"{_RUNNER}.console"):
+                        _run_connection_loop("mydb", db_config, 15432, use_hostname_forwarding=False)
+        mock_wait.assert_called_once()
+        mock_attempt.assert_called_once()
+
+    def test_on_tokens_expired_hook_receives_profile(self):
+        """The on_tokens_expired hook passed into _run_connection_loop is
+        wired into _wait_for_valid_tokens's on_expired callback, bound to
+        this connection's profile — this is what lets the CLI/sidecar
+        auto-launch a browser SSO refresh instead of the user having to
+        trigger one manually."""
+        db_config = _make_db_config(profile="myprofile")
+        hook = MagicMock()
+        with patch(f"{_RUNNER}._run_attempt"):
+            with patch(f"{_RUNNER}.SSMSession") as mock_session:
+                mock_session._is_token_expired.return_value = True
+                with patch(f"{_RUNNER}._wait_for_valid_tokens", return_value=False) as mock_wait:
+                    with patch(f"{_RUNNER}.console"):
+                        _run_connection_loop(
+                            "mydb",
+                            db_config,
+                            15432,
+                            use_hostname_forwarding=False,
+                            on_tokens_expired=hook,
+                        )
+        on_expired_cb = mock_wait.call_args.args[-1]
+        on_expired_cb()
+        hook.assert_called_once_with("myprofile")
+
+    def test_clean_session_end_skips_reconnect_delay(self):
+        """A clean 'Session ended' (rc=0 — AWS's idle timeout closing the SSM
+        session server-side, not a real failure) should reconnect
+        immediately instead of going through _wait_before_reconnect's delay
+        and 'Connection lost' message."""
+        db_config = _make_db_config()
+        registry = ForwarderRegistry()
+        record = ConnectionRecord(name="mydb", local_port=15432)
+        calls = {"n": 0}
+
+        def attempt_side_effect(*_a, **_kw):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                record.last_attempt_reason = "Session ended"
+                return 0
+            raise KeyboardInterrupt
+
+        with patch(f"{_RUNNER}._run_attempt", side_effect=attempt_side_effect):
+            with patch(f"{_RUNNER}.SSMSession") as mock_session:
+                mock_session._is_token_expired.return_value = False
+                with patch(f"{_RUNNER}._wait_before_reconnect") as mock_wait_reconnect:
+                    with patch(f"{_RUNNER}.console"):
+                        _run_connection_loop(
+                            "mydb",
+                            db_config,
+                            15432,
+                            use_hostname_forwarding=False,
+                            registry=registry,
+                            record=record,
+                        )
+        mock_wait_reconnect.assert_not_called()
 
     def test_reconnects_when_tokens_valid(self):
         db_config = _make_db_config()
@@ -703,6 +791,171 @@ class TestWaitBeforeReconnectStopEvent:
                 elapsed = time.time() - start
         assert result is False
         assert elapsed < 1.0  # woke up quickly, did not wait the full delay
+
+
+# ---------------------------------------------------------------------------
+# _wait_for_valid_tokens
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestWaitForValidTokens:
+    def test_returns_false_immediately_when_should_stop_already_true(self):
+        emit_state = MagicMock()
+        with patch(f"{_RUNNER}.console"):
+            result = _wait_for_valid_tokens(
+                "mydb",
+                "us-east-1",
+                "dev",
+                emit_state_fn=emit_state,
+                should_stop_fn=lambda: True,
+                stop_event=None,
+            )
+        assert result is False
+        emit_state.assert_called_with(STOPPED)
+
+    def test_returns_false_when_stop_event_set_during_poll(self):
+        stop_event = threading.Event()
+        threading.Thread(target=lambda: (time.sleep(0.03), stop_event.set()), daemon=True).start()
+        emit_state = MagicMock()
+        with patch(f"{_RUNNER}.console"):
+            with patch(f"{_RUNNER}._TOKEN_POLL_INTERVAL", 0.01):
+                with patch(f"{_RUNNER}.SSMSession") as mock_session:
+                    mock_session._is_token_expired.return_value = True
+                    result = _wait_for_valid_tokens(
+                        "mydb",
+                        "us-east-1",
+                        "dev",
+                        emit_state_fn=emit_state,
+                        should_stop_fn=lambda: False,
+                        stop_event=stop_event,
+                    )
+        assert result is False
+        emit_state.assert_called_with(STOPPED)
+
+    def test_returns_true_once_tokens_are_valid_again(self):
+        with patch(f"{_RUNNER}.console"):
+            with patch(f"{_RUNNER}._TOKEN_POLL_INTERVAL", 0.01):
+                with patch(f"{_RUNNER}.SSMSession") as mock_session:
+                    mock_session._is_token_expired.side_effect = [True, False]
+                    result = _wait_for_valid_tokens(
+                        "mydb",
+                        "us-east-1",
+                        "dev",
+                        emit_state_fn=MagicMock(),
+                        should_stop_fn=lambda: False,
+                        stop_event=None,
+                    )
+        assert result is True
+
+    def test_gives_up_and_emits_error_after_timeout(self):
+        """Safety net: with no stop mechanism and tokens that never refresh,
+        the wait must still end on its own once _TOKEN_WAIT_TIMEOUT elapses,
+        rather than polling forever."""
+        emit_state = MagicMock()
+        with patch(f"{_RUNNER}.console"):
+            with patch(f"{_RUNNER}._TOKEN_POLL_INTERVAL", 0.01):
+                with patch(f"{_RUNNER}._TOKEN_WAIT_TIMEOUT", 0.02):
+                    with patch(f"{_RUNNER}.SSMSession") as mock_session:
+                        mock_session._is_token_expired.return_value = True
+                        result = _wait_for_valid_tokens(
+                            "mydb",
+                            "us-east-1",
+                            "dev",
+                            emit_state_fn=emit_state,
+                            should_stop_fn=lambda: False,
+                            stop_event=None,
+                        )
+        assert result is False
+        assert emit_state.call_args.args[0] == ERROR
+        assert emit_state.call_args.kwargs.get("error")
+
+
+# ---------------------------------------------------------------------------
+# _launch_cli_sso_login
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestLaunchCliSsoLogin:
+    def test_noop_when_profile_is_none(self):
+        with patch(f"{_RUNNER}.subprocess.run") as mock_run:
+            _launch_cli_sso_login(None)
+        mock_run.assert_not_called()
+
+    def test_launches_aws_sso_login_with_profile(self):
+        with patch(f"{_RUNNER}.subprocess.run") as mock_run:
+            _launch_cli_sso_login("qa-profile")
+            for _ in range(50):
+                if mock_run.called:
+                    break
+                time.sleep(0.01)
+        mock_run.assert_called_once_with(["aws", "sso", "login", "--profile", "qa-profile"], check=False, timeout=120)
+
+    def test_timeout_clears_dedupe_slot_for_retry(self):
+        """If 'aws sso login' hangs (abandoned browser tab, AWS CLI stuck),
+        subprocess.run's timeout must fire so the dedupe slot is freed —
+        otherwise every future auto-refresh attempt for this profile would
+        silently no-op forever, since the slot is only cleared once the
+        subprocess call returns."""
+        with patch(f"{_RUNNER}.subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="aws", timeout=120)):
+            _launch_cli_sso_login("stuck-profile")
+            for _ in range(50):
+                if "stuck-profile" not in _cli_sso_login_threads:
+                    break
+                time.sleep(0.01)
+        assert "stuck-profile" not in _cli_sso_login_threads
+
+    def test_dedupes_concurrent_calls_for_same_profile(self):
+        release = threading.Event()
+
+        def fake_run(*_a, **_kw):
+            release.wait(timeout=2.0)
+
+        with patch(f"{_RUNNER}.subprocess.run", side_effect=fake_run) as mock_run:
+            _launch_cli_sso_login("shared-profile")
+            time.sleep(0.05)  # let the first thread register itself
+            _launch_cli_sso_login("shared-profile")  # should piggyback, not launch a second
+            release.set()
+            time.sleep(0.1)
+        assert mock_run.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# _start_keepalive_prober
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestKeepaliveProber:
+    def test_probes_port_periodically_and_stops_on_event(self):
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        port = server.getsockname()[1]
+        stop = threading.Event()
+        try:
+            with patch(f"{_RUNNER}._KEEPALIVE_INTERVAL", 0.01):
+                thread = _start_keepalive_prober("mydb", port, stop)
+                conn, _addr = server.accept()  # blocks until the prober connects
+                conn.close()
+        finally:
+            stop.set()
+            thread.join(timeout=1.0)
+            server.close()
+        assert not thread.is_alive()
+
+    def test_swallows_connection_errors_when_nothing_is_listening(self):
+        stop = threading.Event()
+        with patch(f"{_RUNNER}._KEEPALIVE_INTERVAL", 0.01):
+            thread = _start_keepalive_prober("mydb", _find_free_port(59123), stop)
+            time.sleep(0.05)  # a couple of failed probe cycles
+        stop.set()
+        # A failed probe may be mid-connect (bounded by the prober's own 3s
+        # connect timeout) when stop is requested, so allow more than that
+        # before concluding the thread is stuck.
+        thread.join(timeout=4.0)
+        assert not thread.is_alive()
 
 
 # ---------------------------------------------------------------------------
