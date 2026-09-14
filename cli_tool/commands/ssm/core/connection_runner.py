@@ -186,7 +186,7 @@ def _terminate_proc(proc: subprocess.Popen) -> None:
 
             try:
                 if proc.pid > 1:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    os.killpg(os.getpgid(proc.pid), getattr(signal, "SIGKILL", 9))
             except ProcessLookupError:
                 pass
     except Exception:
@@ -570,7 +570,7 @@ def _run_attempt(
                     try:
                         if sys.platform != "win32":
                             if proc.pid > 1:
-                                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                                os.killpg(os.getpgid(proc.pid), getattr(signal, "SIGKILL", 9))
                         else:
                             import psutil
 
