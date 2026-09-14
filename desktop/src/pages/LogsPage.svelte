@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { logsApi, configApi, ApiError } from "../lib/api";
+  import { logsApi, ApiError } from "../lib/api";
   import { ws, type WsMessage } from "../lib/ws";
   import { errorLog, clearErrorLog } from "../lib/error-log";
   import SearchInput from "../lib/SearchInput.svelte";
@@ -32,7 +32,6 @@
   let showConfirmClear = $state(false);
   let error: string | null = $state(null);
   let paused = $state(false);
-  let debugMode = $state(false);
   let lineCount = $state(300);
   let clientErrorsExpanded = $state(true);
   let expandedErrorIds = $state<Set<number>>(new Set());
@@ -212,23 +211,7 @@
     paused = !paused;
   }
 
-  async function toggleDebugMode() {
-    const nextVal = !debugMode;
-    try {
-      await configApi.patch({ debug_mode: nextVal });
-      debugMode = nextVal;
-    } catch {
-      error = "Failed to update debug mode";
-    }
-  }
-
   onMount(async () => {
-    try {
-      const cfg = await configApi.get();
-      debugMode = !!cfg.debug_mode;
-    } catch {
-      // ignore
-    }
     load();
     offLogLine = ws.on("log.line", (msg: WsMessage) => {
       if (paused) return;
@@ -378,11 +361,6 @@
           {level}
         </label>
       {/each}
-      <span style="border-left: 1px solid #333; height: 16px; margin: 0 0.5rem;"></span>
-      <label class="level-toggle" title="Enable Uvicorn debug logs. Requires app restart to take effect.">
-        <input type="checkbox" checked={debugMode} onchange={toggleDebugMode} />
-        <span class="filter-label" style="text-transform:none; margin:0;">Backend Debug Mode</span>
-      </label>
     </div>
   </div>
 

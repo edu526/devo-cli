@@ -75,6 +75,18 @@
     }
   }
 
+  let debugMode = $state(false);
+
+  async function toggleDebugMode() {
+    const nextVal = !debugMode;
+    try {
+      await configApi.patch({ debug_mode: nextVal });
+      debugMode = nextVal;
+    } catch {
+      parseError = "Failed to update debug mode";
+    }
+  }
+
   const configPath = navigator.userAgent.includes("Windows")
     ? "%USERPROFILE%\\.devo\\config.json"
     : "~/.devo/config.json";
@@ -123,6 +135,7 @@
       config = await configApi.get();
       configCache.set(config);
       notificationsEnabled = config.notifications_enabled !== false;
+      debugMode = !!config.debug_mode;
       const text = JSON.stringify(config, null, 2);
       if (view) {
         view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
@@ -241,6 +254,11 @@
     {#if notificationsError}
       <span class="autostart-error">{notificationsError}</span>
     {/if}
+
+    <label class="autostart-toggle" title="Enable Uvicorn debug logs. Requires app restart to take effect.">
+      <input type="checkbox" checked={debugMode} onchange={toggleDebugMode} />
+      Backend Debug Mode
+    </label>
   </div>
 
   <div class="app-settings">
@@ -268,7 +286,8 @@
   .app-settings {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.25rem;
     margin-bottom: 0.75rem;
   }
 
