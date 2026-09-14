@@ -10,6 +10,7 @@
   import { configCache } from "../lib/page-stores";
   import { isAutostartEnabled, setAutostartEnabled } from "../lib/autostart";
   import { theme, type Theme } from "../lib/theme";
+  import { fetchUpdate, getAppVersion } from "../lib/update";
 
   const initialCache = get(configCache);
   let config: Record<string, unknown> = $state(initialCache ?? {});
@@ -33,6 +34,25 @@
       autostartError = e instanceof Error ? e.message : String(e);
     } finally {
       autostartBusy = false;
+    }
+  }
+
+  let currentVersion: string | null = $state(null);
+  let checkingUpdate = $state(false);
+  let updateCheckResult: string | null = $state(null);
+
+  async function checkForUpdates() {
+    checkingUpdate = true;
+    updateCheckResult = null;
+    try {
+      const result = await fetchUpdate();
+      if (result) {
+        updateCheckResult = `Update available: v${result.version}`;
+      } else {
+        updateCheckResult = `You're up to date (v${currentVersion})`;
+      }
+    } finally {
+      checkingUpdate = false;
     }
   }
 
@@ -137,6 +157,9 @@
     isAutostartEnabled().then((v) => {
       autostart = v;
     });
+    getAppVersion().then((v) => {
+      currentVersion = v;
+    });
   });
 
   onDestroy(() => view?.destroy());
@@ -185,6 +208,15 @@
         <option value="system">System</option>
       </select>
     </label>
+  </div>
+
+  <div class="app-settings">
+    <button class="btn-secondary" onclick={checkForUpdates} disabled={checkingUpdate}>
+      {checkingUpdate ? "Checking…" : "Check for updates"}
+    </button>
+    {#if updateCheckResult}
+      <span class="update-status">{updateCheckResult}</span>
+    {/if}
   </div>
 
   {#if loading}
@@ -248,6 +280,11 @@
   .theme-select select:focus-visible {
     outline: none;
     border-color: var(--accent);
+  }
+
+  .update-status {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
   }
 
   .hint {
