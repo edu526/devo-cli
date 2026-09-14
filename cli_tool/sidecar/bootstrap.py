@@ -5,6 +5,8 @@ import logging.handlers
 import os
 import socket
 import sys
+import threading
+import time
 from pathlib import Path
 
 import uvicorn
@@ -47,20 +49,47 @@ def _kill_orphan_ssm_processes() -> None:
     If the sidecar crashed or was killed without a clean shutdown, SSM child
     processes survive as orphans. We sweep them on startup so they don't hold
     ports or consume resources.
-    """
-    import psutil
 
+    Runs on a background thread (see run()) so a slow or large sweep — e.g.
+    after a retry storm left many orphans behind — never delays the
+    DEVO_SIDECAR_READY handshake that Tauri is waiting on (30s timeout).
+    Because it's fire-and-forget, everything here — including the logging
+    calls — is guarded: this must never surface as an unhandled exception
+    on a background thread (e.g. logging to a handler whose stream was
+    already closed during interpreter/process shutdown).
+    """
     log = logging.getLogger(__name__)
-    killed = 0
-    for proc in psutil.process_iter(["name"]):
+    t0 = time.monotonic()
+    try:
+        import psutil
+
+        killed = 0
+        scanned = 0
+        for proc in psutil.process_iter(["name"]):
+            scanned += 1
+            try:
+                if proc.info["name"] and "session-manager-plugin" in proc.info["name"].lower():
+                    proc.terminate()
+                    killed += 1
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        elapsed = time.monotonic() - t0
+        log.info(
+            "[TIMING] Orphan sweep: scanned %d process(es), terminated %d, took %.3fs",
+            scanned,
+            killed,
+            elapsed,
+        )
+        if elapsed > 2.0:
+            log.warning(
+                "[TIMING] Orphan sweep took %.3fs — unusually slow, check for a large number of stuck processes",
+                elapsed,
+            )
+    except Exception:
         try:
-            if proc.info["name"] and "session-manager-plugin" in proc.info["name"].lower():
-                proc.terminate()
-                killed += 1
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            log.exception("[TIMING] Orphan sweep failed after %.3fs", time.monotonic() - t0)
+        except Exception:
             pass
-    if killed:
-        log.info("Startup cleanup: terminated %d orphan session-manager-plugin process(es).", killed)
 
 
 def _find_free_port() -> int:
@@ -70,6 +99,11 @@ def _find_free_port() -> int:
 
 
 def run(port: int = 0, host: str = "127.0.0.1", log_level: str = "warning") -> None:
+    t0 = time.monotonic()
+
+    def _elapsed() -> float:
+        return time.monotonic() - t0
+
     try:
         from cli_tool.core.utils.config_manager import load_config
 
@@ -80,10 +114,17 @@ def run(port: int = 0, host: str = "127.0.0.1", log_level: str = "warning") -> N
 
     _configure_logging(log_level)
     log = logging.getLogger(__name__)
+    log.info("[TIMING] Logging configured at +%.3fs", _elapsed())
 
-    _kill_orphan_ssm_processes()
+    # Fire-and-forget: the orphan sweep must never block the READY handshake
+    # below (Tauri gives up waiting for it after 30s). It doesn't touch
+    # anything the rest of startup depends on — it only cleans up processes
+    # left over from a previous, already-dead sidecar instance.
+    threading.Thread(target=_kill_orphan_ssm_processes, name="orphan-ssm-sweep", daemon=True).start()
+    log.info("[TIMING] Orphan sweep dispatched to background thread at +%.3fs", _elapsed())
 
     actual_port = port if port != 0 else _find_free_port()
+    log.info("[TIMING] Port resolved (%s) at +%.3fs", actual_port, _elapsed())
 
     registry = ForwarderRegistry()
     event_hub = EventHub()
@@ -93,11 +134,13 @@ def run(port: int = 0, host: str = "127.0.0.1", log_level: str = "warning") -> N
     token = app_state.issue_token()
 
     app = create_app(app_state)
+    log.info("[TIMING] FastAPI app created at +%.3fs", _elapsed())
 
     log.info("Sidecar starting on %s:%s — log file: %s", host, actual_port, LOG_FILE)
 
     # Handshake line read by the Tauri shell / parent process
     print(f"DEVO_SIDECAR_READY port={actual_port} token={token}", flush=True)
+    log.info("[TIMING] DEVO_SIDECAR_READY printed at +%.3fs", _elapsed())
     uvicorn.run(
         app,
         host=host,
