@@ -42,7 +42,7 @@
   }
   label {
     font-size: 0.8rem;
-    color: #94a3b8;
+    color: var(--text-secondary);
     font-weight: 500;
   }
   /* Override the global .modal label rule (flex-direction: column)
@@ -55,7 +55,7 @@
     gap: 0.15rem;
   }
   .required {
-    color: #f87171;
+    color: var(--danger);
     margin-left: 0.15rem;
   }
   .control {
@@ -65,10 +65,10 @@
   .control :global(select),
   .control :global(textarea) {
     width: 100%;
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
     border-radius: 6px;
-    color: #e0e0e0;
+    color: var(--text-primary);
     font-size: 0.85rem;
     padding: 0.45rem 0.6rem;
     font-family: inherit;
@@ -83,30 +83,30 @@
     background-position: right 0.6rem center;
   }
   .control :global(select option) {
-    background: #1a1a1a;
-    color: #e0e0e0;
+    background: var(--bg-surface);
+    color: var(--text-primary);
   }
   .control :global(input:focus),
   .control :global(select:focus),
   .control :global(textarea:focus) {
     outline: none;
-    border-color: #4f8ef7;
+    border-color: var(--accent);
   }
   .control :global(input::placeholder) {
-    color: #6a6a6a;
+    color: var(--text-faint);
   }
   .has-error .control :global(input),
   .has-error .control :global(select),
   .has-error .control :global(textarea) {
-    border-color: #f87171;
+    border-color: var(--danger);
   }
   .error {
-    color: #f87171;
+    color: var(--danger);
     font-size: 0.75rem;
     margin: 0;
   }
   .hint {
-    color: #6a6a6a;
+    color: var(--text-faint);
     font-size: 0.72rem;
     margin: 0;
   }

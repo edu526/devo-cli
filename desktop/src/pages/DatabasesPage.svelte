@@ -870,13 +870,13 @@
   }
   .error-cell {
     max-width: 200px;
-    color: #f87171;
+    color: var(--danger);
     font-size: 0.8rem;
   }
   .uptime-cell {
     font-family: "JetBrains Mono", monospace;
     font-size: 0.78rem;
-    color: #94a3b8;
+    color: var(--text-secondary);
     white-space: nowrap;
   }
   .btn-icon {
@@ -980,11 +980,11 @@
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
-    background: #1a1a00;
-    border: 1px solid #fbbf24;
+    background: color-mix(in srgb, var(--warning) 10%, transparent);
+    border: 1px solid var(--warning);
     border-radius: 6px;
     padding: 0.75rem 1rem;
-    color: #fbbf24;
+    color: var(--warning);
     font-size: 0.85rem;
     margin-bottom: 1rem;
   }
@@ -994,16 +994,16 @@
   }
   .alert-sso p {
     margin: 0;
-    color: #a08020;
+    color: var(--text-secondary);
     font-size: 0.85rem;
   }
   .alert-sso code {
-    color: #fde68a;
+    color: var(--warning);
   }
   .alert-sso a {
     word-break: break-all;
     overflow-wrap: anywhere;
-    color: #fbbf24;
+    color: var(--warning);
     text-decoration: underline;
   }
   .spinner-sso {

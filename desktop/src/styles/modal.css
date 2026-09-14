@@ -11,8 +11,8 @@
 }
 
 .modal {
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 1.5rem;
   min-width: 380px;
@@ -29,7 +29,7 @@
 .modal h2 {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #f0f0f0;
+  color: var(--text-primary);
   margin-bottom: 0.25rem;
 }
 
@@ -38,15 +38,15 @@
   flex-direction: column;
   gap: 0.35rem;
   font-size: 0.82rem;
-  color: #8a8a8a;
+  color: var(--text-muted);
   font-weight: 500;
 }
 
 .modal input {
-  background: #111;
-  border: 1px solid #333;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-strong);
   border-radius: 5px;
-  color: #e0e0e0;
+  color: var(--text-primary);
   font-size: 0.85rem;
   padding: 0.45rem 0.7rem;
   outline: none;
@@ -55,7 +55,7 @@
 }
 
 .modal input:focus {
-  border-color: #4f8ef7;
+  border-color: var(--accent);
 }
 .modal input:disabled {
   opacity: 0.4;

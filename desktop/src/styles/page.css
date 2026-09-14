@@ -18,7 +18,7 @@
 .page-header h1 {
   font-size: 1.4rem;
   font-weight: 600;
-  color: #f0f0f0;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -60,12 +60,12 @@
   color: #fff;
 }
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
+  background: color-mix(in srgb, var(--accent) 85%, black);
 }
 
 .btn-secondary {
-  background: var(--bg-panel);
-  color: var(--text-normal);
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
   border: 1px solid var(--border-strong);
 }
 .btn-secondary:hover:not(:disabled) {
@@ -73,13 +73,13 @@
 }
 
 .btn-danger {
-  background: rgba(239, 68, 68, 0.1);
-  color: #fca5a5;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
 }
 .btn-danger:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.5);
+  background: color-mix(in srgb, var(--danger) 20%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
 }
 
 .btn-primary:disabled,
@@ -128,10 +128,10 @@ table {
 
 th {
   text-align: left;
-  color: #6a6a6a;
+  color: var(--text-faint);
   font-weight: 500;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #2a2a2a;
+  border-bottom: 1px solid var(--border);
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -139,7 +139,7 @@ th {
 
 td {
   padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid #1e1e1e;
+  border-bottom: 1px solid var(--border);
   vertical-align: middle;
   white-space: nowrap;
 }
@@ -151,15 +151,15 @@ td {
 }
 
 tr:hover td {
-  background: #181818;
+  background: var(--bg-surface-2);
 }
 tr:hover td.actions-cell {
-  background: #181818;
+  background: var(--bg-surface-2);
 }
 
 td.name {
   font-weight: 600;
-  color: #e0e0e0;
+  color: var(--text-primary);
 }
 
 td code {
@@ -172,12 +172,12 @@ td.actions-cell {
   white-space: nowrap;
   position: sticky;
   right: 0;
-  background: #0f0f0f;
+  background: var(--bg-base);
   box-shadow: -4px 0 8px rgba(0, 0, 0, 0.4);
 }
 
 tr:hover td.actions-cell {
-  background: #181818;
+  background: var(--bg-surface-2);
 }
 
 .actions-cell .actions-wrap {
@@ -188,7 +188,7 @@ tr:hover td.actions-cell {
 code {
   font-family: "JetBrains Mono", "Cascadia Code", monospace;
   font-size: 0.82em;
-  color: #9cb6f7;
+  color: var(--accent);
 }
 
 /* Badge */
@@ -204,34 +204,34 @@ code {
 }
 
 .badge-green {
-  background: #14301a;
-  color: #4ade80;
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
 }
 .badge-yellow {
-  background: #2a2000;
-  color: #fbbf24;
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
+  color: var(--warning);
 }
 .badge-red {
-  background: #2a1010;
-  color: #f87171;
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  color: var(--danger);
 }
 .badge-blue {
-  background: #0d2a4a;
-  color: #60a5fa;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 .badge-gray {
-  background: #222;
-  color: #8a8a8a;
+  background: var(--bg-surface-2);
+  color: var(--text-muted);
 }
 
 /* Alerts */
 
 .alert-error {
-  background: #2a1010;
-  border: 1px solid #5a2020;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
   border-radius: 6px;
   padding: 0.6rem 1rem;
-  color: #f87171;
+  color: var(--danger);
   font-size: 0.85rem;
 }
 
@@ -241,7 +241,7 @@ code {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #4f8ef7;
+  background: var(--accent);
   opacity: 0.7;
   animation: pulse-dot 1.2s ease-in-out infinite;
   flex-shrink: 0;
@@ -263,22 +263,22 @@ code {
 .empty-state {
   text-align: center;
   padding: 3rem 1rem;
-  color: #8a8a8a;
+  color: var(--text-muted);
 }
 
 .empty-state p:first-child {
   font-size: 1rem;
-  color: #c0c0c0;
+  color: var(--text-secondary);
   margin-bottom: 0.4rem;
 }
 
 .muted {
-  color: #6a6a6a;
+  color: var(--text-faint);
   font-size: 0.85rem;
 }
 
 .optional {
-  color: #555;
+  color: var(--text-faint);
   font-size: 0.78rem;
   font-weight: 400;
 }

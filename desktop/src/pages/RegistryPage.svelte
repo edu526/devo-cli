@@ -715,17 +715,17 @@
   }
   .namespace {
     font-size: 0.85rem;
-    color: var(--muted, #888);
+    color: var(--text-muted);
   }
   .status-dot {
-    color: #22c55e;
+    color: var(--success);
     font-size: 0.7rem;
   }
   .status-dot.dim {
-    color: var(--muted, #888);
+    color: var(--text-faint);
   }
   .section {
-    border-top: 1px solid var(--border-color, #2a2a2a);
+    border-top: 1px solid var(--border);
     padding-top: 0.6rem;
     margin-top: 0.6rem;
   }
@@ -733,7 +733,7 @@
     font-size: 0.72rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: var(--muted, #888);
+    color: var(--text-muted);
     margin-bottom: 0.4rem;
     display: flex;
     align-items: center;
@@ -746,21 +746,21 @@
     flex-wrap: wrap;
   }
   .auth-row select {
-    background: var(--bg-input, #2a2a2a);
-    color: var(--fg, #ddd);
-    border: 1px solid var(--border-color, #333);
+    background: var(--bg-surface-2);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
     border-radius: 4px;
     padding: 0.3rem 0.5rem;
     font-size: 0.85rem;
   }
   .registry-url {
     font-size: 0.75rem;
-    color: var(--muted, #888);
+    color: var(--text-muted);
     word-break: break-all;
   }
   .packages-list {
     padding: 0.5rem;
-    background: var(--bg-input, #2a2a2a);
+    background: var(--bg-surface-2);
     border-radius: 4px;
     max-height: 200px;
     overflow-y: auto;
@@ -787,8 +787,8 @@
     }
   }
   .sso-banner {
-    background: rgba(251, 191, 36, 0.1);
-    border: 1px solid rgba(251, 191, 36, 0.4);
+    background: color-mix(in srgb, var(--warning) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
     border-radius: 6px;
     padding: 0.75rem 1rem;
     margin-bottom: 1rem;
@@ -800,29 +800,29 @@
   }
   .sso-banner p {
     margin: 0.25rem 0 0 0;
-    color: var(--text-muted, #888);
+    color: var(--text-muted);
     font-size: 0.85rem;
   }
   .sso-banner a {
     word-break: break-all;
     overflow-wrap: anywhere;
-    color: #fbbf24;
+    color: var(--warning);
     text-decoration: underline;
   }
   .sso-spinner {
     margin-top: 0.2rem;
-    color: #fbbf24;
+    color: var(--warning);
   }
   .select-tool {
-    background: #222;
-    color: #e0e0e0;
-    border: 1px solid #333;
+    background: var(--bg-surface-2);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
     border-radius: 4px;
     padding: 0.25rem 0.5rem;
     font-size: 0.8rem;
   }
   .select-tool option {
-    background: #222;
-    color: #e0e0e0;
+    background: var(--bg-surface-2);
+    color: var(--text-primary);
   }
 </style>

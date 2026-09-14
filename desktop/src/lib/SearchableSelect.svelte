@@ -203,10 +203,10 @@
   }
   input {
     width: 100%;
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
     border-radius: 6px;
-    color: #e0e0e0;
+    color: var(--text-primary);
     font-size: 0.85rem;
     padding: 0.45rem 1.8rem 0.45rem 0.6rem;
     font-family: inherit;
@@ -214,7 +214,7 @@
     transition: border-color 0.15s;
   }
   input:focus {
-    border-color: #4f8ef7;
+    border-color: var(--accent);
   }
   .disabled input {
     opacity: 0.4;
@@ -225,7 +225,7 @@
     right: 0.6rem;
     top: 50%;
     transform: translateY(-50%);
-    color: #94a3b8;
+    color: var(--text-secondary);
     pointer-events: none;
     font-size: 0.75rem;
   }
@@ -233,8 +233,8 @@
     position: fixed;
     max-height: 220px;
     overflow-y: auto;
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
     border-radius: 6px;
     list-style: none;
     margin: 0;
@@ -245,19 +245,19 @@
   .options li {
     padding: 0.4rem 0.7rem;
     font-size: 0.85rem;
-    color: #e0e0e0;
+    color: var(--text-primary);
     cursor: pointer;
     user-select: none;
   }
   .options li.hl {
-    background: #2a2a2a;
+    background: var(--bg-surface-2);
   }
   .options li.sel::before {
     content: "✓ ";
-    color: #4f8ef7;
+    color: var(--accent);
   }
   .options li.empty {
-    color: #6a6a6a;
+    color: var(--text-faint);
     font-style: italic;
     cursor: default;
   }

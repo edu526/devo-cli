@@ -1060,7 +1060,7 @@
   .link-btn {
     background: none;
     border: none;
-    color: #6b9ef7;
+    color: var(--accent);
     font-size: 0.78rem;
     cursor: pointer;
     padding: 0.15rem 0;
@@ -1068,7 +1068,7 @@
     font-family: inherit;
   }
   .link-btn:hover {
-    color: #9bbcff;
+    color: color-mix(in srgb, var(--accent) 70%, white);
     text-decoration: underline;
   }
   .btn-sm {
@@ -1088,16 +1088,16 @@
   .footer-sep {
     width: 1px;
     height: 18px;
-    background: var(--border, #2a2a2a);
+    background: var(--border);
     margin: 0 0.15rem;
   }
   .action-danger {
-    color: #f87171;
+    color: var(--danger);
   }
   .action-danger:hover:not(:disabled) {
-    color: #fff;
-    background: rgba(248, 113, 113, 0.12);
-    border-color: rgba(248, 113, 113, 0.4);
+    color: color-mix(in srgb, var(--danger) 85%, black);
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    border-color: color-mix(in srgb, var(--danger) 40%, transparent);
   }
   .modal-confirm {
     min-width: 380px;
@@ -1109,20 +1109,20 @@
   }
   .error-details summary {
     cursor: pointer;
-    color: #fca5a5;
+    color: var(--danger);
     font-size: 0.72rem;
     user-select: none;
   }
   .error-details summary:hover {
-    color: #fff;
+    color: color-mix(in srgb, var(--danger) 85%, black);
   }
   .error-details code {
     display: block;
     margin-top: 0.3rem;
     padding: 0.4rem 0.5rem;
-    background: rgba(0, 0, 0, 0.35);
+    background: color-mix(in srgb, var(--bg-base) 60%, transparent);
     border-radius: 4px;
-    color: #fca5a5;
+    color: var(--danger);
     font-family: "JetBrains Mono", monospace;
     font-size: 0.72rem;
     white-space: pre-wrap;
@@ -1153,14 +1153,14 @@
   }
 
   .default-bar {
-    background: #0d2a4a;
-    color: #60a5fa;
+    background: var(--accent-soft);
+    color: var(--accent);
     font-size: 0.72rem;
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     padding: 0.25rem 1rem;
-    border-bottom: 1px solid #1e4a7a;
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
     border-top-left-radius: 8px;
     border-top-right-radius: 8px;
   }
@@ -1250,7 +1250,7 @@
   }
   .card-meta.identity {
     font-family: inherit;
-    color: #6b9ef7;
+    color: var(--accent);
   }
   .status-dot {
     width: 6px;
@@ -1260,16 +1260,16 @@
     display: inline-block;
   }
   .status-dot.status-valid {
-    background: #4ade80;
+    background: var(--success);
   }
   .status-dot.status-expiring {
-    background: #fbbf24;
+    background: var(--warning);
   }
   .status-dot.status-expired {
-    background: #f87171;
+    background: var(--danger);
   }
   .status-dot.status-unknown {
-    background: #6a6a6a;
+    background: var(--info);
   }
   .status-text {
     text-transform: capitalize;
@@ -1282,13 +1282,13 @@
   }
 
   .is-default {
-    border-color: #1e4a7a;
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   }
   .is-expired {
-    border-left: 3px solid #f87171;
+    border-left: 3px solid var(--danger);
   }
   .is-expiring {
-    border-left: 3px solid #fbbf24;
+    border-left: 3px solid var(--warning);
   }
 
   .card-footer {
@@ -1301,7 +1301,7 @@
   }
   .default-label {
     font-size: 0.72rem;
-    color: #60a5fa;
+    color: var(--accent);
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -1360,7 +1360,7 @@
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    color: #fbbf24 !important;
+    color: var(--warning) !important;
     font-style: italic;
     padding: 0 1rem !important;
   }
@@ -1370,11 +1370,11 @@
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
-    background: #1a1a00;
-    border: 1px solid #fbbf24;
+    background: color-mix(in srgb, var(--warning) 14%, transparent);
+    border: 1px solid var(--warning);
     border-radius: 6px;
     padding: 0.75rem 1rem;
-    color: #fbbf24;
+    color: var(--warning);
     font-size: 0.85rem;
   }
   .alert-sso strong {
@@ -1383,16 +1383,16 @@
   }
   .alert-sso p {
     margin: 0;
-    color: #a08020;
+    color: color-mix(in srgb, var(--warning) 65%, black);
     font-size: 0.8rem;
   }
   .alert-sso code {
-    color: #fde68a;
+    color: color-mix(in srgb, var(--warning) 75%, white);
   }
   .alert-sso a {
     word-break: break-all;
     overflow-wrap: anywhere;
-    color: #fbbf24;
+    color: var(--warning);
     text-decoration: underline;
   }
   .spinner-sso {
@@ -1409,14 +1409,14 @@
   .dismiss {
     background: none;
     border: none;
-    color: #f87171;
+    color: var(--danger);
     cursor: pointer;
     font-size: 0.9rem;
     padding: 0 0.25rem;
     line-height: 1;
   }
   .dismiss:hover {
-    color: #fff;
+    color: color-mix(in srgb, var(--danger) 85%, black);
   }
   .sso-sessions {
     margin-bottom: 1.25rem;
@@ -1425,7 +1425,7 @@
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: var(--text-muted, #888);
+    color: var(--text-muted);
     margin-bottom: 0.5rem;
   }
   .sso-list {
@@ -1458,8 +1458,8 @@
     font-size: 0.95rem;
   }
   .badge-count {
-    background: var(--bg-input, #2a2a2a);
-    color: var(--text-muted, #888);
+    background: var(--border);
+    color: var(--text-muted);
     padding: 0.1rem 0.4rem;
     border-radius: 4px;
     font-size: 0.7rem;

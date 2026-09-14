@@ -37,8 +37,8 @@
 <style>
   .view-toggle {
     display: flex;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border);
     border-radius: 6px;
     padding: 2px;
     gap: 2px;
@@ -47,7 +47,7 @@
   .vt-btn {
     background: transparent;
     border: none;
-    color: var(--text-muted, #a0a0a0);
+    color: var(--text-muted);
     padding: 6px 8px;
     border-radius: 4px;
     cursor: pointer;
@@ -58,12 +58,12 @@
   }
 
   .vt-btn:hover {
-    color: var(--text-normal, #e0e0e0);
-    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
   }
 
   .vt-btn.active {
-    color: #4f8ef7;
-    background: rgba(79, 142, 247, 0.1);
+    color: var(--accent);
+    background: var(--accent-soft);
   }
 </style>

@@ -408,7 +408,7 @@
             aria-label="Copy log"
           >
             {#if copiedId === entry.id}
-              <Check size={12} color="#4ade80" />
+              <Check size={12} color="var(--success)" />
             {:else}
               <Copy size={12} />
             {/if}
@@ -474,7 +474,7 @@
 
   .filter-label {
     font-size: 0.78rem;
-    color: #6a6a6a;
+    color: var(--text-faint);
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
@@ -484,7 +484,7 @@
     align-items: center;
     gap: 0.3rem;
     font-size: 0.78rem;
-    color: #8a8a8a;
+    color: var(--text-muted);
     cursor: pointer;
     user-select: none;
   }
@@ -496,16 +496,16 @@
     border-radius: 50%;
   }
   .level-dot.level-debug {
-    background: #4a4a4a;
+    background: var(--text-faint);
   }
   .level-dot.level-info {
-    background: #94a3b8;
+    background: var(--info);
   }
   .level-dot.level-warn {
-    background: #fbbf24;
+    background: var(--warning);
   }
   .level-dot.level-error {
-    background: #f87171;
+    background: var(--danger);
   }
 
   .line-select {
@@ -534,8 +534,8 @@
   }
 
   .log-viewer {
-    background: #0d0d0d;
-    border: 1px solid #1e1e1e;
+    background: var(--bg-base);
+    border: 1px solid var(--border);
     border-radius: 6px;
     padding: 0.25rem 0;
     font-family: "JetBrains Mono", "Cascadia Code", monospace;
@@ -571,10 +571,10 @@
     cursor: pointer;
   }
   .log-toggle:hover {
-    background: #161616;
+    background: var(--bg-surface-2);
   }
   .log-row.expanded .log-toggle {
-    background: #111;
+    background: var(--bg-sidebar);
   }
 
   .log-copy-btn {
@@ -582,9 +582,9 @@
     right: 8px;
     top: 4px;
     opacity: 0;
-    background: #2a2a2a;
-    border: 1px solid #555;
-    color: #e2e8f0;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-strong);
+    color: var(--text-primary);
     padding: 4px 6px;
     border-radius: 4px;
     cursor: pointer;
@@ -596,9 +596,9 @@
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.6);
   }
   .log-copy-btn:hover {
-    background: #3a3a3a;
-    border-color: #777;
-    color: #fff;
+    background: var(--border-strong);
+    border-color: var(--text-muted);
+    color: var(--text-primary);
   }
   .log-row:hover .log-copy-btn {
     opacity: 1;
@@ -625,21 +625,21 @@
   }
 
   .level-error {
-    color: #f87171;
+    color: var(--danger);
   }
   .level-warn {
-    color: #fbbf24;
+    color: var(--warning);
   }
   .level-info {
-    color: #94a3b8;
+    color: var(--info);
   }
   .level-debug {
-    color: #4a4a4a;
+    color: var(--text-faint);
   }
 
   /* ── Client errors panel ────────────────────────────────────────────────── */
   .client-errors {
-    background: #0d0d0d;
+    background: var(--bg-base);
     border: 1px solid var(--border);
     border-radius: 6px;
     margin: 0.75rem 0;
@@ -681,7 +681,7 @@
 
   .badge-count {
     background: var(--danger);
-    color: #1a0a0a;
+    color: var(--bg-surface);
     border-radius: 999px;
     padding: 0 0.45rem;
     font-size: 0.7rem;
@@ -788,7 +788,7 @@
     margin: 0;
     padding: 0.4rem 0.75rem 0.4rem 2.5rem;
     color: var(--text-faint);
-    background: #050505;
+    background: var(--bg-base);
     font-size: 0.72rem;
     overflow-x: auto;
     white-space: pre-wrap;

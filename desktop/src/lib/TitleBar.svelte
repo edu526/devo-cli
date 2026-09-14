@@ -130,8 +130,8 @@
 <style>
   .titlebar {
     height: 36px;
-    background: #0d0d0d;
-    border-bottom: 1px solid #1a1a1a;
+    background: var(--bg-base);
+    border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     flex-shrink: 0;
@@ -160,7 +160,7 @@
 
   .tb-version {
     font-size: 0.7rem;
-    color: #666;
+    color: var(--text-faint);
     font-family: "JetBrains Mono", monospace;
     font-weight: 500;
     white-space: nowrap;
@@ -186,7 +186,7 @@
     justify-content: center;
     background: none;
     border: none;
-    color: #666;
+    color: var(--text-faint);
     cursor: pointer;
     transition:
       background 0.1s,
@@ -199,8 +199,8 @@
   }
 
   .ctrl-btn:hover {
-    background: #2a2a2a;
-    color: #e0e0e0;
+    background: var(--bg-surface-2);
+    color: var(--text-primary);
   }
 
   .ctrl-close:hover {
@@ -209,7 +209,7 @@
   }
 
   .update-badge {
-    background: #fbbf24;
+    background: var(--warning);
     color: #1a1a1a;
     border: none;
     border-radius: 10px;

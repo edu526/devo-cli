@@ -56,8 +56,8 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
     border-radius: 6px;
     padding: 0.35rem 0.6rem;
     min-width: 220px;
@@ -70,7 +70,7 @@
     background: transparent;
     border: none;
     outline: none;
-    color: #e0e0e0;
+    color: var(--text-primary);
     font-size: 0.85rem;
     flex: 1;
     min-width: 0;
@@ -78,7 +78,7 @@
   .clear-btn {
     background: none;
     border: none;
-    color: #8a8a8a;
+    color: var(--text-muted);
     cursor: pointer;
     font-size: 1rem;
     line-height: 1;

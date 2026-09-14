@@ -180,17 +180,21 @@
     right: 0;
     bottom: 0;
     z-index: 50;
-    background: radial-gradient(circle at 50% -20%, rgba(79, 142, 247, 0.15), transparent 60%);
-    background-color: var(--bg-body, #0f0f0f);
+    background: radial-gradient(
+      circle at 50% -20%,
+      color-mix(in srgb, var(--accent) 15%, transparent),
+      transparent 60%
+    );
+    background-color: var(--bg-base);
   }
 
   .onboarding-card {
     width: 100%;
     max-width: 580px;
-    background: rgba(30, 30, 46, 0.4);
+    background: color-mix(in srgb, var(--bg-elevated) 40%, transparent);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
     border-radius: 16px;
     padding: 2.5rem;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
@@ -206,16 +210,14 @@
     height: 54px;
     margin-bottom: 1rem;
     border-radius: 14px;
-    box-shadow: 0 4px 15px rgba(79, 142, 247, 0.2);
+    box-shadow: 0 4px 15px color-mix(in srgb, var(--accent) 20%, transparent);
   }
 
   header h1 {
     font-size: 1.8rem;
     font-weight: 700;
     margin: 0 0 0.5rem 0;
-    background: linear-gradient(135deg, #4f8ef7, #a78bfa);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--accent);
     letter-spacing: -0.5px;
   }
 
@@ -243,7 +245,7 @@
     font-size: 1.25rem;
     font-weight: 600;
     margin: 0 0 0.25rem 0;
-    color: #fff;
+    color: var(--text-primary);
   }
 
   .checks {
@@ -260,22 +262,22 @@
     align-items: flex-start;
     gap: 1rem;
     padding: 1rem;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: color-mix(in srgb, var(--bg-base) 20%, transparent);
+    border: 1px solid color-mix(in srgb, var(--text-primary) 5%, transparent);
     border-radius: 8px;
     transition: border-color 0.2s;
   }
 
   .check-item:hover {
-    border-color: rgba(255, 255, 255, 0.1);
+    border-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
   }
 
   .check-icon {
     width: 24px;
     height: 24px;
     border-radius: 50%;
-    background: rgba(46, 213, 115, 0.1);
-    color: #2ed573;
+    background: color-mix(in srgb, var(--success) 12%, transparent);
+    color: var(--success);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -285,8 +287,8 @@
   }
 
   .check-item.fail .check-icon {
-    background: rgba(255, 71, 87, 0.1);
-    color: #ff4757;
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    color: var(--danger);
   }
 
   .check-info {
@@ -299,7 +301,7 @@
     font-family: "JetBrains Mono", monospace;
     font-size: 0.9rem;
     font-weight: 500;
-    color: #e0e0e0;
+    color: var(--text-primary);
   }
 
   .check-info .detail {
@@ -309,14 +311,14 @@
   .spinner-small {
     width: 14px;
     height: 14px;
-    border: 2px solid rgba(79, 142, 247, 0.2);
-    border-top-color: #4f8ef7;
+    border: 2px solid color-mix(in srgb, var(--accent) 20%, transparent);
+    border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 1s linear infinite;
   }
 
   .check-item.loading .check-icon {
-    background: rgba(255, 255, 255, 0.05);
+    background: color-mix(in srgb, var(--text-primary) 5%, transparent);
   }
 
   @keyframes spin {
@@ -329,8 +331,8 @@
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
-    background: rgba(251, 191, 36, 0.1);
-    border: 1px solid rgba(251, 191, 36, 0.2);
+    background: color-mix(in srgb, var(--warning) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--warning) 25%, transparent);
     border-radius: 8px;
     padding: 1rem;
     margin-top: 1.5rem;
@@ -339,7 +341,7 @@
   .warn-icon {
     width: 20px;
     height: 20px;
-    background: #fbbf24;
+    background: var(--warning);
     color: #000;
     border-radius: 50%;
     display: flex;
@@ -352,7 +354,7 @@
 
   .alert-warn p {
     margin: 0;
-    color: #fcd34d;
+    color: var(--warning);
     font-size: 0.85rem;
     line-height: 1.4;
   }
@@ -365,7 +367,7 @@
   }
 
   .btn-primary {
-    background: linear-gradient(135deg, #4f8ef7, #a78bfa);
+    background: var(--accent);
     color: #fff;
     border: none;
     border-radius: 6px;
@@ -386,9 +388,9 @@
   }
 
   .btn-secondary {
-    background: rgba(255, 255, 255, 0.05);
-    color: #e0e0e0;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+    color: var(--text-primary);
+    border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
     border-radius: 6px;
     padding: 0.5rem 1.25rem;
     font-size: 0.9rem;
@@ -398,7 +400,7 @@
   }
 
   .btn-secondary:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
+    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+    border-color: color-mix(in srgb, var(--text-primary) 20%, transparent);
   }
 </style>
