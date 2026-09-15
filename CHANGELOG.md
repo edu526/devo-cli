@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v3.14.0 (2026-09-15)
+
+### Bug Fixes
+
+- **hooks**: Scope unstaged pre-commit-hooks to the pre-commit stage
+  ([`3d37c25`](https://github.com/edu526/devo-cli/commit/3d37c25c445169df00c7cbdd8ba0d94812c52621))
+
+- **sidecar**: Resolve encoding errors and downgrade expected connection logs
+  ([`0d715e8`](https://github.com/edu526/devo-cli/commit/0d715e8f38b13a0822a877f63cc6963e4f63f680))
+
+- **ssm**: Keep tunnels alive across idle drops and auto-refresh SSO
+  ([`b571f51`](https://github.com/edu526/devo-cli/commit/b571f519f87843a61386590e95e44b3d83274c25))
+
+- **ssm**: Stop kills stuck reconnecting tunnels and abort after 5 failed attempts
+  ([`7089e5c`](https://github.com/edu526/devo-cli/commit/7089e5cb4ab8895bdf6334468a135886214f3d9c))
+
+- **ssm**: Use a signal.SIGKILL fallback so the POSIX kill path doesn't AttributeError
+  ([`ffc669f`](https://github.com/edu526/devo-cli/commit/ffc669f16a362bc495bedceab43b1f3a0be30a45))
+
+### Features
+
+- **desktop**: Reconnecting state shows the failure reason and gets its own color
+  ([`8b4b2a1`](https://github.com/edu526/devo-cli/commit/8b4b2a1d3ccec3780de4952082e682c93e7ae83f))
+
+
 ## v3.13.0 (2026-07-01)
 
 ### Bug Fixes
