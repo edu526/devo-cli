@@ -84,6 +84,7 @@ pub async fn fetch_update(
 
 #[tauri::command]
 pub async fn install_update(
+    app: AppHandle,
     pending_update: State<'_, PendingUpdate>,
     on_event: Channel<DownloadEvent>,
 ) -> Result<()> {
@@ -106,6 +107,17 @@ pub async fn install_update(
             },
         )
         .await?;
+
+    // On Windows, `download_and_install` never returns on success — it hands
+    // off to the installer via ShellExecuteW and calls `std::process::exit(0)`
+    // itself. On Linux (AppImage/deb/rpm) and macOS it only swaps the files
+    // on disk and returns normally, so without an explicit restart here the
+    // app would keep running the old version in memory until the user
+    // manually quit and reopened it — update "succeeds" with no visible
+    // effect.
+    if cfg!(not(windows)) {
+        app.restart();
+    }
 
     Ok(())
 }
