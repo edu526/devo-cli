@@ -92,10 +92,25 @@ def _kill_orphan_ssm_processes() -> None:
             pass
 
 
-def _find_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+def _bind_socket(host: str, port: int) -> socket.socket:
+    """Bind and start listening immediately, before DEVO_SIDECAR_READY is printed.
+
+    Previously we only probed a free port number (binding, reading it back, then
+    closing the socket) and let `uvicorn.run()` bind the real listening socket
+    later, after printing READY. That left a gap — sometimes wide enough to be
+    visible, especially with the extra startup overhead of a PyInstaller-frozen
+    binary — where Tauri had already told the frontend the sidecar was ready,
+    but the port wasn't actually accepting connections yet, so the app's first
+    requests failed with "Failed to fetch". Binding+listening here first and
+    handing this same socket to uvicorn means the OS is already queuing
+    connections in the backlog by the time READY is printed, so nothing can
+    hit "connection refused" anymore.
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind((host, port))
+    sock.listen(100)
+    return sock
 
 
 def run(port: int = 0, host: str = "127.0.0.1", log_level: str = "warning") -> None:
@@ -123,8 +138,9 @@ def run(port: int = 0, host: str = "127.0.0.1", log_level: str = "warning") -> N
     threading.Thread(target=_kill_orphan_ssm_processes, name="orphan-ssm-sweep", daemon=True).start()
     log.info("[TIMING] Orphan sweep dispatched to background thread at +%.3fs", _elapsed())
 
-    actual_port = port if port != 0 else _find_free_port()
-    log.info("[TIMING] Port resolved (%s) at +%.3fs", actual_port, _elapsed())
+    sock = _bind_socket(host, port)
+    actual_port = sock.getsockname()[1]
+    log.info("[TIMING] Socket bound and listening (%s) at +%.3fs", actual_port, _elapsed())
 
     registry = ForwarderRegistry()
     event_hub = EventHub()
@@ -138,13 +154,15 @@ def run(port: int = 0, host: str = "127.0.0.1", log_level: str = "warning") -> N
 
     log.info("Sidecar starting on %s:%s — log file: %s", host, actual_port, LOG_FILE)
 
-    # Handshake line read by the Tauri shell / parent process
+    # Handshake line read by the Tauri shell / parent process. Safe to print
+    # now — `sock` above is already bound and listening, so any connection
+    # that arrives before uvicorn finishes its own startup just queues in the
+    # OS backlog instead of being refused.
     print(f"DEVO_SIDECAR_READY port={actual_port} token={token}", flush=True)
     log.info("[TIMING] DEVO_SIDECAR_READY printed at +%.3fs", _elapsed())
-    uvicorn.run(
+    config = uvicorn.Config(
         app,
-        host=host,
-        port=actual_port,
         log_level=log_level,
         access_log=(log_level == "debug"),
     )
+    uvicorn.Server(config).run(sockets=[sock])
