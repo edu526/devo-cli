@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { updateAvailable, installUpdate, getAppVersion, fetchUpdate } from "./update";
+  import { updateAvailable, installUpdate, getAppVersion, fetchUpdate, type ProgressState } from "./update";
 
   const POLL_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
@@ -40,15 +40,20 @@
   }
 
   async function handleUpdateClick() {
-    if (!$updateAvailable) return;
+    if (!$updateAvailable || updateInstalling) return;
     updateInstalling = true;
     updateError = null;
-    try {
-      await installUpdate(() => {});
-    } catch (e) {
-      updateError = String(e);
-    } finally {
-      updateInstalling = false;
+    // `installUpdate` never throws — it reports failures ("no pending
+    // update", download errors, etc.) only through the progress callback.
+    // The previous try/catch here never caught anything, so a failed
+    // install silently reverted the button with no visible feedback at all.
+    let progress: ProgressState = { phase: "idle", downloaded: 0, total: null, error: null };
+    const ok = await installUpdate((s) => {
+      progress = typeof s === "function" ? s(progress) : s;
+    });
+    updateInstalling = false;
+    if (!ok) {
+      updateError = progress.error ?? "Update failed";
     }
   }
 
@@ -85,11 +90,13 @@
     {#if $updateAvailable}
       <button
         class="update-badge"
+        class:update-badge-error={!!updateError}
+        onmousedown={(e) => e.stopPropagation()}
         onclick={handleUpdateClick}
         disabled={updateInstalling}
         title={updateError ?? "Update available — click to install"}
       >
-        {updateInstalling ? "…" : "↑ update"}
+        {updateInstalling ? "…" : updateError ? "⚠ retry update" : "↑ update"}
       </button>
     {/if}
   </div>
@@ -231,5 +238,12 @@
   .update-badge:disabled {
     opacity: 0.6;
     cursor: progress;
+  }
+  .update-badge-error {
+    background: #c0392b;
+    color: #fff;
+  }
+  .update-badge-error:hover {
+    background: #e74c3c;
   }
 </style>

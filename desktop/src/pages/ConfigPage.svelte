@@ -10,7 +10,7 @@
   import { configCache } from "../lib/page-stores";
   import { isAutostartEnabled, setAutostartEnabled } from "../lib/autostart";
   import { theme, type Theme } from "../lib/theme";
-  import { fetchUpdate, getAppVersion } from "../lib/update";
+  import { fetchUpdate, getAppVersion, installUpdate, updateAvailable, type ProgressState } from "../lib/update";
 
   const initialCache = get(configCache);
   let config: Record<string, unknown> = $state(initialCache ?? {});
@@ -38,21 +38,42 @@
   }
 
   let currentVersion: string | null = $state(null);
-  let checkingUpdate = $state(false);
+  let updateBusy = $state(false);
   let updateCheckResult: string | null = $state(null);
+  let installError: string | null = $state(null);
 
-  async function checkForUpdates() {
-    checkingUpdate = true;
+  // One button, two phases: first click checks the manifest; once an update
+  // is known to be available ($updateAvailable), the same button switches to
+  // triggering the actual install instead of checking again.
+  async function handleUpdateClick() {
+    if (updateBusy) return;
+    if ($updateAvailable) {
+      updateBusy = true;
+      installError = null;
+      // `installUpdate` never throws — a failed download or install (no
+      // pending update, network error, etc.) is only reported through the
+      // progress callback, so it must be read from there.
+      let progress: ProgressState = { phase: "idle", downloaded: 0, total: null, error: null };
+      const ok = await installUpdate((s) => {
+        progress = typeof s === "function" ? s(progress) : s;
+      });
+      updateBusy = false;
+      if (!ok) {
+        installError = progress.error ?? "Update failed";
+      }
+      return;
+    }
+
+    updateBusy = true;
     updateCheckResult = null;
+    installError = null;
     try {
       const result = await fetchUpdate();
-      if (result) {
-        updateCheckResult = `Update available: v${result.version}`;
-      } else {
-        updateCheckResult = `You're up to date (v${currentVersion})`;
-      }
+      updateCheckResult = result
+        ? `Update available: v${result.version}`
+        : `You're up to date (v${currentVersion})`;
     } finally {
-      checkingUpdate = false;
+      updateBusy = false;
     }
   }
 
@@ -262,11 +283,18 @@
   </div>
 
   <div class="app-settings">
-    <button class="btn-secondary" onclick={checkForUpdates} disabled={checkingUpdate}>
-      {checkingUpdate ? "Checking…" : "Check for updates"}
+    <button class="btn-secondary" onclick={handleUpdateClick} disabled={updateBusy}>
+      {#if updateBusy}
+        {$updateAvailable ? "Installing…" : "Checking…"}
+      {:else}
+        {$updateAvailable ? "Install update" : "Check for updates"}
+      {/if}
     </button>
     {#if updateCheckResult}
       <span class="update-status">{updateCheckResult}</span>
+    {/if}
+    {#if installError}
+      <span class="autostart-error">{installError}</span>
     {/if}
   </div>
 
