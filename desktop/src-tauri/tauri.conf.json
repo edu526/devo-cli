@@ -13,6 +13,9 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
+    "category": "DeveloperTool",
+    "shortDescription": "Secure AWS bastion tunnels, database connections, and SSO profile management",
+    "longDescription": "Devo is a desktop companion for the devo CLI. It manages secure SSM port-forwarding tunnels to private databases through AWS bastion hosts, keeps AWS SSO profiles authenticated, and gives you a GUI over EC2 instances, database connections, and /etc/hosts entries used for tunneling.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -22,6 +25,9 @@
     ],
     "externalBin": ["binaries/devo-sidecar"],
     "linux": {
+      "deb": {
+        "section": "net"
+      },
       "appimage": {
         "bundleMediaFramework": false
       }

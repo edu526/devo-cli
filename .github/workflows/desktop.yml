@@ -170,7 +170,7 @@ jobs:
           - os: ubuntu-22.04
             platform: linux
             arch: x86_64
-            tauri_targets: appimage
+            tauri_targets: appimage,deb
             rust_target: x86_64-unknown-linux-gnu
             updater_target: linux-x86_64
           - os: macos-14
@@ -320,12 +320,14 @@ jobs:
           includeUpdaterJson: true
 
       # ── Artifacts ────────────────────────────────────────────────────────────
-      - name: Upload Linux AppImage
+      - name: Upload Linux bundles
         if: matrix.platform == 'linux'
         uses: actions/upload-artifact@v4
         with:
           name: devo-desktop-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.sha }}
-          path: desktop/src-tauri/target/${{ matrix.rust_target }}/release/bundle/appimage/*.AppImage
+          path: |
+            desktop/src-tauri/target/${{ matrix.rust_target }}/release/bundle/appimage/*.AppImage
+            desktop/src-tauri/target/${{ matrix.rust_target }}/release/bundle/deb/*.deb
           if-no-files-found: error
 
       - name: Upload macOS bundle
