@@ -56,7 +56,21 @@ pub async fn fetch_update(
     app: AppHandle,
     pending_update: State<'_, PendingUpdate>,
 ) -> Result<Option<UpdateMetadata>> {
-    let update = app.updater()?.check().await?;
+    // On Windows, `download_and_install` hands off to the NSIS installer via
+    // `ShellExecuteW` and then calls `std::process::exit(0)` directly — it
+    // never goes through Tauri's `RunEvent::Exit`. Without this hook the
+    // sidecar child process outlives the app, keeps `devo-sidecar.exe` open,
+    // and the installer fails with "Error opening file for writing".
+    let app_for_hook = app.clone();
+    let update = app
+        .updater_builder()
+        .on_before_exit(move || {
+            app_for_hook.cleanup_before_exit();
+            crate::kill_orphaned_sidecars();
+        })
+        .build()?
+        .check()
+        .await?;
 
     let update_metadata = update.as_ref().map(|update| UpdateMetadata {
         version: update.version.clone(),

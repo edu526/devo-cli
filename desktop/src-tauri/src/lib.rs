@@ -95,17 +95,30 @@ fn run_elevated(args: Vec<String>) -> Result<u32, String> {
     }
 }
 
-async fn setup_sidecar(app: AppHandle, launched_via_autostart: bool) {
-    // Kill any orphaned sidecars from previous crashes before spawning a new one
+/// Force-kills any devo-sidecar process by name. Used both to clean up
+/// orphans from a previous crash before spawning a new sidecar, and to make
+/// sure the sidecar doesn't outlive the app on exit — otherwise the running
+/// `devo-sidecar.exe` stays locked and an installer upgrading the app fails
+/// with "Error opening file for writing" on Windows.
+pub(crate) fn kill_orphaned_sidecars() {
+    // `taskkill /IM` does NOT support partial wildcards like "devo-sidecar*.exe"
+    // — Windows only treats a bare "*" as "match everything". A pattern like
+    // that silently fails to match anything ("ERROR: no se encontró el
+    // proceso"), so this must be the exact image name.
     #[cfg(windows)]
     let _ = std::process::Command::new("taskkill")
-        .args(["/F", "/IM", "devo-sidecar*.exe", "/T"])
+        .args(["/F", "/IM", "devo-sidecar.exe", "/T"])
         .output();
 
     #[cfg(not(windows))]
     let _ = std::process::Command::new("pkill")
         .args(["-f", "devo-sidecar"])
         .output();
+}
+
+async fn setup_sidecar(app: AppHandle, launched_via_autostart: bool) {
+    // Kill any orphaned sidecars from previous crashes before spawning a new one
+    kill_orphaned_sidecars();
 
     match sidecar::spawn_and_wait(&app).await {
         Ok(info) => {
@@ -163,6 +176,15 @@ pub fn run() {
             tray::hide_to_tray,
             run_elevated
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Devo");
+        .build(tauri::generate_context!())
+        .expect("error while building Devo")
+        .run(|_app_handle, event| {
+            // Fires on every exit path (tray Quit, OS shutdown, restart
+            // after an update) — make sure the sidecar process is dead
+            // before the app process itself goes away, since it's a
+            // separate OS process that Windows won't clean up on its own.
+            if let tauri::RunEvent::Exit = event {
+                kill_orphaned_sidecars();
+            }
+        });
 }
