@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.14.1 (2026-09-17)
+
+### Bug Fixes
+
+- **release**: Stop non-functional file changes from bumping the CLI version
+  ([`e8b8da0`](https://github.com/edu526/devo-cli/commit/e8b8da05e186bf679762c637a452c4fbd4e84b96))
+
+
 ## v3.14.0 (2026-09-15)
 
 ### Bug Fixes
