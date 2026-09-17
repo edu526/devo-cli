@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 _WARN_SECONDS = 5 * 60  # emit once when crossing below 5 minutes
 _POLL_INTERVAL = 30  # seconds between polls
+_DEFAULT_SYNC_INTERVAL_SECONDS = 10 * 60  # resync [default] on this cadence
 # ponytail: 8 workers caps concurrency for aws configure export-credentials subprocess calls
 _MAX_WORKERS = 8
 
@@ -406,22 +407,35 @@ def start_discover(hub: EventHub, session_name: str) -> None:
 async def watch_profiles(hub: EventHub) -> None:
     """Background asyncio task: poll expirations and emit profile.expiring events."""
     warned: set[str] = set()
+    last_default_sync: dict[str, datetime] = {}
     while True:
         await asyncio.sleep(_POLL_INTERVAL)
-        _tick(hub, warned)
+        last_default_sync = _tick(hub, warned, last_default_sync)
 
 
-def _tick(hub: EventHub, warned: set[str]) -> None:
-    """Single iteration of the watch loop. Exposed for unit tests."""
+def _tick(
+    hub: EventHub,
+    warned: set[str],
+    last_default_sync: dict[str, datetime] | None = None,
+) -> dict[str, datetime]:
+    """Single iteration of the watch loop. Exposed for unit tests.
+
+    `last_default_sync` records when [default] was last resynced, per
+    profile name — see the comment below for why a low-seconds signal
+    alone can't drive that resync.
+    """
     from cli_tool.commands.aws_login.core.credentials import write_default_credentials
+
+    last_default_sync = dict(last_default_sync or {})
 
     try:
         profiles = get_profiles_info()
     except Exception:
-        return
+        return last_default_sync
 
     # Group profiles by SSO session to emit one notification per session
     sso_sessions: dict[str, dict] = {}  # session_name -> {sso_secs, profile_names}
+    now = datetime.now(timezone.utc)
 
     for p in profiles:
         name = p["name"]
@@ -430,15 +444,28 @@ def _tick(hub: EventHub, warned: set[str]) -> None:
         sso_secs = sso_info.get("seconds_remaining")
         sso_session = p.get("sso_session") or name  # fallback to profile name for legacy
 
-        # 1. Check STS Auto-Refresh for Default Profile
-        is_default = p.get("is_default")
-        if is_default and sts_secs is not None and sso_secs is not None:
-            if sts_secs <= _WARN_SECONDS and sso_secs > _WARN_SECONDS:
-                logger.info("Auto-refreshing default credentials for '%s' (STS: %ss left)", name, sts_secs)
+        # 1. Keep [default] credentials in ~/.aws/credentials resynced.
+        # `sts_secs` comes from `export-credentials`, which makes botocore
+        # silently refresh the role credentials well before they actually
+        # expire — so polling the profile is itself what keeps `sts_secs`
+        # looking healthy, and it almost never drops into the warning
+        # window in practice. That silent refresh only updates botocore's
+        # own cache, never the static copy already written to [default],
+        # so waiting for a "dying" signal here leaves [default] to expire
+        # ungoverned. Resync on a fixed cadence instead, while still
+        # reacting immediately if `sts_secs` does report danger (e.g.
+        # right after the sidecar was closed/asleep for a while).
+        if p.get("is_default") and sso_secs is not None and sso_secs > _WARN_SECONDS:
+            last_sync = last_default_sync.get(name)
+            due = last_sync is None or (now - last_sync).total_seconds() >= _DEFAULT_SYNC_INTERVAL_SECONDS
+            dying = sts_secs is not None and sts_secs <= _WARN_SECONDS
+            if due or dying:
+                logger.info("Syncing default credentials for '%s'", name)
                 try:
                     write_default_credentials(name)
+                    last_default_sync[name] = now
                 except Exception as e:
-                    logger.error("Auto-refresh failed: %s", e)
+                    logger.error("Default credentials sync failed: %s", e)
 
         # 2. Accumulate SSO session info (one entry per unique session)
         if sso_secs is None:
@@ -461,3 +488,5 @@ def _tick(hub: EventHub, warned: set[str]) -> None:
             )
         elif sso_secs > _WARN_SECONDS and session_name in warned:
             warned.discard(session_name)
+
+    return last_default_sync

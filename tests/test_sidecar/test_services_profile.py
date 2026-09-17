@@ -290,3 +290,97 @@ class TestTick:
         profile_service._tick(hub, warned)
 
         write_mock.assert_called_once_with("dev")
+
+    def test_default_resync_fires_on_first_tick_even_when_sts_looks_healthy(self, mocker):
+        """`export-credentials` silently refreshes STS before it ever looks
+        "dying", so the resync must not depend on that signal — it should
+        fire on the very first tick (never synced before) regardless."""
+        mocker.patch(
+            "cli_tool.sidecar.services.profile_service.get_profiles_info",
+            return_value=[
+                {
+                    "name": "dev",
+                    "sso_session": "my-sso",
+                    "is_default": True,
+                    "seconds_remaining": 3600,  # STS looks perfectly healthy
+                    "sso_token": {"seconds_remaining": 7200},
+                }
+            ],
+        )
+        write_mock = mocker.patch("cli_tool.commands.aws_login.core.credentials.write_default_credentials")
+        hub = EventHub()
+        warned: set[str] = set()
+
+        result = profile_service._tick(hub, warned)
+
+        write_mock.assert_called_once_with("dev")
+        assert "dev" in result
+
+    def test_default_resync_skipped_within_interval(self, mocker):
+        mocker.patch(
+            "cli_tool.sidecar.services.profile_service.get_profiles_info",
+            return_value=[
+                {
+                    "name": "dev",
+                    "sso_session": "my-sso",
+                    "is_default": True,
+                    "seconds_remaining": 3600,
+                    "sso_token": {"seconds_remaining": 7200},
+                }
+            ],
+        )
+        write_mock = mocker.patch("cli_tool.commands.aws_login.core.credentials.write_default_credentials")
+        hub = EventHub()
+        warned: set[str] = set()
+        last_default_sync = {"dev": datetime.now(timezone.utc)}
+
+        result = profile_service._tick(hub, warned, last_default_sync)
+
+        write_mock.assert_not_called()
+        assert result["dev"] == last_default_sync["dev"]
+
+    def test_default_resync_fires_again_after_interval_elapses(self, mocker):
+        mocker.patch(
+            "cli_tool.sidecar.services.profile_service.get_profiles_info",
+            return_value=[
+                {
+                    "name": "dev",
+                    "sso_session": "my-sso",
+                    "is_default": True,
+                    "seconds_remaining": 3600,
+                    "sso_token": {"seconds_remaining": 7200},
+                }
+            ],
+        )
+        write_mock = mocker.patch("cli_tool.commands.aws_login.core.credentials.write_default_credentials")
+        hub = EventHub()
+        warned: set[str] = set()
+        stale_sync = datetime.now(timezone.utc) - timedelta(seconds=profile_service._DEFAULT_SYNC_INTERVAL_SECONDS + 1)
+
+        result = profile_service._tick(hub, warned, {"dev": stale_sync})
+
+        write_mock.assert_called_once_with("dev")
+        assert result["dev"] > stale_sync
+
+    def test_default_resync_skipped_when_sso_token_itself_is_expiring(self, mocker):
+        """If the underlying SSO token is also close to dying, don't bother
+        attempting a resync that would just fail — wait for a real login."""
+        mocker.patch(
+            "cli_tool.sidecar.services.profile_service.get_profiles_info",
+            return_value=[
+                {
+                    "name": "dev",
+                    "sso_session": "my-sso",
+                    "is_default": True,
+                    "seconds_remaining": 3600,
+                    "sso_token": {"seconds_remaining": 30},  # SSO itself is dying
+                }
+            ],
+        )
+        write_mock = mocker.patch("cli_tool.commands.aws_login.core.credentials.write_default_credentials")
+        hub = EventHub()
+        warned: set[str] = set()
+
+        profile_service._tick(hub, warned)
+
+        write_mock.assert_not_called()
