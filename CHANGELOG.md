@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v3.14.1 (2026-09-17)
+
+### Bug Fixes
+
+- **desktop**: Inherit the user's real PATH on macOS so the sidecar can find `aws`
+  ([`aff94d1`](https://github.com/edu526/devo-cli/commit/aff94d1184493ba6810c6e90191526b5c96e1a60))
+
+- **desktop**: Rename Linux binary to devo-desktop to stop colliding with the CLI's devo
+  ([`5bab763`](https://github.com/edu526/devo-cli/commit/5bab763f96d387851fabda7f3343a7408fad1067))
+
+
 ## v3.14.0 (2026-09-15)
 
 ### Bug Fixes
