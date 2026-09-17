@@ -76,33 +76,81 @@ async fn resolve_login_shell_path() -> Option<String> {
     }
 }
 
+/// Covers the two dominant `aws` CLI install methods on macOS (Homebrew and
+/// the official .pkg installer) unconditionally, so the fix doesn't depend
+/// entirely on login-shell resolution succeeding — that resolution turned
+/// out to silently produce no override for at least one real user, which
+/// left PATH untouched. This is the floor; `resolve_login_shell_path`
+/// layers on top of it for anything more exotic (pyenv, nvm, custom dirs).
 #[cfg(target_os = "macos")]
-fn merge_path_entries(current: &str, shell_path: &str) -> String {
+fn known_macos_path_dirs() -> Vec<String> {
+    let mut dirs = vec![
+        "/opt/homebrew/bin".to_string(),
+        "/opt/homebrew/sbin".to_string(),
+        "/usr/local/bin".to_string(),
+        "/usr/local/sbin".to_string(),
+    ];
+    if let Ok(home) = std::env::var("HOME") {
+        dirs.push(format!("{home}/.local/bin"));
+    }
+    dirs
+}
+
+#[cfg(target_os = "macos")]
+fn merge_path_entries(parts: &[&str]) -> String {
     let mut seen = std::collections::HashSet::new();
     let mut merged = Vec::new();
-    // Shell-resolved entries first so Homebrew/version-manager dirs take
-    // priority over whatever minimal PATH LaunchServices provided.
-    for entry in shell_path.split(':').chain(current.split(':')) {
-        if !entry.is_empty() && seen.insert(entry) {
-            merged.push(entry);
+    // Earlier parts win priority over later ones.
+    for part in parts {
+        for entry in part.split(':') {
+            if !entry.is_empty() && seen.insert(entry) {
+                merged.push(entry);
+            }
         }
     }
     merged.join(":")
 }
 
+/// Appends one line to sidecar.log in the same format the sidecar's own
+/// output uses, so the outcome of the PATH fix is visible in the Logs page
+/// without needing terminal access to the user's Mac.
+#[cfg(target_os = "macos")]
+fn append_log_line(log_path: &std::path::Path, msg: &str) {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_path) {
+        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+        let _ = writeln!(file, "{now} WARN [macos-path-fix] {msg}");
+    }
+}
+
 /// PATH override to apply to the spawned sidecar's environment, or empty
-/// if none is needed / resolution failed (falls back to the inherited PATH).
-async fn sidecar_env_overrides() -> Vec<(String, String)> {
+/// if none is needed (non-macOS, where LaunchServices doesn't truncate PATH).
+async fn sidecar_env_overrides(log_path: &std::path::Path) -> Vec<(String, String)> {
     #[cfg(target_os = "macos")]
     {
-        if let Some(shell_path) = resolve_login_shell_path().await {
-            let current = std::env::var("PATH").unwrap_or_default();
-            return vec![("PATH".to_string(), merge_path_entries(&current, &shell_path))];
-        }
-        Vec::new()
+        let current = std::env::var("PATH").unwrap_or_default();
+        let shell_path = resolve_login_shell_path().await;
+        let known = known_macos_path_dirs().join(":");
+
+        let note = match &shell_path {
+            Some(p) => format!(
+                "resolved login-shell PATH ({} entries); also adding known Homebrew/local-bin dirs",
+                p.split(':').filter(|s| !s.is_empty()).count()
+            ),
+            None => "login-shell PATH resolution failed or timed out; falling back to known Homebrew/local-bin dirs only".to_string(),
+        };
+        append_log_line(log_path, &note);
+
+        let merged = match &shell_path {
+            Some(p) => merge_path_entries(&[p.as_str(), known.as_str(), current.as_str()]),
+            None => merge_path_entries(&[known.as_str(), current.as_str()]),
+        };
+        vec![("PATH".to_string(), merged)]
     }
     #[cfg(not(target_os = "macos"))]
     {
+        let _ = log_path;
         Vec::new()
     }
 }
@@ -123,7 +171,7 @@ pub async fn spawn_and_wait(app: &AppHandle) -> Result<SidecarInfo, String> {
         }
     }
 
-    let env_overrides = sidecar_env_overrides().await;
+    let env_overrides = sidecar_env_overrides(&log_path).await;
 
     let (mut rx, child) = {
         #[cfg(debug_assertions)]
@@ -312,18 +360,26 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn merge_path_prioritizes_shell_entries_and_dedupes() {
-        let merged = merge_path_entries(
-            "/usr/bin:/bin:/opt/homebrew/bin",
+    fn merge_path_prioritizes_earlier_parts_and_dedupes() {
+        let merged = merge_path_entries(&[
             "/opt/homebrew/bin:/usr/local/bin:/usr/bin",
-        );
+            "/usr/bin:/bin:/opt/homebrew/bin",
+        ]);
         assert_eq!(merged, "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin");
     }
 
     #[cfg(target_os = "macos")]
     #[test]
     fn merge_path_ignores_empty_segments() {
-        let merged = merge_path_entries("/usr/bin::/bin", "/opt/homebrew/bin:");
+        let merged = merge_path_entries(&["/opt/homebrew/bin:", "/usr/bin::/bin"]);
         assert_eq!(merged, "/opt/homebrew/bin:/usr/bin:/bin");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn known_dirs_cover_homebrew_and_local_bin() {
+        let dirs = known_macos_path_dirs();
+        assert!(dirs.contains(&"/opt/homebrew/bin".to_string()));
+        assert!(dirs.contains(&"/usr/local/bin".to_string()));
     }
 }
