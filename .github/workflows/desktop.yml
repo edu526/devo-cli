@@ -320,6 +320,12 @@ jobs:
         with:
           projectPath: desktop
           args: --target ${{ matrix.rust_target }} --bundles ${{ matrix.tauri_targets }}
+          # GitHub's release-asset-upload endpoint is known to be flaky under
+          # load (transient 500s/timeouts — see tauri-apps/tauri-action#900
+          # and community reports of the same "Unicorn" 500 error). This is
+          # the action's own purpose-built retry for exactly that, covering
+          # both the build and the fetch/create-release/upload steps.
+          retryAttempts: 3
           tagName: app-v__VERSION__
           releaseName: "Devo Desktop v__VERSION__"
           releaseDraft: false
