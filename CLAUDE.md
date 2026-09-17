@@ -86,6 +86,7 @@ Tauri (Rust) — find_repo_root() walks up from binary to find venv/
 - **WS auth**: `websocket.close(code=4401)` must come *after* `websocket.accept()` — close codes are only valid post-handshake. App state accessed via `websocket.app.state.app_state`, not via `Request` injection.
 - **Sidecar repo root detection**: `find_repo_root()` in `sidecar.rs` walks up from the binary path looking for `venv/bin/python` — do NOT use `current_dir()` which is unreliable under `tauri dev`.
 - **Sidecar extras**: `fastapi`, `uvicorn`, `watchdog`, `websockets` are in the optional `[sidecar]` extras — install with `venv/bin/pip install -e ".[sidecar]"` before running dev.
+- **macOS PATH**: apps launched from Finder/Dock get LaunchServices' minimal PATH (no Homebrew, no shell rc PATH additions), which the sidecar inherits — so bare `subprocess.run(["aws", ...])` calls fail with `FileNotFoundError` even though `aws` is installed and profile listing (which reads `~/.aws/config` directly, no subprocess) works fine. Fixed in `sidecar.rs`'s `sidecar_env_overrides()`, which resolves the user's login-shell PATH (`$SHELL -ilc 'echo $PATH'`) and passes it as an env override to the spawned sidecar — macOS-only, no-op elsewhere.
 
 ### Sidecar binary for release
 

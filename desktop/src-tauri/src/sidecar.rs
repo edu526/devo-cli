@@ -30,6 +30,83 @@ fn parse_ready_line(line: &str) -> Option<SidecarInfo> {
     }
 }
 
+/// macOS apps launched from Finder/Dock/Spotlight (LaunchServices) get a
+/// minimal PATH (`/usr/bin:/bin:/usr/sbin:/sbin`) that skips Homebrew
+/// (`/opt/homebrew/bin`, `/usr/local/bin`) and anything a shell rc file
+/// puts on PATH (pyenv, nvm, asdf, ...). That PATH is inherited by the
+/// sidecar and every subprocess it spawns (`aws`, `session-manager-plugin`),
+/// so `aws sso login` etc. fail with FileNotFoundError even though the CLI
+/// is installed. Resolve the user's real PATH via their login shell and
+/// merge it in before spawning. No-op on Windows/Linux, where this doesn't
+/// happen.
+#[cfg(target_os = "macos")]
+async fn resolve_login_shell_path() -> Option<String> {
+    // Bracket the PATH with markers so noise from interactive-shell startup
+    // (MOTD, oh-my-zsh banners, nvm/asdf output) can't be mistaken for it.
+    const START: &str = "__DEVO_PATH_START__";
+    const END: &str = "__DEVO_PATH_END__";
+
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    let script = format!("echo \"{START}$PATH{END}\"");
+
+    // -i -l sources the same rc/profile files a real terminal would
+    // (.zprofile, .zshrc, ...), which is where Homebrew's `shellenv` and
+    // version-manager shims usually get added to PATH.
+    let output = timeout(
+        Duration::from_secs(5),
+        tokio::process::Command::new(&shell)
+            .args(["-ilc", script.as_str()])
+            .output(),
+    )
+    .await
+    .ok()?
+    .ok()?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let start = stdout.find(START)? + START.len();
+    let end = stdout.find(END)?;
+    if end <= start {
+        return None;
+    }
+    let path = stdout[start..end].trim();
+    if path.is_empty() {
+        None
+    } else {
+        Some(path.to_string())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn merge_path_entries(current: &str, shell_path: &str) -> String {
+    let mut seen = std::collections::HashSet::new();
+    let mut merged = Vec::new();
+    // Shell-resolved entries first so Homebrew/version-manager dirs take
+    // priority over whatever minimal PATH LaunchServices provided.
+    for entry in shell_path.split(':').chain(current.split(':')) {
+        if !entry.is_empty() && seen.insert(entry) {
+            merged.push(entry);
+        }
+    }
+    merged.join(":")
+}
+
+/// PATH override to apply to the spawned sidecar's environment, or empty
+/// if none is needed / resolution failed (falls back to the inherited PATH).
+async fn sidecar_env_overrides() -> Vec<(String, String)> {
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(shell_path) = resolve_login_shell_path().await {
+            let current = std::env::var("PATH").unwrap_or_default();
+            return vec![("PATH".to_string(), merge_path_entries(&current, &shell_path))];
+        }
+        Vec::new()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Vec::new()
+    }
+}
+
 pub async fn spawn_and_wait(app: &AppHandle) -> Result<SidecarInfo, String> {
     use tauri::Manager;
 
@@ -46,6 +123,8 @@ pub async fn spawn_and_wait(app: &AppHandle) -> Result<SidecarInfo, String> {
         }
     }
 
+    let env_overrides = sidecar_env_overrides().await;
+
     let (mut rx, child) = {
         #[cfg(debug_assertions)]
         {
@@ -56,6 +135,7 @@ pub async fn spawn_and_wait(app: &AppHandle) -> Result<SidecarInfo, String> {
                 .sidecar("devo-sidecar")
                 .map_err(|e| format!("sidecar placeholder not found: {e}"))?
                 .args(["--port", "0", "--log-level", "info"])
+                .envs(env_overrides)
                 .spawn()
                 .map_err(|e| format!("failed to spawn sidecar: {e}"))?
         }
@@ -66,6 +146,7 @@ pub async fn spawn_and_wait(app: &AppHandle) -> Result<SidecarInfo, String> {
                 .sidecar("devo-sidecar")
                 .map_err(|e| format!("sidecar not found: {e}"))?
                 .args(["--port", "0"])
+                .envs(env_overrides)
                 .spawn()
                 .map_err(|e| format!("failed to spawn sidecar: {e}"))?
         }
@@ -227,5 +308,22 @@ mod tests {
     #[test]
     fn parse_missing_port_returns_none() {
         assert!(parse_ready_line("DEVO_SIDECAR_READY token=abc").is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn merge_path_prioritizes_shell_entries_and_dedupes() {
+        let merged = merge_path_entries(
+            "/usr/bin:/bin:/opt/homebrew/bin",
+            "/opt/homebrew/bin:/usr/local/bin:/usr/bin",
+        );
+        assert_eq!(merged, "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn merge_path_ignores_empty_segments() {
+        let merged = merge_path_entries("/usr/bin::/bin", "/opt/homebrew/bin:");
+        assert_eq!(merged, "/opt/homebrew/bin:/usr/bin:/bin");
     }
 }
