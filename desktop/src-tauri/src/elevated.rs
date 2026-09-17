@@ -20,7 +20,7 @@ const HELPER_EXE: &str = "devo-elevate.exe";
 
 #[derive(Debug, Error)]
 pub enum ElevationError {
-    #[error("could not locate {HELPER_EXE} next to devo.exe")]
+    #[error("could not locate {HELPER_EXE} next to the main app binary")]
     HelperNotFound,
     #[error("ShellExecuteEx failed: {0}")]
     ShellExecute(String),
@@ -35,7 +35,7 @@ fn wide(s: &str) -> Vec<u16> {
 }
 
 fn find_helper() -> Option<PathBuf> {
-    // Same dir as the main devo.exe (workspace shares target/).
+    // Same dir as the main app binary (workspace shares target/).
     let exe = std::env::current_exe().ok()?;
     let dir = exe.parent()?;
     let candidate = dir.join(HELPER_EXE);

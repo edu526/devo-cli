@@ -4,11 +4,16 @@
 
 [![GitHub release](https://img.shields.io/github/v/release/edu526/devo-cli)](https://github.com/edu526/devo-cli/releases/latest) [![Downloads](https://img.shields.io/github/downloads/edu526/devo-cli/total)](https://github.com/edu526/devo-cli/releases) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Python Version](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/) [![Release](https://github.com/edu526/devo-cli/actions/workflows/release.yml/badge.svg)](https://github.com/edu526/devo-cli/releases) [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=edu526_devo-cli&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=edu526_devo-cli) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=edu526_devo-cli&metric=coverage)](https://sonarcloud.io/summary/new_code?id=edu526_devo-cli)
 
+**Devo** streamlines everyday AWS work for engineering teams — SSM tunnels
+to private databases, SSO profile refresh, DynamoDB exports, and
+AI-assisted git workflows. Use it as a **CLI** in your terminal or as a
+**desktop app** with a GUI; both share the same Python backend.
+
 </div>
 
 ---
 
-## Install
+## Install the CLI
 
 **Linux / macOS**
 ```bash
@@ -19,6 +24,8 @@ curl -fsSL https://devo.heyedu.dev/install.sh | bash
 ```powershell
 irm https://devo.heyedu.dev/install.ps1 | iex
 ```
+
+Prefer a GUI? Jump to [Devo Desktop](#devo-desktop).
 
 ## What it does
 
@@ -42,9 +49,14 @@ terminal.
 
 | Platform | Bundle | Notes |
 |---|---|---|
-| Linux | `.AppImage` | x86_64, WebKitGTK 4.1 + glibc 2.31+ |
+| Linux | `.AppImage` or `.deb` | x86_64, WebKitGTK 4.1 + glibc 2.31+ |
 | macOS | `.dmg` (aarch64 + x86_64) | Apple Silicon + Intel |
 | Windows | `.msi` + NSIS `.exe` | x86_64, WebView2 runtime required |
+
+> Builds aren't code-signed/notarized yet (no Apple/Microsoft developer
+> license), so macOS shows a Gatekeeper warning and Windows shows a
+> SmartScreen warning on first launch — see the install guide below for
+> the one-time workaround.
 
 See the user guide for install + auto-update details:
 [`docs/guides/desktop-installation.md`](docs/guides/desktop-installation.md)
