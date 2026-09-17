@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.14.2 (2026-09-17)
+
+### Bug Fixes
+
+- **desktop**: Harden macOS PATH fix with a static fallback + on-device logging
+  ([`dae28dc`](https://github.com/edu526/devo-cli/commit/dae28dcbcd0592aae9a53633f31be99785a061e4))
+
+
 ## v3.14.1 (2026-09-17)
 
 ### Bug Fixes
