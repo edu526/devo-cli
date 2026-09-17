@@ -138,6 +138,8 @@ Handled automatically by **python-semantic-release** — never create tags manua
 
 Releases trigger automatically on push to `main`. Tag format: `v1.2.3`.
 
+**Changes to the release tooling itself** (e.g. `pyproject.toml`'s `[tool.semantic_release]` section, `release.yml`, `desktop.yml`) are `chore:`, not `fix:` — even when they fix a real bug in how releases get triggered. `chore` never bumps the version regardless of which files it touches (only `feat`/`fix`/`perf` do), so typing it correctly is what keeps it out of the CLI's version history — not `path_filters`. `path_filters` only helps when the change is scoped to an already-excluded path (`desktop/`, `docs/`, etc.); it can't tell "this edit only touched the semantic-release config" from "this edit touched the `[project]` dependencies" within the *same* file (`pyproject.toml`), since matching is per-file, not per-section. A `v3.14.1` shipped for exactly this reason once — a `pyproject.toml`-only release-tooling fix mistyped as `fix:`.
+
 ## Pre-commit Hooks
 
 Install with: `pre-commit install && pre-commit install --hook-type pre-push`
