@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.14.2 (2026-10-02)
+
+### Bug Fixes
+
+- **desktop**: Make Windows hosts elevation work in installed builds
+  ([`1760afa`](https://github.com/edu526/devo-cli/commit/1760afabbfd56cb3e7965a98baa9f569d7806093))
+
+
 ## v3.14.1 (2026-09-17)
 
 ### Bug Fixes
