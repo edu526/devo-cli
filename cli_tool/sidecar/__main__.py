@@ -12,10 +12,16 @@ try:
 except Exception:
     pass
 
+from cli_tool.sidecar import hosts_cli
 from cli_tool.sidecar.bootstrap import run
 
 if __name__ == "__main__":
     import argparse
+
+    # Elevated hosts-file writes re-invoke this binary as
+    # `devo-sidecar -m cli_tool.cli ssm hosts ...` (see hosts_cli).
+    if hosts_cli.is_cli_invocation(sys.argv[1:]):
+        hosts_cli.run(sys.argv[1:])
 
     parser = argparse.ArgumentParser(description="Devo sidecar server")
     parser.add_argument("--port", type=int, default=0)

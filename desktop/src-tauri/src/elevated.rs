@@ -1,10 +1,10 @@
-// ponytail: launches devo-elevate.exe (a tiny helper in the workspace) with
-// ShellExecuteExW + lpVerb="runas". The helper has an embedded manifest
-// (assemblyIdentity name="Devo" + requireAdministrator) so the UAC prompt
-// says "Devo" instead of "cmd.exe", and the process auto-elevates. The
-// helper then runs the .venv devo CLI as a child (inherits the admin
-// token) and we wait on the process handle for the exit code.
-// Linux/macOS keep the existing sidecar sudo flow.
+// ponytail: runs `args` elevated via ShellExecuteExW + lpVerb="runas" and
+// waits on the process handle for the exit code. When devo-elevate.exe (a
+// tiny helper in the workspace) sits next to the app binary we launch it
+// instead and it runs `args` as a child — its embedded manifest
+// (assemblyIdentity name="Devo") makes the UAC prompt say "Devo". The
+// helper is not bundled in installed builds, so there we elevate `args[0]`
+// directly. Linux/macOS keep the existing sidecar sudo flow.
 #![cfg(windows)]
 
 use std::path::PathBuf;
@@ -20,8 +20,8 @@ const HELPER_EXE: &str = "devo-elevate.exe";
 
 #[derive(Debug, Error)]
 pub enum ElevationError {
-    #[error("could not locate {HELPER_EXE} next to the main app binary")]
-    HelperNotFound,
+    #[error("no command given to elevate")]
+    EmptyCommand,
     #[error("ShellExecuteEx failed: {0}")]
     ShellExecute(String),
     #[error("timed out waiting for elevated command after {0:?}")]
@@ -46,14 +46,51 @@ fn find_helper() -> Option<PathBuf> {
     }
 }
 
+/// Quotes one argument per the CommandLineToArgvW rules, so paths with
+/// spaces (e.g. under `C:\Users\First Last`) survive as one argv entry.
+fn quote_arg(arg: &str) -> String {
+    if !arg.is_empty() && !arg.contains([' ', '\t', '\n', '"']) {
+        return arg.to_string();
+    }
+    let mut out = String::from('"');
+    let mut backslashes = 0;
+    for c in arg.chars() {
+        match c {
+            '\\' => backslashes += 1,
+            '"' => {
+                out.push_str(&"\\".repeat(backslashes * 2 + 1));
+                out.push('"');
+                backslashes = 0;
+            }
+            _ => {
+                out.push_str(&"\\".repeat(backslashes));
+                out.push(c);
+                backslashes = 0;
+            }
+        }
+    }
+    out.push_str(&"\\".repeat(backslashes * 2));
+    out.push('"');
+    out
+}
+
+fn join_args(args: &[String]) -> String {
+    args.iter().map(|a| quote_arg(a)).collect::<Vec<_>>().join(" ")
+}
+
 pub fn run_elevated(args: &[String]) -> Result<u32, ElevationError> {
-    let helper = find_helper().ok_or(ElevationError::HelperNotFound)?;
-    // lpParameters is the args string for the helper. The helper receives
-    // them as argv (skipping its own path) and forwards to devo.exe.
-    let params = args.join(" ");
+    if args.is_empty() {
+        return Err(ElevationError::EmptyCommand);
+    }
+    // The helper receives the whole command as argv and spawns it; without
+    // the helper, elevate the command's own executable.
+    let (program, params) = match find_helper() {
+        Some(helper) => (helper.to_string_lossy().into_owned(), join_args(args)),
+        None => (args[0].clone(), join_args(&args[1..])),
+    };
 
     let verb = wide("runas");
-    let file = wide(&helper.to_string_lossy());
+    let file = wide(&program);
     let params_w = wide(&params);
 
     let mut info = SHELLEXECUTEINFOW {
@@ -102,5 +139,23 @@ mod tests {
     #[test]
     fn helper_exe_name() {
         assert_eq!(HELPER_EXE, "devo-elevate.exe");
+    }
+
+    #[test]
+    fn quote_arg_leaves_plain_args_alone() {
+        assert_eq!(quote_arg("ssm"), "ssm");
+        assert_eq!(quote_arg(r"C:\Users\edu\devo.exe"), r"C:\Users\edu\devo.exe");
+    }
+
+    #[test]
+    fn quote_arg_wraps_spaces_and_empty() {
+        assert_eq!(quote_arg(r"C:\First Last\a.exe"), r#""C:\First Last\a.exe""#);
+        assert_eq!(quote_arg(""), r#""""#);
+    }
+
+    #[test]
+    fn quote_arg_escapes_quotes_and_trailing_backslashes() {
+        assert_eq!(quote_arg(r#"a"b"#), r#""a\"b""#);
+        assert_eq!(quote_arg(r"C:\dir x\"), r#""C:\dir x\\""#);
     }
 }

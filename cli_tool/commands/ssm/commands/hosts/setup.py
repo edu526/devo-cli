@@ -31,8 +31,9 @@ def setup_databases(db_names: Optional[list[str]] = None) -> tuple[list[str], li
 
 
 @click.command()
-def hosts_setup():
-    """Setup /etc/hosts entries for all configured databases"""
+@click.argument("db_names", nargs=-1)
+def hosts_setup(db_names):
+    """Setup /etc/hosts entries for configured databases (all, or only DB_NAMES)"""
     config_manager = SSMConfigManager()
     databases = config_manager.list_databases()
 
@@ -42,7 +43,7 @@ def hosts_setup():
 
     console.print("[cyan]Setting up /etc/hosts entries...[/cyan]\n")
 
-    succeeded, failed = setup_databases()
+    succeeded, failed = setup_databases(list(db_names) or None)
 
     if failed and not succeeded:
         console.print("\n[red]Setup failed![/red]")

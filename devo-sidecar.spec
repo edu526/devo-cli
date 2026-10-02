@@ -13,6 +13,7 @@ hidden_imports = [
     "cli_tool.sidecar.app",
     "cli_tool.sidecar.bootstrap",
     "cli_tool.sidecar.deps",
+    "cli_tool.sidecar.hosts_cli",
     "cli_tool.sidecar.state",
     "cli_tool.sidecar.routers",
     "cli_tool.sidecar.routers.config",
@@ -36,6 +37,7 @@ hidden_imports = [
     "cli_tool.commands.ssm.core.hosts_setup",
     "cli_tool.commands.ssm.utils",
     "cli_tool.commands.ssm.utils.hosts_manager",
+    "cli_tool.commands.ssm.commands.hosts",
     # AWS login (profile listing + credential verification)
     "cli_tool.commands.aws_login",
     "cli_tool.commands.aws_login.core",
