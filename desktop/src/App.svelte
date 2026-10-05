@@ -2,6 +2,7 @@
   import { onMount, onDestroy, type Component } from "svelte";
   import {
     initApi,
+    startTokenKeepAlive,
     bootApi,
     type BootStatus,
     profilesApi,
@@ -198,6 +199,7 @@
     const info = boot.sidecar_info;
     sidecar.set(info);
     await initApi();
+    stopTokenKeepAlive = startTokenKeepAlive();
     ws.connect(info.port);
     appStatus.set("ready");
 
@@ -238,7 +240,10 @@
       .catch(() => {});
   });
 
+  let stopTokenKeepAlive: (() => void) | null = null;
+
   onDestroy(() => {
+    stopTokenKeepAlive?.();
     window.removeEventListener("keydown", handleKeydown, true);
     window.removeEventListener("keydown", handleGlobalShortcut, true);
     window.removeEventListener("keydown", blockBrowserShortcuts, true);

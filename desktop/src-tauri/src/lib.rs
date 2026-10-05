@@ -37,6 +37,26 @@ async fn get_sidecar_info(state: State<'_, SidecarState>) -> Result<SidecarInfo,
         .ok_or_else(|| "sidecar not ready yet".to_string())
 }
 
+/// Called by the frontend after every successful `/auth/refresh`. The sidecar
+/// rotates its bearer token, but the copy held here is the one issued at boot;
+/// if the webview is ever reloaded or recreated (typical after hours idle),
+/// `get_sidecar_info` would hand back the stale token and every request —
+/// including the refresh itself — would 401 until the whole app is restarted.
+#[tauri::command]
+fn set_sidecar_token(
+    token: String,
+    sidecar: State<'_, SidecarState>,
+    boot: State<'_, BootState>,
+) -> Result<(), String> {
+    if let Some(info) = sidecar.0.lock().map_err(|e| e.to_string())?.as_mut() {
+        info.token = token.clone();
+    }
+    if let BootStatus::Ready { sidecar_info, .. } = &mut *boot.0.lock().map_err(|e| e.to_string())? {
+        sidecar_info.token = token;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn get_boot_status(state: State<'_, BootState>) -> BootStatus {
     state.0.lock().unwrap().clone()
@@ -151,6 +171,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_sidecar_info,
+            set_sidecar_token,
             get_boot_status,
             updater::fetch_update,
             updater::install_update,

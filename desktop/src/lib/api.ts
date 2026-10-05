@@ -158,6 +158,7 @@ export interface SsoLoginCompleted {
 let _baseUrl = "";
 let _token = "";
 let _refreshInFlight: Promise<string> | null = null;
+let _lastRefreshAt = 0;
 
 export class ApiError extends Error {
   constructor(
@@ -285,12 +286,45 @@ async function _refreshToken(): Promise<string> {
       }
       const body = (await res.json()) as RefreshResponse;
       _token = body.token;
+      _lastRefreshAt = Date.now();
+      // Keep the Tauri shell's copy in sync: after a webview reload,
+      // `get_sidecar_info` must return the *current* token, not the one
+      // issued at boot (which the sidecar already invalidated).
+      Promise.resolve(invoke("set_sidecar_token", { token: _token })).catch(() => {});
       return _token;
     } finally {
       _refreshInFlight = null;
     }
   })();
   return _refreshInFlight;
+}
+
+const KEEPALIVE_INTERVAL_MS = 60 * 60 * 1000;
+const KEEPALIVE_MIN_GAP_MS = 5 * 60 * 1000;
+
+/**
+ * Rotate the bearer token proactively so it never gets old while the app
+ * sits open (overnight, PC asleep, window hidden in the tray). Refreshes
+ * hourly and whenever the window becomes visible again. Returns a cleanup fn.
+ */
+export function startTokenKeepAlive(): () => void {
+  const tick = () => {
+    if (!_token) return;
+    _refreshToken().catch(() => {});
+  };
+  const onVisible = () => {
+    if (document.visibilityState === "visible" && Date.now() - _lastRefreshAt > KEEPALIVE_MIN_GAP_MS) {
+      tick();
+    }
+  };
+  const id = setInterval(tick, KEEPALIVE_INTERVAL_MS);
+  document.addEventListener("visibilitychange", onVisible);
+  window.addEventListener("focus", onVisible);
+  return () => {
+    clearInterval(id);
+    document.removeEventListener("visibilitychange", onVisible);
+    window.removeEventListener("focus", onVisible);
+  };
 }
 
 async function req<T>(

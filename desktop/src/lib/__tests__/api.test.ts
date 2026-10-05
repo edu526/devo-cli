@@ -5,6 +5,7 @@ import {
   getBaseUrl,
   getToken,
   getLastErrorDiagnostics,
+  startTokenKeepAlive,
   ApiError,
   connectionsApi,
   instancesApi,
@@ -150,6 +151,55 @@ describe("api", () => {
 
       await expect(connectionsApi.list()).rejects.toMatchObject({ status: 401 });
       expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it("syncs the rotated token back to the Tauri shell", async () => {
+      mockInvoke.mockResolvedValueOnce({ port: 1, token: "old-tok" });
+      await initApi();
+
+      vi.spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(new Response(null, { status: 401 }))
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ token: "synced-tok", expires_at: 0, issued_at: 0 }),
+            { status: 200 },
+          ),
+        )
+        .mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200 }));
+
+      await connectionsApi.list();
+
+      expect(mockInvoke).toHaveBeenCalledWith("set_sidecar_token", { token: "synced-tok" });
+    });
+
+  });
+
+  describe("startTokenKeepAlive", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("rotates the token on the hourly interval and stops on cleanup", async () => {
+      mockInvoke.mockResolvedValueOnce({ port: 1, token: "tok-0" });
+      await initApi();
+      vi.useFakeTimers();
+
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
+        async () =>
+          new Response(
+            JSON.stringify({ token: "tok-next", expires_at: 0, issued_at: 0 }),
+            { status: 200 },
+          ),
+      );
+
+      const stop = startTokenKeepAlive();
+      await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(String(fetchSpy.mock.calls[0]![0])).toContain("/auth/refresh");
+
+      stop();
+      await vi.advanceTimersByTimeAsync(2 * 60 * 60 * 1000);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
   });
 
