@@ -15,9 +15,10 @@ const TRAY_ID: &str = "devo-tray";
 
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
     let show_item = MenuItem::with_id(app, "show", "Show Devo", true, None::<&str>)?;
+    let restart_item = MenuItem::with_id(app, "restart", "Restart Devo", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show_item, &separator, &quit_item])?;
+    let menu = Menu::with_items(app, &[&show_item, &restart_item, &separator, &quit_item])?;
 
     match TrayIconBuilder::with_id(TRAY_ID)
         .tooltip("Devo Desktop")
@@ -27,6 +28,9 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => {
                 show_main_window(app);
+            }
+            "restart" => {
+                crate::restart_devo(app, true);
             }
             "quit" => {
                 app.exit(0);

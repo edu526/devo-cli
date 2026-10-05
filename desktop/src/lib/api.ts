@@ -299,6 +299,29 @@ async function _refreshToken(): Promise<string> {
   return _refreshInFlight;
 }
 
+// ── Auth lost ─────────────────────────────────────────────────────────────
+//
+// Fired when the sidecar rejected both the current token and the refresh
+// (token expired beyond the refresh window, or out of sync). The only way
+// out is a fresh sidecar, so the UI offers / performs an app restart.
+
+const _authLostHandlers = new Set<() => void>();
+
+export function onAuthLost(handler: () => void): () => void {
+  _authLostHandlers.add(handler);
+  return () => _authLostHandlers.delete(handler);
+}
+
+function _notifyAuthLost(): void {
+  _authLostHandlers.forEach((h) => {
+    try {
+      h();
+    } catch {
+      // a bad subscriber must not break the others
+    }
+  });
+}
+
 const KEEPALIVE_INTERVAL_MS = 60 * 60 * 1000;
 const KEEPALIVE_MIN_GAP_MS = 5 * 60 * 1000;
 
@@ -310,7 +333,9 @@ const KEEPALIVE_MIN_GAP_MS = 5 * 60 * 1000;
 export function startTokenKeepAlive(): () => void {
   const tick = () => {
     if (!_token) return;
-    _refreshToken().catch(() => {});
+    _refreshToken().catch((e) => {
+      if (e instanceof ApiError && e.status === 401) _notifyAuthLost();
+    });
   };
   const onVisible = () => {
     if (document.visibilityState === "visible" && Date.now() - _lastRefreshAt > KEEPALIVE_MIN_GAP_MS) {
@@ -372,8 +397,9 @@ async function req<T>(
     try {
       await _refreshToken();
       res = await send();
-    } catch {
+    } catch (e) {
       // refresh failed — fall through and let the original 401 surface
+      if (e instanceof ApiError && e.status === 401) _notifyAuthLost();
     }
   }
 

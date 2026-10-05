@@ -117,6 +117,37 @@ fn run_elevated(args: Vec<String>) -> Result<u32, String> {
     }
 }
 
+/// Relaunches the whole app: kills the sidecar, starts a fresh copy of this
+/// executable (which boots a new sidecar and a new bootstrap token) and exits.
+///
+/// `show_window` drops `--autostart` from the new process's arguments so the
+/// window is shown; pass `false` to keep it hidden in the tray (automatic
+/// recovery while the user isn't looking).
+///
+/// We don't use `AppHandle::restart()` because it replays the current
+/// arguments verbatim, and exits through `process::exit` before we could kill
+/// the sidecar. Exiting with `process::exit` (not `app.exit`) also avoids
+/// `RunEvent::Exit` running `kill_own_sidecar` after the new process is up.
+pub(crate) fn restart_devo(app: &AppHandle, show_window: bool) -> ! {
+    kill_own_sidecar();
+
+    if let Ok(exe) = std::env::current_exe() {
+        let args = std::env::args()
+            .skip(1)
+            .filter(|a| !(show_window && a == "--autostart"));
+        let _ = std::process::Command::new(exe).args(args).spawn();
+    }
+
+    app.cleanup_before_exit();
+    std::process::exit(0);
+}
+
+/// Frontend-facing restart, used by the "session expired" banner.
+#[tauri::command]
+fn restart_app(app: AppHandle, show_window: bool) -> Result<(), String> {
+    restart_devo(&app, show_window)
+}
+
 async fn setup_sidecar(app: AppHandle, launched_via_autostart: bool) {
     // Kill any orphaned sidecars from previous crashes before spawning a new one
     kill_orphaned_sidecars();
@@ -172,6 +203,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_sidecar_info,
             set_sidecar_token,
+            restart_app,
             get_boot_status,
             updater::fetch_update,
             updater::install_update,

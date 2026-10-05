@@ -5,6 +5,7 @@ import {
   getBaseUrl,
   getToken,
   getLastErrorDiagnostics,
+  onAuthLost,
   startTokenKeepAlive,
   ApiError,
   connectionsApi,
@@ -172,6 +173,39 @@ describe("api", () => {
       expect(mockInvoke).toHaveBeenCalledWith("set_sidecar_token", { token: "synced-tok" });
     });
 
+    it("notifies auth-lost subscribers when the refresh is rejected", async () => {
+      mockInvoke.mockResolvedValueOnce({ port: 1, token: "old-tok" });
+      await initApi();
+
+      vi.spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(new Response(null, { status: 401 }))
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ detail: "too old" }), { status: 401 }),
+        );
+
+      const lost = vi.fn();
+      const off = onAuthLost(lost);
+      await expect(connectionsApi.list()).rejects.toMatchObject({ status: 401 });
+      off();
+
+      expect(lost).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not notify auth-lost on a network error during refresh", async () => {
+      mockInvoke.mockResolvedValueOnce({ port: 1, token: "old-tok" });
+      await initApi();
+
+      vi.spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(new Response(null, { status: 401 }))
+        .mockRejectedValueOnce(new TypeError("Load failed"));
+
+      const lost = vi.fn();
+      const off = onAuthLost(lost);
+      await expect(connectionsApi.list()).rejects.toBeDefined();
+      off();
+
+      expect(lost).not.toHaveBeenCalled();
+    });
   });
 
   describe("startTokenKeepAlive", () => {
@@ -200,6 +234,25 @@ describe("api", () => {
       stop();
       await vi.advanceTimersByTimeAsync(2 * 60 * 60 * 1000);
       expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("reports auth-lost when the periodic refresh is rejected", async () => {
+      mockInvoke.mockResolvedValueOnce({ port: 1, token: "tok-0" });
+      await initApi();
+      vi.useFakeTimers();
+
+      vi.spyOn(globalThis, "fetch").mockImplementation(
+        async () => new Response(JSON.stringify({ detail: "too old" }), { status: 401 }),
+      );
+
+      const lost = vi.fn();
+      const off = onAuthLost(lost);
+      const stop = startTokenKeepAlive();
+      await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+      stop();
+      off();
+
+      expect(lost).toHaveBeenCalledTimes(1);
     });
   });
 

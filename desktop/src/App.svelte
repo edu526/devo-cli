@@ -3,6 +3,7 @@
   import {
     initApi,
     startTokenKeepAlive,
+    onAuthLost,
     bootApi,
     type BootStatus,
     profilesApi,
@@ -11,7 +12,8 @@
   } from "./lib/api";
   import { setAutostartEnabled } from "./lib/autostart";
   import { ws } from "./lib/ws";
-  import { sidecar, appStatus, appError, currentPage, type Page } from "./lib/stores";
+  import { sidecar, appStatus, appError, authLost, currentPage, type Page } from "./lib/stores";
+  import SessionExpiredBanner from "./lib/SessionExpiredBanner.svelte";
   import { profilesCache, registryCache, configCache } from "./lib/page-stores";
   import { logError } from "./lib/error-log";
   import { theme, applyTheme } from "./lib/theme";
@@ -200,6 +202,7 @@
     sidecar.set(info);
     await initApi();
     stopTokenKeepAlive = startTokenKeepAlive();
+    stopAuthLost = onAuthLost(() => authLost.set(true));
     ws.connect(info.port);
     appStatus.set("ready");
 
@@ -241,9 +244,11 @@
   });
 
   let stopTokenKeepAlive: (() => void) | null = null;
+  let stopAuthLost: (() => void) | null = null;
 
   onDestroy(() => {
     stopTokenKeepAlive?.();
+    stopAuthLost?.();
     window.removeEventListener("keydown", handleKeydown, true);
     window.removeEventListener("keydown", handleGlobalShortcut, true);
     window.removeEventListener("keydown", blockBrowserShortcuts, true);
@@ -257,6 +262,7 @@
 </script>
 
 <TitleBar />
+<SessionExpiredBanner />
 
 {#if $appStatus === "loading"}
   <div class="splash">
