@@ -200,6 +200,10 @@ pub async fn spawn_and_wait(app: &AppHandle) -> Result<SidecarInfo, String> {
         }
     };
 
+    // Remember our own sidecar's PID so exit/restart kills only this one,
+    // never another Devo instance's sidecar.
+    crate::register_sidecar_pid(child.pid());
+
     // Keep the child in an Option so we can guarantee it gets killed on
     // every error path below (timeout, sidecar error, terminated early,
     // stdout-closed-before-ready). Without this, a failing boot would

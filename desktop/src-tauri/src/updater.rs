@@ -66,7 +66,7 @@ pub async fn fetch_update(
         .updater_builder()
         .on_before_exit(move || {
             app_for_hook.cleanup_before_exit();
-            crate::kill_orphaned_sidecars();
+            crate::kill_own_sidecar();
         })
         .build()?
         .check()

@@ -2,10 +2,12 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 mod sidecar;
+mod sidecar_proc;
 mod tray;
 mod updater;
 
 use sidecar::SidecarInfo;
+pub(crate) use sidecar_proc::{kill_orphaned_sidecars, kill_own_sidecar, register_sidecar_pid};
 
 #[cfg(windows)]
 mod elevated;
@@ -95,38 +97,6 @@ fn run_elevated(args: Vec<String>) -> Result<u32, String> {
     }
 }
 
-/// Force-kills any devo-sidecar process by name. Used both to clean up
-/// orphans from a previous crash before spawning a new sidecar, and to make
-/// sure the sidecar doesn't outlive the app on exit — otherwise the running
-/// `devo-sidecar.exe` stays locked and an installer upgrading the app fails
-/// with "Error opening file for writing" on Windows.
-pub(crate) fn kill_orphaned_sidecars() {
-    // `taskkill /IM` does NOT support partial wildcards like "devo-sidecar*.exe"
-    // — Windows only treats a bare "*" as "match everything". A pattern like
-    // that silently fails to match anything ("ERROR: no se encontró el
-    // proceso"), so this must be the exact image name.
-    #[cfg(windows)]
-    {
-        // During an OS shutdown/restart the session is already tearing down
-        // and spawning taskkill.exe fails to load its DLLs (0xc0000142),
-        // which pops a modal error that blocks the shutdown. Windows kills
-        // every process of the session anyway, so there is nothing to do.
-        use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_SHUTTINGDOWN};
-        if unsafe { GetSystemMetrics(SM_SHUTTINGDOWN) } != 0 {
-            return;
-        }
-
-        let _ = std::process::Command::new("taskkill")
-            .args(["/F", "/IM", "devo-sidecar.exe", "/T"])
-            .output();
-    }
-
-    #[cfg(not(windows))]
-    let _ = std::process::Command::new("pkill")
-        .args(["-f", "devo-sidecar"])
-        .output();
-}
-
 async fn setup_sidecar(app: AppHandle, launched_via_autostart: bool) {
     // Kill any orphaned sidecars from previous crashes before spawning a new one
     kill_orphaned_sidecars();
@@ -195,7 +165,7 @@ pub fn run() {
             // before the app process itself goes away, since it's a
             // separate OS process that Windows won't clean up on its own.
             if let tauri::RunEvent::Exit = event {
-                kill_orphaned_sidecars();
+                kill_own_sidecar();
             }
         });
 }
