@@ -640,6 +640,15 @@ def test_get_default_config_values():
     assert config["version_check"]["enabled"] is True
 
 
+@pytest.mark.unit
+def test_get_default_config_renews_aws_sessions_automatically():
+    """The desktop app is meant to be hands-off: renewal is on by default."""
+    config = get_default_config()
+
+    assert config["aws_login"]["auto_renew"] is True
+    assert config["aws_login"]["set_env_profile"] is False
+
+
 # ============================================================================
 # Test edge cases and error handling
 # ============================================================================

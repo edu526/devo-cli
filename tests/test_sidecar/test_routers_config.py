@@ -114,3 +114,17 @@ class TestGetConfigSchema:
         data = response.json()
         assert data["title"] == "Devo Config"
         assert "properties" in data
+
+    def test_schema_describes_aws_login_options(self, mocker):
+        mocker.patch(
+            "cli_tool.sidecar.routers.config.get_default_config",
+            return_value={},
+        )
+        client, _ = _make_client()
+
+        data = client.get("/config/schema", headers=AUTH).json()
+
+        aws_login = data["properties"]["aws_login"]["properties"]
+        assert aws_login["auto_renew"] == {"type": "boolean"}
+        assert "refresh_on_launch" not in aws_login
+        assert "auto_login" not in aws_login

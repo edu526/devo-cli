@@ -47,7 +47,7 @@ def get_default_config():
         },
         "version_check": {"enabled": True},
         "telemetry": {"enabled": True},
-        "aws_login": {"set_env_profile": False},
+        "aws_login": {"set_env_profile": False, "auto_renew": True},
         "ssm": {"databases": {}, "instances": {}},
         "dynamodb": {"export_templates": {}},
         "onboarded": False,

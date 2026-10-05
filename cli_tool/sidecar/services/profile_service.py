@@ -6,20 +6,26 @@ import logging
 import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from cli_tool.commands.aws_login.core.config import (
     get_existing_sso_sessions,
     list_aws_profiles,
 )
-from cli_tool.commands.aws_login.core.credentials import get_profile_credentials_expiration
+from cli_tool.commands.aws_login.core.credentials import (
+    get_profile_credentials_expiration,
+    read_cached_credentials_expiration,
+)
 from cli_tool.sidecar.state import EventHub
 
 logger = logging.getLogger(__name__)
 
 _WARN_SECONDS = 5 * 60  # emit once when crossing below 5 minutes
 _POLL_INTERVAL = 30  # seconds between polls
+_FIRST_POLL_DELAY = 3  # first poll right after startup, so stale credentials are renewed at once
+_RENEW_BEFORE_SECONDS = 15 * 60  # renew credentials that expire within this window
+_RENEW_RETRY_COOLDOWN = 5 * 60  # don't retry a failed silent renewal sooner than this
 _DEFAULT_SYNC_INTERVAL_SECONDS = 10 * 60  # resync [default] on this cadence
 # ponytail: 8 workers caps concurrency for aws configure export-credentials subprocess calls
 _MAX_WORKERS = 8
@@ -27,7 +33,10 @@ _MAX_WORKERS = 8
 
 def _build_profile_info(name: str, src: str, default_name: str | None, now: datetime) -> dict[str, Any]:
     """Build the info dict for one profile. Shared by list and single-profile paths."""
-    expiration = get_profile_credentials_expiration(name)
+    # Fast path: the AWS CLI's own credential cache (a file read). Only when
+    # there is no cache entry do we fall back to spawning `aws`, which is ~2 s
+    # per profile but can also create the credentials.
+    expiration = read_cached_credentials_expiration(name) or get_profile_credentials_expiration(name)
     seconds_remaining = None
     status = "unknown"
     if expiration:
@@ -397,18 +406,134 @@ def start_discover(hub: EventHub, session_name: str) -> None:
 
 
 async def watch_profiles(hub: EventHub) -> None:
-    """Background asyncio task: poll expirations and emit profile.expiring events."""
+    """Background asyncio task: keep credentials fresh and emit profile events.
+
+    Each iteration runs in a worker thread: it can spend seconds on `aws`
+    subprocesses, and run inline it would freeze the whole sidecar (every API
+    request and WebSocket ping) for that long.
+    """
     warned: set[str] = set()
     last_default_sync: dict[str, datetime] = {}
+    renew_state: dict[str, Any] = {}
+    await asyncio.sleep(_FIRST_POLL_DELAY)
     while True:
+        try:
+            last_default_sync = await asyncio.to_thread(_tick, hub, warned, last_default_sync, renew_state)
+        except Exception:
+            logger.exception("profile watch iteration failed")
         await asyncio.sleep(_POLL_INTERVAL)
-        last_default_sync = _tick(hub, warned, last_default_sync)
+
+
+def _session_key(profile: dict[str, Any]) -> str:
+    return profile.get("sso_session") or profile["name"]
+
+
+def _needs_renewal(profile: dict[str, Any]) -> bool:
+    secs = profile.get("seconds_remaining")
+    return profile.get("status") in ("expired", "unknown") or (secs is not None and secs <= _RENEW_BEFORE_SECONDS)
+
+
+def _auto_renew(hub: EventHub, profiles: list[dict[str, Any]], state: dict[str, Any]) -> bool:
+    """Silently renew credentials that expired or are about to, without a browser.
+
+    This is what keeps the app hands-off: profiles are renewed in the
+    background for as long as Devo is open. Listing no longer renews them as a
+    side effect (it reads the AWS CLI cache), so it is done here explicitly.
+
+    When a whole SSO session can't be renewed silently, the shared login
+    handler opens the browser login for it (also with the window hidden). If
+    the handler holds the login back — a recent automatic login for that
+    session was not completed — a single `profile.needs_login` event is
+    published instead, so the UI can offer a "Log in" button. Failing profiles
+    are not retried silently for `_RENEW_RETRY_COOLDOWN` unless the session's
+    SSO token becomes valid again (the user logged in), and sessions with a
+    login in progress are skipped. Disable with `aws_login.auto_renew = false`.
+
+    `state` is the caller's memory between calls. Returns True when at least
+    one profile was renewed (the caller should re-read the profile info).
+    """
+    from cli_tool.core.utils.config_manager import get_config_value
+
+    if get_config_value("aws_login.auto_renew", True) is False:
+        return False
+
+    from cli_tool.commands.aws_login.commands.refresh import _silent_refresh_profiles
+    from cli_tool.sidecar.services import login_coordinator
+
+    now = datetime.now(timezone.utc)
+    retry_after: dict[str, datetime] = state.setdefault("retry_after", {})
+    notified: set[str] = state.setdefault("notified", set())
+
+    def blocked(p: dict[str, Any]) -> bool:
+        if login_coordinator.is_running(_session_key(p)):
+            return True  # a login is already getting this session back
+        until = retry_after.get(p["name"])
+        session_alive = (p.get("sso_token") or {}).get("status") == "valid"
+        return until is not None and until > now and not session_alive
+
+    recovered: set[str] = set()
+    for p in profiles:
+        if (p.get("sso_token") or {}).get("status") == "valid" and _session_key(p) in notified:
+            recovered.add(_session_key(p))
+
+    todo = [(p["name"], "stale") for p in profiles if _needs_renewal(p) and not blocked(p)]
+    renewed: list[str] = []
+    failing: list[tuple[str, str]] = []
+    by_name = {p["name"]: p for p in profiles}
+    if todo:
+        renewed, failing = _silent_refresh_profiles(todo)
+
+    renewed_sessions = {_session_key(by_name[n]) for n in renewed}
+    for name in renewed:
+        retry_after.pop(name, None)
+
+    # Sessions we had reported as needing a login that work again (renewed, or
+    # the user logged in): tell the UI so it can drop its "login required" notice.
+    recovered |= renewed_sessions & notified
+    if recovered:
+        notified.difference_update(recovered)
+        hub.publish("profile.login_resolved", {"sessions": sorted(recovered)})
+
+    if not todo:
+        return False
+
+    dead_sessions: dict[str, list[str]] = {}
+    for name, _reason in failing:
+        retry_after[name] = now + timedelta(seconds=_RENEW_RETRY_COOLDOWN)
+        key = _session_key(by_name[name])
+        # A session where something did renew is alive: that failure is about
+        # the profile itself, not something a login would fix.
+        if key not in renewed_sessions:
+            dead_sessions.setdefault(key, []).append(name)
+
+    held_back: dict[str, list[str]] = {}
+    for key, names in dead_sessions.items():
+        status, _attempt = login_coordinator.request_login(hub, profile=names[0], source="auto_renew", automatic=True, known_expired=True)
+        logger.info("auto-renew: session '%s' needs a login: %s", key, status)
+        if status == login_coordinator.SUPPRESSED and key not in notified:
+            held_back[key] = names
+        notified.add(key)
+
+    if held_back:
+        hub.publish(
+            "profile.needs_login",
+            {
+                "sessions": sorted(held_back),
+                "names": [n for names in held_back.values() for n in names],
+                "by_session": {session: names for session, names in sorted(held_back.items())},
+            },
+        )
+
+    if renewed:
+        logger.info("auto-renew: renewed %d profile(s)", len(renewed))
+    return bool(renewed)
 
 
 def _tick(
     hub: EventHub,
     warned: set[str],
     last_default_sync: dict[str, datetime] | None = None,
+    renew_state: dict[str, Any] | None = None,
 ) -> dict[str, datetime]:
     """Single iteration of the watch loop. Exposed for unit tests.
 
@@ -424,6 +549,12 @@ def _tick(
         profiles = get_profiles_info()
     except Exception:
         return last_default_sync
+
+    try:
+        if _auto_renew(hub, profiles, renew_state if renew_state is not None else {}):
+            profiles = get_profiles_info()
+    except Exception:
+        logger.exception("auto-renew failed")
 
     # Group profiles by SSO session to emit one notification per session
     sso_sessions: dict[str, dict] = {}  # session_name -> {sso_secs, profile_names}
