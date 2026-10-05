@@ -7,14 +7,32 @@ practices with appropriate scoping for test isolation.
 """
 
 import os
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import boto3
-import pytest
-from click.testing import CliRunner
-from moto import mock_aws
-from rich.console import Console
+# ============================================================================
+# Hard isolation: the whole test session runs with a throwaway home dir.
+# ============================================================================
+# Must happen before anything from cli_tool is imported: several modules
+# resolve ~/.devo paths at import time (sidecar.log, audit log, registry
+# tokens, ...), and a background thread that outlives its test can call
+# load_config() after the per-test monkeypatch below has been undone. Both
+# used to reach the developer's real ~/.devo — a test once overwrote a real
+# ~/.devo/config.json with defaults that way. With HOME/USERPROFILE pointing
+# at a temp dir, Path.home() can never resolve to the real one.
+_TEST_HOME = Path(tempfile.mkdtemp(prefix="devo-test-home-"))
+for _var in ("HOME", "USERPROFILE"):
+    os.environ[_var] = str(_TEST_HOME)
+os.environ.pop("HOMEDRIVE", None)
+os.environ.pop("HOMEPATH", None)
+assert Path.home() == _TEST_HOME, f"test home isolation failed: {Path.home()}"
+
+import boto3  # noqa: E402
+import pytest  # noqa: E402
+from click.testing import CliRunner  # noqa: E402
+from moto import mock_aws  # noqa: E402
+from rich.console import Console  # noqa: E402
 
 # Marker for the sidecar rate_limit module — swaps the slowapi Limiter
 # for an enabled=False shim that doesn't try to mutate the WSGI response

@@ -49,6 +49,21 @@ AUTH = {"Authorization": "Bearer test-token"}
 
 
 @pytest.fixture(autouse=True)
+def no_real_aws_renewal(mocker):
+    """The refresh handlers try a silent renewal first, which shells out to the
+    real `aws` CLI and kept their worker threads alive past the end of the test.
+    Pretend it always fails so they go straight to the (mocked) login path."""
+    mocker.patch(
+        "cli_tool.commands.aws_login.commands.refresh._silent_refresh_profiles",
+        side_effect=lambda profs: ([], list(profs)),
+    )
+    mocker.patch(
+        "cli_tool.sidecar.routers.profiles._renew_role_credentials",
+        side_effect=lambda names: list(names),
+    )
+
+
+@pytest.fixture(autouse=True)
 def fresh_refresh_all_lock(monkeypatch):
     """Tests that fake `threading.Thread` never run the worker that releases
     the in-flight lock; give every test its own."""
