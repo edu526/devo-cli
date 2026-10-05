@@ -106,9 +106,20 @@ pub(crate) fn kill_orphaned_sidecars() {
     // that silently fails to match anything ("ERROR: no se encontró el
     // proceso"), so this must be the exact image name.
     #[cfg(windows)]
-    let _ = std::process::Command::new("taskkill")
-        .args(["/F", "/IM", "devo-sidecar.exe", "/T"])
-        .output();
+    {
+        // During an OS shutdown/restart the session is already tearing down
+        // and spawning taskkill.exe fails to load its DLLs (0xc0000142),
+        // which pops a modal error that blocks the shutdown. Windows kills
+        // every process of the session anyway, so there is nothing to do.
+        use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_SHUTTINGDOWN};
+        if unsafe { GetSystemMetrics(SM_SHUTTINGDOWN) } != 0 {
+            return;
+        }
+
+        let _ = std::process::Command::new("taskkill")
+            .args(["/F", "/IM", "devo-sidecar.exe", "/T"])
+            .output();
+    }
 
     #[cfg(not(windows))]
     let _ = std::process::Command::new("pkill")
