@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v3.15.0 (2026-10-05)
+
+### Features
+
+- **desktop**: Keep AWS credentials renewed in the background
+  ([`775e8bf`](https://github.com/edu526/devo-cli/commit/775e8bf8bb0a2d65b7b6d869c1cf960ff60c68c2))
+
+- **desktop**: Only log in when needed on Refresh and Refresh All
+  ([`a4aa797`](https://github.com/edu526/devo-cli/commit/a4aa79757f40f8969c6aedeead6e2710d34abf6d))
+
+
 ## v3.14.2 (2026-10-02)
 
 ### Bug Fixes
