@@ -13,6 +13,7 @@
   } from "../lib/api";
   import { ws, type WsMessage } from "../lib/ws";
   import { profilesCache } from "../lib/page-stores";
+  import { anyNeedsRefresh } from "../lib/profile-staleness";
   import SearchInput from "../lib/SearchInput.svelte";
   import ViewToggle from "../lib/ViewToggle.svelte";
   import { viewModes } from "../lib/stores";
@@ -41,6 +42,17 @@
   let loading = $state(initialProfiles.length === 0);
   let bgRefreshing = $state(false); // silent background refresh indicator
   let refreshing = $state(false); // "Refresh All" / SSO refresh in progress
+  // Most refreshes now finish in milliseconds. Busy states are only *shown*
+  // after this delay, so fast ones don't flash a spinner (or a disabled button).
+  const BUSY_DISPLAY_DELAY_MS = 250;
+  let refreshingSlow = $state(false);
+  let slowBusy: Set<string> = $state(new Set());
+  // Brief "Up to date" confirmation shown inside the Refresh All button.
+  let upToDate = $state(false);
+  let upToDateTimer: ReturnType<typeof setTimeout> | null = null;
+  // Right-click menu offering a forced re-login: target is a profile name, or
+  // null for "all sessions".
+  let forceMenu: { x: number; y: number; target: string | null } | null = $state(null);
   let actionError: string | null = $state(null);
   let busySet: Set<string> = $state(new Set());
   let busyRefresh: Set<string> = $state(new Set());
@@ -327,11 +339,35 @@
     profilesCache.set(profiles);
   }
 
-  async function refreshAll() {
+  /**
+   * Normally only what needs it: expired or soon-to-expire profiles are renewed
+   * silently first, and the browser login runs only for SSO sessions that
+   * can't be renewed that way. `force` (Shift+click / right-click) logs in
+   * every session again and replaces the cached credentials, e.g. after a
+   * permission change.
+   */
+  async function refreshAll(force = false) {
+    if (anyBusyRefresh) return;
     refreshing = true;
+    refreshingSlow = false;
+    setTimeout(() => {
+      if (refreshing) refreshingSlow = true;
+    }, BUSY_DISPLAY_DELAY_MS);
     actionError = null;
     try {
-      await profilesApi.refreshAll();
+      if (!force) {
+        // The list is cheap to re-read; checking first means a click with
+        // nothing to do doesn't use up the endpoint's per-minute allowance.
+        const fresh = await profilesApi.list();
+        profiles = fresh;
+        profilesCache.set(fresh);
+        if (!anyNeedsRefresh(fresh)) {
+          refreshing = false;
+          flashUpToDate();
+          return;
+        }
+      }
+      await profilesApi.refreshAll(force, { allowBrowser: true });
       // Result arrives via WS profile.refreshed
     } catch (e) {
       actionError = e instanceof ApiError ? e.message : String(e);
@@ -339,11 +375,34 @@
     }
   }
 
-  async function refreshOne(name: string) {
+  function flashUpToDate() {
+    upToDate = true;
+    if (upToDateTimer !== null) clearTimeout(upToDateTimer);
+    upToDateTimer = setTimeout(() => (upToDate = false), 2500);
+  }
+
+  function openForceMenu(e: MouseEvent, target: string | null) {
+    e.preventDefault();
+    forceMenu = { x: e.clientX, y: e.clientY, target };
+  }
+
+  function runForce() {
+    const target = forceMenu?.target ?? null;
+    forceMenu = null;
+    if (target === null) refreshAll(true);
+    else refreshOne(target, true);
+  }
+
+  async function refreshOne(name: string, force = false) {
+    if (busyRefresh.has(name) || refreshing) return;
     actionError = null;
+    slowBusy = new Set([...slowBusy].filter((n) => n !== name));
     busyRefresh = new Set([...busyRefresh, name]);
+    setTimeout(() => {
+      if (busyRefresh.has(name)) slowBusy = new Set([...slowBusy, name]);
+    }, BUSY_DISPLAY_DELAY_MS);
     try {
-      await profilesApi.refresh(name);
+      await profilesApi.refresh(name, { force });
       // Actual result arrives via WS profile.refreshed / profile.refreshing
     } catch (e) {
       actionError = e instanceof ApiError ? e.message : String(e);
@@ -489,6 +548,9 @@
   }
 
   const anyBusyRefresh = $derived(busyRefresh.size > 0 || refreshing);
+  const showRefreshing = $derived(refreshing && refreshingSlow);
+  const showBusy = (name: string) => busyRefresh.has(name) && slowBusy.has(name);
+  const showAnyBusy = $derived(showRefreshing || [...busyRefresh].some((n) => slowBusy.has(n)));
 </script>
 
 <div class="page">
@@ -500,9 +562,18 @@
       <ViewToggle page="profiles" />
       <SearchInput bind:value={query} placeholder="Filter profiles…" />
       <div class="actions">
-        <button class="btn-secondary" disabled={anyBusyRefresh} onclick={refreshAll}>
-          {#if refreshing}<span class="spinner-sm"></span>{/if}
-          Refresh All
+        <button
+          class="btn-secondary"
+          disabled={showAnyBusy}
+          title="Renews only what needs it. Shift+click or right-click to force a new login."
+          onclick={(e) => refreshAll(e.shiftKey)}
+          oncontextmenu={(e) => openForceMenu(e, null)}
+        >
+          <span class="stable-label">
+            <span class:shown={!showRefreshing && !upToDate}>Refresh All</span>
+            <span class:shown={showRefreshing}><span class="spinner-sm"></span>Refreshing…</span>
+            <span class:shown={upToDate && !showRefreshing} role="status">✓ Up to date</span>
+          </span>
         </button>
         <button class="btn-primary" onclick={openCreate}>
           <span class="btn-glyph">+</span>
@@ -553,6 +624,24 @@
     </div>
   {/if}
 
+  {#if forceMenu}
+    <div
+      class="force-menu-backdrop"
+      role="presentation"
+      onclick={() => (forceMenu = null)}
+      oncontextmenu={(e) => {
+        e.preventDefault();
+        forceMenu = null;
+      }}
+    ></div>
+    <div class="force-menu" role="menu" style:left="{forceMenu.x}px" style:top="{forceMenu.y}px">
+      <button role="menuitem" onclick={runForce}>
+        Force re-login{forceMenu.target === null ? " (all sessions)" : ""}
+      </button>
+      <p>Logs in again and replaces cached credentials. Useful after a permission change.</p>
+    </div>
+  {/if}
+
   {#if loading}
     <p class="muted">Loading…</p>
   {:else if profiles.length === 0}
@@ -598,14 +687,16 @@
                   </button>
                   <button
                     class="btn-sm btn-primary"
-                    disabled={busyRefresh.has(p.name) || anyBusyRefresh}
-                    onclick={() => refreshOne(p.name)}
+                    disabled={showAnyBusy}
+                    title="Renews only if needed. Shift+click or right-click to force a new login."
+                    onclick={(e) => refreshOne(p.name, e.shiftKey)}
+                    oncontextmenu={(e) => openForceMenu(e, p.name)}
                   >
-                    {#if busyRefresh.has(p.name)}
-                      {ssoInProgress === p.name ? "Approving…" : "Refreshing…"}
-                    {:else}
-                      Refresh
-                    {/if}
+                    <span class="stable-label">
+                      <span class:shown={!showBusy(p.name)}>Refresh</span>
+                      <span class:shown={showBusy(p.name) && ssoInProgress !== p.name}>Refreshing…</span>
+                      <span class:shown={showBusy(p.name) && ssoInProgress === p.name}>Approving…</span>
+                    </span>
                   </button>
 
                   <button
@@ -680,16 +771,16 @@
               <button
                 class="action-icon"
                 aria-label="Refresh"
-                disabled={busyRefresh.has(p.name) || anyBusyRefresh}
-                onclick={() => refreshOne(p.name)}
+                disabled={showAnyBusy}
+                title="Renews only if needed. Shift+click or right-click to force a new login."
+                onclick={(e) => refreshOne(p.name, e.shiftKey)}
+                oncontextmenu={(e) => openForceMenu(e, p.name)}
               >
                 <span class="action-glyph"><RefreshCw size={14} /></span>
-                <span class="action-label">
-                  {#if busyRefresh.has(p.name)}
-                    {ssoInProgress === p.name ? "Approving…" : "Refreshing…"}
-                  {:else}
-                    Refresh
-                  {/if}
+                <span class="action-label stable-label">
+                  <span class:shown={!showBusy(p.name)}>Refresh</span>
+                  <span class:shown={showBusy(p.name) && ssoInProgress !== p.name}>Refreshing…</span>
+                  <span class:shown={showBusy(p.name) && ssoInProgress === p.name}>Approving…</span>
                 </span>
               </button>
 
@@ -1405,6 +1496,57 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+  }
+  /* Every label variant sits in the same grid cell, so the button is always
+     as wide as the longest one and switching state never moves the layout. */
+  .stable-label {
+    display: inline-grid;
+  }
+  .stable-label > span {
+    grid-area: 1 / 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    visibility: hidden;
+  }
+  .stable-label > span.shown {
+    visibility: visible;
+  }
+  .force-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+  }
+  .force-menu {
+    position: fixed;
+    z-index: 1000;
+    max-width: 260px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.35rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  }
+  .force-menu button {
+    width: 100%;
+    text-align: left;
+    padding: 0.4rem 0.6rem;
+    border: none;
+    border-radius: 5px;
+    background: none;
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .force-menu button:hover {
+    background: var(--bg-surface-2);
+  }
+  .force-menu p {
+    margin: 0.25rem 0.6rem 0.35rem;
+    color: var(--text-muted);
+    font-size: 0.75rem;
   }
   .dismiss {
     background: none;

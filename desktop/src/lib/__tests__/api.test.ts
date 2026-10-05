@@ -300,6 +300,30 @@ describe("api", () => {
       expect(fetchSpy.mock.calls[0]![0]).toContain("/profiles/dev:refresh");
     });
 
+    it("profilesApi.refreshAll keeps the legacy body unless a browser option is given", async () => {
+      const fetchSpy = vi.mocked(globalThis.fetch);
+      await profilesApi.refreshAll();
+      await profilesApi.refreshAll(false, { allowBrowser: false });
+      await profilesApi.refreshAll(false, { allowBrowser: true });
+
+      const bodies = fetchSpy.mock.calls.map((c) => JSON.parse(String(c[1]?.body)));
+      expect(bodies[0]).toEqual({ force: true });
+      expect(bodies[1]).toEqual({ force: false, allow_browser: false });
+      expect(bodies[2]).toEqual({ force: false, allow_browser: true });
+    });
+
+    it("profilesApi.refresh sends no body unless forced", async () => {
+      const fetchSpy = vi.mocked(globalThis.fetch);
+      await profilesApi.refresh("dev");
+      await profilesApi.refresh("dev", { force: false });
+      await profilesApi.refresh("dev", { force: true });
+
+      const bodies = fetchSpy.mock.calls.map((c) => c[1]?.body);
+      expect(bodies[0]).toBeUndefined();
+      expect(bodies[1]).toBeUndefined();
+      expect(JSON.parse(String(bodies[2]))).toEqual({ force: true });
+    });
+
     it("hostsApi.remove encodes hostname in path", async () => {
       const fetchSpy = vi.mocked(globalThis.fetch);
       await hostsApi.remove("db.example.com");

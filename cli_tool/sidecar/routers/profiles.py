@@ -150,12 +150,20 @@ def create_profile_endpoint(body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
-def _do_refresh_all(hub: EventHub, force: bool = False) -> None:
+def _do_refresh_all(hub: EventHub, force: bool = False, allow_browser: bool = True) -> None:
     """Synchronous body of the refresh_all background thread.
 
     When `force` is False (the default) only profiles that are expired
     or expiring are renewed — clicking "Refresh All" should refresh all
     profiles, so the desktop passes force=True by default.
+
+    Without `force`, each stale profile is first renewed silently (no
+    browser; works whenever the SSO session is still alive). Only the ones
+    that can't be renewed that way go through the `aws sso login` browser
+    flow. With `allow_browser=False` that last step is skipped and those
+    profiles are reported in the `needs_login` field of `profile.refreshed`
+    instead — used for unattended runs such as app launch. `force` always
+    runs the full login: it is an explicit request to re-authenticate.
 
     Imports are kept inside the function so the heavy `aws_login` module
     tree is not loaded on sidecar startup.
@@ -165,12 +173,16 @@ def _do_refresh_all(hub: EventHub, force: bool = False) -> None:
             _classify_profiles,
             _group_profiles_by_session,
             _refresh_all_sessions,
+            _silent_refresh_profiles,
         )
         from cli_tool.commands.aws_login.core.config import list_aws_profiles
 
         logger.info("Starting refresh_all (force=%s) — classifying profiles", force)
         profiles = list_aws_profiles()
-        to_refresh, valid = _classify_profiles(profiles)
+        # Decide from the AWS CLI's credential cache: spawning `aws` once per
+        # profile just to classify took ~2 s each, in series. Anything the
+        # cache can't vouch for goes through the silent renewal below.
+        to_refresh, valid = _classify_profiles(profiles, cached_only=True)
         if force:
             # Same semantics as `devo aws-login refresh --force`: move the
             # still-valid profiles onto the refresh list so the explicit
@@ -185,8 +197,24 @@ def _do_refresh_all(hub: EventHub, force: bool = False) -> None:
         logger.info("refresh_all: refreshing %d profile(s)", len(to_refresh))
         hub.publish("profile.refreshing", {"name": f"{len(to_refresh)} profile(s)"})
 
-        session_profiles = _group_profiles_by_session(to_refresh)
-        _, _, verified = _refresh_all_sessions(session_profiles)
+        verified: list[str] = []
+        if not force:
+            verified, to_refresh = _silent_refresh_profiles(to_refresh)
+            logger.info(
+                "refresh_all: %d renewed silently, %d need a login",
+                len(verified),
+                len(to_refresh),
+            )
+
+        needs_login: list[str] = []
+        if to_refresh and allow_browser:
+            session_profiles = _group_profiles_by_session(to_refresh)
+            _, _, browser_verified = _refresh_all_sessions(session_profiles)
+            if force:
+                browser_verified = _renew_role_credentials(browser_verified)
+            verified = verified + browser_verified
+        elif to_refresh:
+            needs_login = [prof for prof, _reason in to_refresh]
 
         logger.info("refresh_all: verified %d profile(s)", len(verified))
         # Mirror CLI's refresh_all: if the configured default profile was
@@ -194,10 +222,44 @@ def _do_refresh_all(hub: EventHub, force: bool = False) -> None:
         # credentials so anything that uses them (env, scripts, other
         # tooling) gets fresh STS credentials too.
         _sync_default_credentials_if_in(verified)
-        hub.publish("profile.refreshed", {"names": verified, "success": True})
+        event: dict[str, Any] = {"names": verified, "success": True}
+        if needs_login:
+            event["needs_login"] = needs_login
+        hub.publish("profile.refreshed", event)
     except Exception as exc:
         logger.exception("refresh_all failed")
         hub.publish("profile.refreshed", {"names": [], "success": False, "error": str(exc)})
+
+
+def _renew_role_credentials(profile_names: list[str]) -> list[str]:
+    """After a successful forced login: drop the old cached role credentials
+    and fetch new ones, so permission changes take effect now instead of when
+    the old credentials expire. Returns the profiles that got new ones.
+
+    Done after the login (not before) so a cancelled login doesn't throw away
+    credentials that were still valid.
+    """
+    from cli_tool.commands.aws_login.commands.refresh import _verify_in_parallel
+    from cli_tool.commands.aws_login.core.credentials import clear_cached_role_credentials
+
+    for name in profile_names:
+        clear_cached_role_credentials(name)
+    return [name for name, ok in zip(profile_names, _verify_in_parallel(profile_names)) if ok]
+
+
+# Held while a refresh-all runs. The banner's "Log in", the Refresh All button
+# and the launch login all use this endpoint; a second request while one is in
+# flight joins it (its result arrives on the same `profile.refreshed` event)
+# instead of starting a parallel login.
+_refresh_all_running = threading.Lock()
+
+
+def _run_refresh_all(hub: EventHub, force: bool, allow_browser: bool, running: threading.Lock) -> None:
+    """Thread body: run the refresh, then release the lock the request took."""
+    try:
+        _do_refresh_all(hub, force, allow_browser)
+    finally:
+        running.release()
 
 
 def _sync_default_credentials_if_in(refreshed_profiles: list[str]) -> None:
@@ -231,7 +293,7 @@ def _sync_default_credentials_if_in(refreshed_profiles: list[str]) -> None:
 
 
 @router.post(":refresh_all", status_code=status.HTTP_202_ACCEPTED)
-@limiter.limit("1/minute")
+@limiter.limit("4/minute")
 def refresh_all(
     request: Request,
     response: Response,
@@ -239,21 +301,40 @@ def refresh_all(
 ) -> dict[str, Any]:
     """Kick off refresh in background. Progress arrives via WS profile.refreshed.
 
-    Body (optional): {"force": true} to renew every profile, not only
-    the ones that are expired or about to expire. Mirrors `devo aws-login
-    refresh --force`.
+    Body (optional):
+      - {"force": true} renews every profile, not only the ones that are
+        expired or about to expire, through the full browser login. Mirrors
+        `devo aws-login refresh --force`.
+      - {"allow_browser": false} never opens a browser: stale profiles are
+        renewed silently when possible and the rest are listed in
+        `needs_login` on the `profile.refreshed` event. Default true.
     """
     app_state = _state(request)
     hub = app_state.event_hub
     force = bool((body or {}).get("force", False))
+    allow_browser = bool((body or {}).get("allow_browser", True))
 
-    t = threading.Thread(target=_do_refresh_all, args=(hub, force), daemon=True)
-    t.start()
+    running = _refresh_all_running
+    if not running.acquire(blocking=False):
+        return {
+            "status": "already_running",
+            "message": "A refresh is already in progress — watch WS for profile.refreshed",
+        }
+    try:
+        t = threading.Thread(target=_run_refresh_all, args=(hub, force, allow_browser, running), daemon=True)
+        t.start()
+    except Exception:
+        running.release()
+        raise
     return {"status": "accepted", "message": "Refresh started — watch WS for profile.refreshed"}
 
 
-def _do_refresh_one(hub: EventHub, name: str) -> None:
+def _do_refresh_one(hub: EventHub, name: str, force: bool = False) -> None:
     """Synchronous body of the per-profile refresh background thread.
+
+    Tries a silent renewal first; the browser login below only runs when the
+    profile's SSO session can't be renewed that way. With `force` it always
+    logs in and then replaces this profile's cached role credentials.
 
     Uses `aws sso login --profile {name}` (same as `devo aws-login` login
     command), NOT `--sso-session`, so only this profile's credentials are
@@ -265,6 +346,7 @@ def _do_refresh_one(hub: EventHub, name: str) -> None:
     helper so the unit tests can patch them out without standing up
     the FastAPI request context.
     """
+    from cli_tool.commands.aws_login.commands.refresh import _silent_refresh_profiles
     from cli_tool.commands.aws_login.core.config import get_profile_config
     from cli_tool.sidecar.services.sso_service import run_sso_login_sync
 
@@ -277,7 +359,18 @@ def _do_refresh_one(hub: EventHub, name: str) -> None:
         hub.publish("profile.refreshed", {"names": [], "success": False, "error": msg})
         return
 
+    # Same rule as refresh-all: only open the browser when it is needed. If the
+    # SSO session is alive the profile's credentials are renewed silently.
+    renewed = [] if force else _silent_refresh_profiles([(name, "manual")])[0]
+    if renewed:
+        logger.info("Refreshed '%s' silently (no login needed)", name)
+        hub.publish("profile.refreshed", {"names": [name], "success": True})
+        _sync_default_credentials_if_in([name])
+        return
+
     success = run_sso_login_sync(hub, name, source="profile")
+    if success and force:
+        success = bool(_renew_role_credentials([name]))
     if success:
         hub.publish("profile.refreshed", {"names": [name], "success": True})
         # If this profile is the configured default, rewrite [default]
@@ -289,12 +382,18 @@ def _do_refresh_one(hub: EventHub, name: str) -> None:
 
 
 @router.post("/{name}:refresh", status_code=status.HTTP_202_ACCEPTED)
-def refresh_profile(name: str, request: Request) -> dict[str, Any]:
-    """Refresh SSO credentials for a single profile. Result arrives via WS profile.refreshed."""
+def refresh_profile(name: str, request: Request, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Refresh SSO credentials for a single profile. Result arrives via WS profile.refreshed.
+
+    Body (optional): {"force": true} always runs the browser login and then
+    replaces the profile's cached role credentials (e.g. after a permission
+    change). Without it the profile is renewed silently when possible.
+    """
     app_state = _state(request)
     hub = app_state.event_hub
+    force = bool((body or {}).get("force", False))
 
-    threading.Thread(target=_do_refresh_one, args=(hub, name), daemon=True).start()
+    threading.Thread(target=_do_refresh_one, args=(hub, name, force), daemon=True).start()
     return {"status": "accepted", "message": f"Refresh started for '{name}' — watch WS for profile.refreshed"}
 
 

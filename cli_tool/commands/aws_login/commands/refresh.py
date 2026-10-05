@@ -2,6 +2,8 @@
 
 import subprocess
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 import click
@@ -19,6 +21,36 @@ from cli_tool.core.utils.config_manager import get_config_value
 
 console = Console()
 
+# Cap on concurrent `aws` subprocesses when verifying/renewing profiles.
+_SILENT_MAX_WORKERS = 8
+
+# Silent renewals share SSO tokens that may be renewed from a single-use
+# refresh token, so two of them must never run at the same time (the monitor
+# and a refresh-all can both start one).
+_silent_lock = threading.Lock()
+
+
+def _verify_in_parallel(profile_names: list) -> list:
+    """Run `verify_credentials` for every profile concurrently.
+
+    Returns one bool per profile, in input order (not completion order). An
+    exception while verifying one profile counts as a failure for that profile
+    only. Each check is an `aws` subprocess that mostly waits on the network,
+    so threads are enough.
+    """
+
+    def _check(name) -> bool:
+        try:
+            return bool(verify_credentials(name))
+        except Exception:
+            return False
+
+    if len(profile_names) <= 1:
+        return [_check(name) for name in profile_names]
+
+    with ThreadPoolExecutor(max_workers=min(_SILENT_MAX_WORKERS, len(profile_names))) as pool:
+        return list(pool.map(_check, profile_names))
+
 
 def _build_sso_login_cmd(first_profile: str) -> list:
     """Build the 'aws sso login' command for the given profile."""
@@ -31,13 +63,17 @@ def _build_sso_login_cmd(first_profile: str) -> list:
 def _verify_session_profiles(session_profs: list) -> tuple:
     """Verify credentials for each profile in the session.
 
+    The checks run concurrently (the fresh login just renewed the shared SSO
+    token, so they only fetch role credentials), but the results are printed
+    in profile order once all of them are done.
+
     Returns (verified_count, failed_count, verified_profile_names).
     """
     console.print("[green]✓ Session refreshed successfully[/green]")
     verified = failed = 0
     verified_names = []
-    for prof in session_profs:
-        if verify_credentials(prof):
+    for prof, ok in zip(session_profs, _verify_in_parallel(session_profs)):
+        if ok:
             console.print(f"  ✓ {prof}")
             verified += 1
             verified_names.append(prof)
@@ -74,8 +110,12 @@ def _refresh_session(_session_key: str, session_profs: list) -> tuple:
         sys.exit(1)
 
 
-def _classify_profiles(profiles: list) -> tuple:
+def _classify_profiles(profiles: list, cached_only: bool = False) -> tuple:
     """Classify each profile as needing refresh or still valid.
+
+    With ``cached_only`` the decision is made from the AWS CLI's credential
+    cache (instant) instead of spawning ``aws`` for every profile; profiles
+    with no cache entry count as needing a refresh.
 
     Returns (profiles_to_refresh, profiles_valid) where:
       - profiles_to_refresh: list of (prof, reason)
@@ -85,7 +125,7 @@ def _classify_profiles(profiles: list) -> tuple:
     profiles_valid = []
 
     for prof, _source in profiles:
-        needs_refresh, expiration, reason = check_profile_needs_refresh(prof)
+        needs_refresh, expiration, reason = check_profile_needs_refresh(prof, cached_only=cached_only)
         if needs_refresh:
             profiles_to_refresh.append((prof, reason))
         elif expiration:
@@ -96,6 +136,76 @@ def _classify_profiles(profiles: list) -> tuple:
             profiles_valid.append((prof, f"{hours}h {minutes}m remaining"))
 
     return profiles_to_refresh, profiles_valid
+
+
+def _silent_refresh_profiles(profiles_to_refresh: list) -> tuple:
+    """Renew credentials without any browser interaction.
+
+    `aws sts get-caller-identity --profile X` makes the AWS CLI re-resolve the
+    profile's credentials: it renews the role credentials from the cached SSO
+    access token, and with `sso-session` configs it also renews that access
+    token from its refresh token. It only fails when the SSO session itself is
+    gone, which is the case that really needs `aws sso login`.
+
+    Profiles that share an SSO session share its token, so the work is done
+    in two phases to be both fast and safe:
+
+      1. one "probe" profile per session, in parallel across sessions. If it
+         fails, the rest of that session is reported as failed without trying
+         (each try would cost a timeout). If it succeeds, the shared SSO
+         access token has been renewed and cached.
+      2. the remaining profiles of the sessions that passed, in parallel.
+         They only need role credentials from an already-valid token.
+
+    Never run several profiles of one session at once before the probe: the
+    access token is renewed from a refresh token that may be single-use, so
+    concurrent renewals could invalidate each other.
+
+    Returns (renewed_profile_names, still_failing) in the input order, where
+    still_failing keeps the original (profile, reason) tuples.
+    """
+    with _silent_lock:
+        return _silent_refresh_locked(profiles_to_refresh)
+
+
+def _silent_refresh_locked(profiles_to_refresh: list) -> tuple:
+    entries = []
+    for idx, (prof, reason) in enumerate(profiles_to_refresh):
+        prof_config = get_profile_config(prof) or {}
+        key = prof_config.get("sso_session") or prof_config.get("sso_start_url")
+        entries.append((idx, prof, reason, key))
+
+    # Phase 1 targets: the first profile of every session, plus every profile
+    # without a session key (nothing to share, so each is its own probe).
+    probes = []
+    followers: dict = {}
+    seen_sessions = set()
+    for entry in entries:
+        key = entry[3]
+        if key is None or key not in seen_sessions:
+            probes.append(entry)
+            if key is not None:
+                seen_sessions.add(key)
+        else:
+            followers.setdefault(key, []).append(entry)
+
+    ok = {entry[0]: False for entry in entries}
+
+    def _run(batch: list) -> list:
+        return _verify_in_parallel([entry[1] for entry in batch])
+
+    second_phase = []
+    for entry, alive in zip(probes, _run(probes)):
+        ok[entry[0]] = alive
+        if alive and entry[3] is not None:
+            second_phase.extend(followers.get(entry[3], []))
+
+    for entry, alive in zip(second_phase, _run(second_phase)):
+        ok[entry[0]] = alive
+
+    renewed = [prof for idx, prof, _reason, _key in entries if ok[idx]]
+    failing = [(prof, reason) for idx, prof, reason, _key in entries if not ok[idx]]
+    return renewed, failing
 
 
 def _show_valid_profiles_table(profiles_valid: list) -> None:

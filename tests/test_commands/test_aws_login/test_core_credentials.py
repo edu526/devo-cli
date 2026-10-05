@@ -11,9 +11,11 @@ import pytest
 from cli_tool.commands.aws_login.core.credentials import (
     check_profile_credentials_available,
     check_profile_needs_refresh,
+    clear_cached_role_credentials,
     get_profile_credentials_expiration,
     get_sso_cache_token,
     get_sso_token_expiration,
+    read_cached_credentials_expiration,
     verify_credentials,
     write_default_credentials,
 )
@@ -648,3 +650,169 @@ def test_write_default_credentials_returns_none_on_write_error(tmp_path, mocker,
     result = write_default_credentials("dev")
 
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# read_cached_credentials_expiration / check_profile_needs_refresh(cached_only)
+# ---------------------------------------------------------------------------
+
+_CREDS = "cli_tool.commands.aws_login.core.credentials"
+_SSO_CFG = {
+    "sso_session": "corp",
+    "sso_role_name": "Admin",
+    "sso_account_id": "111122223333",
+}
+
+
+def _cache_name(identity):
+    import hashlib
+
+    return hashlib.sha1(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _write_cache(home, identity, expiration="2026-10-05T05:00:00Z"):
+    cache = home / ".aws" / "cli" / "cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    f = cache / f"{_cache_name(identity)}.json"
+    f.write_text(json.dumps({"ProviderType": "sso", "Credentials": {"Expiration": expiration, "AccessKeyId": "x"}}))
+    return f
+
+
+@pytest.mark.unit
+def test_read_cached_expiration_for_an_sso_session_profile(tmp_path, monkeypatch, mocker):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    mocker.patch(f"{_CREDS}.get_profile_config", return_value=dict(_SSO_CFG))
+    _write_cache(tmp_path, {"sessionName": "corp", "roleName": "Admin", "accountId": "111122223333"})
+
+    result = read_cached_credentials_expiration("dev")
+
+    assert result == datetime(2026, 10, 5, 5, 0, tzinfo=timezone.utc)
+
+
+@pytest.mark.unit
+def test_read_cached_expiration_for_a_legacy_start_url_profile(tmp_path, monkeypatch, mocker):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    mocker.patch(
+        f"{_CREDS}.get_profile_config",
+        return_value={"sso_start_url": "https://x.awsapps.com/start", "sso_role_name": "R", "sso_account_id": "1"},
+    )
+    _write_cache(tmp_path, {"startUrl": "https://x.awsapps.com/start", "roleName": "R", "accountId": "1"}, "2030-01-01T00:00:00Z")
+
+    assert read_cached_credentials_expiration("legacy").year == 2030
+
+
+@pytest.mark.unit
+def test_read_cached_expiration_returns_a_past_time_for_expired_credentials(tmp_path, monkeypatch, mocker):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    mocker.patch(f"{_CREDS}.get_profile_config", return_value=dict(_SSO_CFG))
+    _write_cache(tmp_path, {"sessionName": "corp", "roleName": "Admin", "accountId": "111122223333"}, "2020-01-01T00:00:00Z")
+
+    assert read_cached_credentials_expiration("dev") < datetime.now(timezone.utc)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("scenario", ["no_cache_dir", "no_file", "corrupt", "no_expiration", "no_profile", "not_sso"])
+def test_read_cached_expiration_returns_none_when_unusable(scenario, tmp_path, monkeypatch, mocker):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    identity = {"sessionName": "corp", "roleName": "Admin", "accountId": "111122223333"}
+    config = dict(_SSO_CFG)
+
+    if scenario == "no_file":
+        (tmp_path / ".aws" / "cli" / "cache").mkdir(parents=True)
+    elif scenario == "corrupt":
+        _write_cache(tmp_path, identity).write_text("{not json")
+    elif scenario == "no_expiration":
+        _write_cache(tmp_path, identity).write_text(json.dumps({"Credentials": {}}))
+    elif scenario == "no_profile":
+        config = None
+    elif scenario == "not_sso":
+        config = {"region": "us-east-1"}
+    mocker.patch(f"{_CREDS}.get_profile_config", return_value=config)
+
+    assert read_cached_credentials_expiration("dev") is None
+
+
+@pytest.mark.unit
+def test_read_cached_expiration_never_spawns_a_process(tmp_path, monkeypatch, mocker):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    mocker.patch(f"{_CREDS}.get_profile_config", return_value=dict(_SSO_CFG))
+    run = mocker.patch("subprocess.run")
+
+    read_cached_credentials_expiration("dev")
+
+    run.assert_not_called()
+
+
+@pytest.mark.unit
+def test_cached_only_check_flags_missing_cache_without_spawning(mocker):
+    mocker.patch(f"{_CREDS}.get_profile_config", return_value=dict(_SSO_CFG))
+    mocker.patch(f"{_CREDS}.read_cached_credentials_expiration", return_value=None)
+    run = mocker.patch("subprocess.run")
+
+    needs, expiration, reason = check_profile_needs_refresh("dev", cached_only=True)
+
+    assert (needs, expiration, reason) == (True, None, "No valid credentials found")
+    run.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "delta,needs,reason_start",
+    [
+        (timedelta(hours=-2), True, "Expired"),
+        (timedelta(minutes=5), True, "Expiring in"),
+        (timedelta(hours=3), False, "Valid"),
+    ],
+)
+def test_cached_only_check_classifies_from_the_cached_time(delta, needs, reason_start, mocker):
+    mocker.patch(f"{_CREDS}.get_profile_config", return_value=dict(_SSO_CFG))
+    mocker.patch(f"{_CREDS}.read_cached_credentials_expiration", return_value=datetime.now(timezone.utc) + delta)
+    run = mocker.patch("subprocess.run")
+
+    result_needs, _, reason = check_profile_needs_refresh("dev", cached_only=True)
+
+    assert result_needs is needs
+    assert reason.startswith(reason_start)
+    run.assert_not_called()
+
+
+@pytest.mark.unit
+def test_default_check_still_uses_export_credentials(mocker):
+    """The CLI keeps its old behaviour (and its silent-renewal side effect)."""
+    mocker.patch(f"{_CREDS}.get_profile_config", return_value=dict(_SSO_CFG))
+    cached = mocker.patch(f"{_CREDS}.read_cached_credentials_expiration")
+    live = mocker.patch(f"{_CREDS}.get_profile_credentials_expiration", return_value=datetime.now(timezone.utc) + timedelta(hours=3))
+
+    needs, _, _ = check_profile_needs_refresh("dev")
+
+    live.assert_called_once_with("dev")
+    cached.assert_not_called()
+    assert needs is False
+
+
+@pytest.mark.unit
+def test_clear_cached_role_credentials_removes_only_that_profiles_file(tmp_path, monkeypatch, mocker):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    mocker.patch(f"{_CREDS}.get_profile_config", return_value=dict(_SSO_CFG))
+    mine = _write_cache(tmp_path, {"sessionName": "corp", "roleName": "Admin", "accountId": "111122223333"})
+    other = _write_cache(tmp_path, {"sessionName": "corp", "roleName": "ReadOnly", "accountId": "111122223333"})
+
+    assert clear_cached_role_credentials("dev") is True
+
+    assert not mine.exists()
+    assert other.exists()
+
+
+@pytest.mark.unit
+def test_clear_cached_role_credentials_without_a_cache_file(tmp_path, monkeypatch, mocker):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    mocker.patch(f"{_CREDS}.get_profile_config", return_value=dict(_SSO_CFG))
+    assert clear_cached_role_credentials("dev") is False
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("config", [None, {"region": "us-east-1"}])
+def test_clear_cached_role_credentials_ignores_non_sso_profiles(config, tmp_path, monkeypatch, mocker):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    mocker.patch(f"{_CREDS}.get_profile_config", return_value=config)
+    assert clear_cached_role_credentials("dev") is False

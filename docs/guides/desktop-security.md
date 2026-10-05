@@ -58,7 +58,7 @@ sidecar with a new bootstrap token.
 
 | Endpoint | Limit |
 |---|---|
-| `POST /profiles:refresh_all` | 1 / minute |
+| `POST /profiles:refresh_all` | 4 / minute (and one at a time) |
 | `POST /connections:start_all` | 1 / minute |
 | `POST /connections/{name}` | 10 / minute |
 | `DELETE /logs` | 5 / hour |

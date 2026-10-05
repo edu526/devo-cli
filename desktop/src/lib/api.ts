@@ -536,10 +536,25 @@ export const profilesApi = {
   create: (body: ProfileIn) => req<ProfileRecord>("POST", "/profiles", body),
   delete: (name: string) => req<void>("DELETE", `/profiles/${name}`),
   discover: (session: string) => req<DiscoverResponse>("POST", "/profiles:discover", { session }),
-  refreshAll: (force = true) =>
-    req<{ status: string; message: string }>("POST", "/profiles:refresh_all", { force }),
-  refresh: (name: string) =>
-    req<{ status: string; message: string }>("POST", `/profiles/${name}:refresh`),
+  /**
+   * `force` renews every profile through the full browser login. Without it
+   * only stale profiles are renewed — silently when possible. With
+   * `allowBrowser: false` the browser is never opened: profiles that can't be
+   * renewed silently come back in `needs_login` on the `profile.refreshed`
+   * WebSocket event.
+   */
+  refreshAll: (force = true, options?: { allowBrowser?: boolean }) =>
+    req<{ status: string; message: string }>("POST", "/profiles:refresh_all", {
+      force,
+      ...(options?.allowBrowser === undefined ? {} : { allow_browser: options.allowBrowser }),
+    }),
+  /** `force` always runs the browser login and replaces the cached role credentials. */
+  refresh: (name: string, options?: { force?: boolean }) =>
+    req<{ status: string; message: string }>(
+      "POST",
+      `/profiles/${name}:refresh`,
+      options?.force ? { force: true } : undefined,
+    ),
   refreshSsoToken: (name: string) =>
     req<{ name: string; account: string; refreshed: boolean }>(
       "POST",

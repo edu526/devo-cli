@@ -37,6 +37,25 @@ from cli_tool.sidecar.state import AppState, EventHub
 AUTH = {"Authorization": "Bearer test-token"}
 
 
+@pytest.fixture(autouse=True)
+def fresh_refresh_all_lock(monkeypatch):
+    monkeypatch.setattr(profiles, "_refresh_all_running", threading.Lock())
+
+
+@pytest.fixture(autouse=True)
+def no_cache_deletion(mocker):
+    return mocker.patch.object(profiles, "_renew_role_credentials", side_effect=lambda names: list(names))
+
+
+@pytest.fixture(autouse=True)
+def no_silent_refresh(mocker):
+    """Avoid shelling out to the real `aws` CLI in the silent-renewal pass."""
+    return mocker.patch(
+        "cli_tool.commands.aws_login.commands.refresh._silent_refresh_profiles",
+        side_effect=lambda profs: ([], list(profs)),
+    )
+
+
 def _make_app() -> tuple[FastAPI, AppState]:
     app_state = AppState(token="test-token", registry=ForwarderRegistry(), event_hub=EventHub())
     app = FastAPI()
@@ -194,7 +213,7 @@ class TestRefreshAllHttpContract:
             r = client.post("/api/v1/profiles:refresh_all")
             assert r.status_code == 401
 
-    def test_rate_limited_at_1_per_minute(self, mocker):
+    def test_rate_limited_at_4_per_minute(self, mocker):
         # Disable the pipeline so the call returns quickly
         mocker.patch(
             "cli_tool.commands.aws_login.core.config.list_aws_profiles",

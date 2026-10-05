@@ -8,8 +8,12 @@ from unittest.mock import MagicMock, call
 import pytest
 
 from cli_tool.commands.aws_login.commands.refresh import (
+    _classify_profiles,
     _refresh_session,
+    _silent_refresh_profiles,
     _update_default_credentials_after_refresh,
+    _verify_in_parallel,
+    _verify_session_profiles,
     refresh_all_profiles,
 )
 
@@ -535,3 +539,318 @@ def test_refresh_all_profiles_no_default_update_when_all_fail(mocker):
     refresh_all_profiles()
 
     mock_write.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _silent_refresh_profiles
+# ---------------------------------------------------------------------------
+
+_REFRESH = "cli_tool.commands.aws_login.commands.refresh"
+
+
+def _patch_silent(mocker, configs, working):
+    """configs: profile -> config dict; working: profiles whose silent renewal succeeds."""
+    mocker.patch(f"{_REFRESH}.get_profile_config", side_effect=lambda name: configs.get(name))
+    return mocker.patch(
+        f"{_REFRESH}.verify_credentials",
+        side_effect=lambda name: {"account": "1"} if name in working else None,
+    )
+
+
+@pytest.mark.unit
+def test_silent_refresh_renews_profiles_whose_session_is_alive(mocker):
+    mock_verify = _patch_silent(
+        mocker,
+        {"dev": {"sso_session": "corp"}, "prod": {"sso_session": "corp"}},
+        working={"dev", "prod"},
+    )
+
+    renewed, failing = _silent_refresh_profiles([("dev", "Expired"), ("prod", "Expiring in 3 minutes")])
+
+    assert renewed == ["dev", "prod"]
+    assert failing == []
+    assert mock_verify.call_count == 2
+
+
+@pytest.mark.unit
+def test_silent_refresh_reports_profiles_that_need_a_login_with_their_reason(mocker):
+    _patch_silent(mocker, {"dev": {"sso_session": "corp"}}, working=set())
+
+    renewed, failing = _silent_refresh_profiles([("dev", "Expired")])
+
+    assert renewed == []
+    assert failing == [("dev", "Expired")]
+
+
+@pytest.mark.unit
+def test_silent_refresh_skips_rest_of_a_dead_session(mocker):
+    """Profiles of one SSO session share its token: after the first failure
+    the others fail too, so they must not be tried (each try costs a timeout)."""
+    mock_verify = _patch_silent(
+        mocker,
+        {
+            "a": {"sso_session": "corp"},
+            "b": {"sso_session": "corp"},
+            "c": {"sso_session": "corp"},
+            "d": {"sso_session": "personal"},
+        },
+        working={"d"},
+    )
+
+    renewed, failing = _silent_refresh_profiles([(p, "Expired") for p in "abcd"])
+
+    assert renewed == ["d"]
+    assert [p for p, _ in failing] == ["a", "b", "c"]
+    # only the probe of each session was tried; b and c never were
+    assert sorted(c.args[0] for c in mock_verify.call_args_list) == ["a", "d"]
+
+
+@pytest.mark.unit
+def test_silent_refresh_groups_legacy_profiles_by_start_url(mocker):
+    mock_verify = _patch_silent(
+        mocker,
+        {"a": {"sso_start_url": "https://x"}, "b": {"sso_start_url": "https://x"}},
+        working=set(),
+    )
+
+    _, failing = _silent_refresh_profiles([("a", "Expired"), ("b", "Expired")])
+
+    assert [p for p, _ in failing] == ["a", "b"]
+    assert mock_verify.call_count == 1
+
+
+@pytest.mark.unit
+def test_silent_refresh_without_session_key_tries_every_profile(mocker):
+    mock_verify = _patch_silent(mocker, {}, working=set())
+
+    _, failing = _silent_refresh_profiles([("a", "Expired"), ("b", "Expired")])
+
+    assert [p for p, _ in failing] == ["a", "b"]
+    assert mock_verify.call_count == 2
+
+
+@pytest.mark.unit
+def test_silent_refresh_probes_a_session_before_running_the_rest_of_it(mocker):
+    """The first profile of a session must finish before its siblings start:
+    it renews the shared SSO access token, which siblings then reuse."""
+    import threading
+
+    lock = threading.Lock()
+    done = []
+    started_before_probe_done = []
+
+    def fake_verify(name):
+        with lock:
+            if name != "a" and "a" not in done:
+                started_before_probe_done.append(name)
+        if name == "a":
+            with lock:
+                done.append("a")
+        return {"account": "1"}
+
+    mocker.patch(
+        f"{_REFRESH}.get_profile_config",
+        side_effect=lambda name: {"sso_session": "corp"},
+    )
+    mocker.patch(f"{_REFRESH}.verify_credentials", side_effect=fake_verify)
+
+    renewed, failing = _silent_refresh_profiles([(p, "Expired") for p in "abcd"])
+
+    assert started_before_probe_done == []
+    assert renewed == ["a", "b", "c", "d"]
+    assert failing == []
+
+
+@pytest.mark.unit
+def test_silent_refresh_runs_profiles_of_a_live_session_in_parallel(mocker):
+    """Three siblings meet at a barrier: it only opens if they truly run
+    concurrently, so a serial implementation fails (the barrier times out)."""
+    import threading
+
+    barrier = threading.Barrier(3, timeout=5)
+
+    def fake_verify(name):
+        if name == "a":  # the probe runs alone
+            return {"account": "1"}
+        barrier.wait()
+        return {"account": "1"}
+
+    mocker.patch(f"{_REFRESH}.get_profile_config", side_effect=lambda name: {"sso_session": "corp"})
+    mocker.patch(f"{_REFRESH}.verify_credentials", side_effect=fake_verify)
+
+    renewed, failing = _silent_refresh_profiles([(p, "Expired") for p in "abcd"])
+
+    assert renewed == ["a", "b", "c", "d"]
+    assert failing == []
+
+
+@pytest.mark.unit
+def test_silent_refresh_keeps_input_order_in_results(mocker):
+    """Results are reported in input order regardless of which thread ends first."""
+    import time
+
+    def fake_verify(name):
+        time.sleep(0.05 if name in ("a", "b") else 0)
+        return {"account": "1"} if name != "c" else None
+
+    mocker.patch(
+        f"{_REFRESH}.get_profile_config",
+        side_effect=lambda name: {"sso_session": f"s-{name}"},  # one session each => all parallel probes
+    )
+    mocker.patch(f"{_REFRESH}.verify_credentials", side_effect=fake_verify)
+
+    renewed, failing = _silent_refresh_profiles([(p, f"r-{p}") for p in "abcd"])
+
+    assert renewed == ["a", "b", "d"]
+    assert failing == [("c", "r-c")]
+
+
+@pytest.mark.unit
+def test_silent_refresh_treats_an_exception_as_a_failed_renewal(mocker):
+    def fake_verify(name):
+        if name == "boom":
+            raise RuntimeError("aws exploded")
+        return {"account": "1"}
+
+    mocker.patch(f"{_REFRESH}.get_profile_config", side_effect=lambda name: {"sso_session": f"s-{name}"})
+    mocker.patch(f"{_REFRESH}.verify_credentials", side_effect=fake_verify)
+
+    renewed, failing = _silent_refresh_profiles([("ok", "x"), ("boom", "y")])
+
+    assert renewed == ["ok"]
+    assert failing == [("boom", "y")]
+
+
+@pytest.mark.unit
+def test_silent_refresh_with_no_profiles_returns_empty():
+    assert _silent_refresh_profiles([]) == ([], [])
+
+
+# ---------------------------------------------------------------------------
+# _verify_in_parallel / _verify_session_profiles
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_verify_in_parallel_returns_results_in_input_order(mocker):
+    import time
+
+    def fake_verify(name):
+        time.sleep(0.05 if name == "a" else 0)  # the first one finishes last
+        return {"account": "1"} if name != "b" else None
+
+    mocker.patch(f"{_REFRESH}.verify_credentials", side_effect=fake_verify)
+
+    assert _verify_in_parallel(["a", "b", "c"]) == [True, False, True]
+
+
+@pytest.mark.unit
+def test_verify_in_parallel_handles_empty_and_single(mocker):
+    mock_verify = mocker.patch(f"{_REFRESH}.verify_credentials", return_value={"account": "1"})
+
+    assert _verify_in_parallel([]) == []
+    assert _verify_in_parallel(["only"]) == [True]
+    assert mock_verify.call_count == 1
+
+
+@pytest.mark.unit
+def test_verify_in_parallel_counts_an_exception_as_failure_of_that_profile(mocker):
+    def fake_verify(name):
+        if name == "boom":
+            raise RuntimeError("aws exploded")
+        return {"account": "1"}
+
+    mocker.patch(f"{_REFRESH}.verify_credentials", side_effect=fake_verify)
+
+    assert _verify_in_parallel(["ok", "boom", "ok2"]) == [True, False, True]
+
+
+@pytest.mark.unit
+def test_verify_in_parallel_actually_runs_concurrently(mocker):
+    """Three checks meet at a barrier that only opens if they overlap."""
+    import threading
+
+    barrier = threading.Barrier(3, timeout=5)
+
+    def fake_verify(name):
+        barrier.wait()
+        return {"account": "1"}
+
+    mocker.patch(f"{_REFRESH}.verify_credentials", side_effect=fake_verify)
+
+    assert _verify_in_parallel(["a", "b", "c"]) == [True, True, True]
+
+
+@pytest.mark.unit
+def test_verify_session_profiles_prints_in_profile_order_and_counts(mocker):
+    import time
+
+    def fake_verify(name):
+        time.sleep(0.05 if name == "a" else 0)
+        return {"account": "1"} if name != "b" else None
+
+    mocker.patch(f"{_REFRESH}.verify_credentials", side_effect=fake_verify)
+    mock_console = mocker.patch(f"{_REFRESH}.console")
+
+    verified, failed, names = _verify_session_profiles(["a", "b", "c"])
+
+    assert (verified, failed, names) == (2, 1, ["a", "c"])
+    printed = [c.args[0] for c in mock_console.print.call_args_list]
+    assert printed == [
+        "[green]✓ Session refreshed successfully[/green]",
+        "  ✓ a",
+        "  ✗ b (verification failed)",
+        "  ✓ c",
+    ]
+
+
+@pytest.mark.unit
+def test_classify_profiles_passes_cached_only_to_the_check(mocker):
+    check = mocker.patch(f"{_REFRESH}.check_profile_needs_refresh", return_value=(True, None, "No valid credentials found"))
+
+    to_refresh, valid = _classify_profiles([("dev", "sso")], cached_only=True)
+
+    check.assert_called_once_with("dev", cached_only=True)
+    assert to_refresh == [("dev", "No valid credentials found")]
+    assert valid == []
+
+
+@pytest.mark.unit
+def test_classify_profiles_defaults_to_the_live_check(mocker):
+    check = mocker.patch(f"{_REFRESH}.check_profile_needs_refresh", return_value=(False, None, "Valid"))
+
+    _classify_profiles([("dev", "sso")])
+
+    check.assert_called_once_with("dev", cached_only=False)
+
+
+@pytest.mark.unit
+def test_two_silent_refreshes_never_overlap(mocker):
+    """Renewals can share a single-use refresh token, so they are serialized."""
+    import threading
+    import time
+
+    active = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def fake_verify(name):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        time.sleep(0.1)
+        with lock:
+            active -= 1
+        return {"account": "1"}
+
+    mocker.patch(f"{_REFRESH}.get_profile_config", side_effect=lambda name: {"sso_session": f"s-{name}"})
+    mocker.patch(f"{_REFRESH}.verify_credentials", side_effect=fake_verify)
+
+    threads = [threading.Thread(target=_silent_refresh_profiles, args=([(name, "Expired")],)) for name in ("a", "b", "c")]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert peak == 1

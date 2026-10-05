@@ -48,6 +48,17 @@ def _make_client_with_real_limiter():
 AUTH = {"Authorization": "Bearer test-token"}
 
 
+@pytest.fixture(autouse=True)
+def fresh_refresh_all_lock(monkeypatch):
+    """Tests that fake `threading.Thread` never run the worker that releases
+    the in-flight lock; give every test its own."""
+    import threading
+
+    from cli_tool.sidecar.routers import profiles as profiles_module
+
+    monkeypatch.setattr(profiles_module, "_refresh_all_running", threading.Lock())
+
+
 @pytest.mark.unit
 class TestListProfiles:
     def test_returns_profiles(self, mocker):
@@ -293,6 +304,38 @@ class TestRefreshAll:
         thread_args = captured[0]["kwargs"]["args"]
         assert thread_args[1] is True
 
+    def test_allow_browser_defaults_to_true(self, mocker):
+        captured: list[dict] = []
+
+        def fake_thread(*args, **kwargs):
+            captured.append({"kwargs": kwargs})
+            return mocker.MagicMock()
+
+        mocker.patch("threading.Thread", side_effect=fake_thread)
+        client, _ = _make_client()
+        client.post("/profiles:refresh_all", headers=AUTH)
+        # args = (hub, force, allow_browser)
+        assert captured[0]["kwargs"]["args"][2] is True
+
+    def test_allow_browser_false_propagates_to_thread(self, mocker):
+        captured: list[dict] = []
+
+        def fake_thread(*args, **kwargs):
+            captured.append({"kwargs": kwargs})
+            return mocker.MagicMock()
+
+        mocker.patch("threading.Thread", side_effect=fake_thread)
+        client, _ = _make_client()
+        response = client.post(
+            "/profiles:refresh_all",
+            json={"allow_browser": False},
+            headers=AUTH,
+        )
+        assert response.status_code == 202
+        thread_args = captured[0]["kwargs"]["args"]
+        assert thread_args[1] is False  # force untouched
+        assert thread_args[2] is False
+
 
 @pytest.mark.unit
 class TestRefreshProfile:
@@ -399,3 +442,88 @@ class TestGetIdentity:
         client, _ = _make_client()
         response = client.get("/profiles/dev/identity", headers=AUTH)
         assert response.status_code == 401
+
+
+@pytest.mark.unit
+class TestRefreshAllOneAtATime:
+    def test_second_call_while_running_joins_instead_of_starting_another(self, mocker):
+        started: list = []
+        mocker.patch(
+            "threading.Thread",
+            side_effect=lambda *a, **kw: started.append(kw) or mocker.MagicMock(),
+        )
+        client, _ = _make_client()
+
+        r1 = client.post("/profiles:refresh_all", headers=AUTH)
+        r2 = client.post("/profiles:refresh_all", json={"force": True}, headers=AUTH)
+
+        assert r1.json()["status"] == "accepted"
+        assert r2.status_code == 202
+        assert r2.json()["status"] == "already_running"
+        assert len(started) == 1
+
+    def test_accepts_again_once_the_running_one_finished(self, mocker):
+        from cli_tool.sidecar.routers import profiles as profiles_module
+
+        mocker.patch.object(profiles_module, "_do_refresh_all")
+
+        class InlineThread:
+            def __init__(self, target, args, daemon):
+                self._run = lambda: target(*args)
+
+            def start(self):
+                self._run()
+
+        mocker.patch("threading.Thread", side_effect=lambda **kw: InlineThread(**kw))
+        client, _ = _make_client()
+
+        assert client.post("/profiles:refresh_all", headers=AUTH).json()["status"] == "accepted"
+        assert client.post("/profiles:refresh_all", headers=AUTH).json()["status"] == "accepted"
+
+    def test_lock_is_released_even_if_the_refresh_crashes(self, mocker):
+        from cli_tool.sidecar.routers import profiles as profiles_module
+
+        mocker.patch.object(profiles_module, "_do_refresh_all", side_effect=RuntimeError("boom"))
+        lock = profiles_module._refresh_all_running
+        lock.acquire()
+
+        with pytest.raises(RuntimeError):
+            profiles_module._run_refresh_all(EventHub(), False, True, lock)
+
+        assert lock.acquire(blocking=False)
+
+    def test_lock_is_released_if_the_thread_cannot_start(self, mocker):
+        from cli_tool.sidecar.routers import profiles as profiles_module
+
+        broken = mocker.MagicMock()
+        broken.start.side_effect = RuntimeError("can't start new thread")
+        mocker.patch("threading.Thread", return_value=broken)
+        client, _ = _make_client()
+
+        with pytest.raises(RuntimeError):
+            client.post("/profiles:refresh_all", headers=AUTH)
+
+        assert profiles_module._refresh_all_running.acquire(blocking=False)
+
+
+@pytest.mark.unit
+class TestRefreshProfileForce:
+    def _capture(self, mocker):
+        captured: list = []
+        mocker.patch(
+            "threading.Thread",
+            side_effect=lambda *a, **kw: captured.append(kw) or mocker.MagicMock(),
+        )
+        return captured
+
+    def test_force_defaults_to_false(self, mocker):
+        captured = self._capture(mocker)
+        client, _ = _make_client()
+        client.post("/profiles/dev:refresh", headers=AUTH)
+        assert captured[0]["args"][1:] == ("dev", False)
+
+    def test_force_true_propagates(self, mocker):
+        captured = self._capture(mocker)
+        client, _ = _make_client()
+        client.post("/profiles/dev:refresh", json={"force": True}, headers=AUTH)
+        assert captured[0]["args"][1:] == ("dev", True)
