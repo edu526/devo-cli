@@ -14,6 +14,8 @@
   import { ws } from "./lib/ws";
   import { sidecar, appStatus, appError, authLost, currentPage, type Page } from "./lib/stores";
   import SessionExpiredBanner from "./lib/SessionExpiredBanner.svelte";
+  import { startLoginWatcher } from "./lib/login-flow";
+  import LoginRequiredBanner from "./lib/LoginRequiredBanner.svelte";
   import { profilesCache, registryCache, configCache } from "./lib/page-stores";
   import { logError } from "./lib/error-log";
   import { theme, applyTheme } from "./lib/theme";
@@ -204,6 +206,10 @@
     stopTokenKeepAlive = startTokenKeepAlive();
     stopAuthLost = onAuthLost(() => authLost.set(true));
     ws.connect(info.port);
+    // The sidecar renews AWS credentials in the background and, when a whole
+    // SSO session expired, opens the browser login itself. This keeps the
+    // banner and the notifications in sync with that.
+    stopNeedsLogin = startLoginWatcher();
     appStatus.set("ready");
 
     // Check if the user has been onboarded; if not, show the wizard.
@@ -245,10 +251,12 @@
 
   let stopTokenKeepAlive: (() => void) | null = null;
   let stopAuthLost: (() => void) | null = null;
+  let stopNeedsLogin: (() => void) | null = null;
 
   onDestroy(() => {
     stopTokenKeepAlive?.();
     stopAuthLost?.();
+    stopNeedsLogin?.();
     window.removeEventListener("keydown", handleKeydown, true);
     window.removeEventListener("keydown", handleGlobalShortcut, true);
     window.removeEventListener("keydown", blockBrowserShortcuts, true);
@@ -263,6 +271,7 @@
 
 <TitleBar />
 <SessionExpiredBanner />
+<LoginRequiredBanner />
 
 {#if $appStatus === "loading"}
   <div class="splash">

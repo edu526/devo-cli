@@ -1,7 +1,6 @@
 """CodeArtifact registry endpoints /api/v1/codeartifact."""
 
 import logging
-import threading
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -78,61 +77,19 @@ def list_tokens() -> list[dict[str, Any]]:
     return list_active_tokens()
 
 
-def _do_sso_login_and_publish(hub, profile: str) -> None:
-    """Run `aws sso login --profile {profile}` in background and publish WS events.
-
-    The frontend listens for `sso.login.completed` to auto-retry the original
-    CodeArtifact login that triggered this chain. Always clears the
-    module-level inflight slot in `finally` so subsequent requests for
-    the same profile can spawn a fresh login.
-    """
-    from cli_tool.sidecar.services.sso_service import run_sso_login_sync
-
-    try:
-        run_sso_login_sync(hub, profile, source="codeartifact")
-    finally:
-        with _sso_login_lock:
-            _sso_login_threads.pop(profile, None)
-
-
-# Module-level state for in-flight SSO logins, keyed by profile. When two
-# domains share the same SSO profile (the common case), `login_endpoint`
-# would otherwise spawn two parallel `aws sso login --profile X` processes,
-# opening two browser tabs for the same SSO session. The first request
-# starts the thread; subsequent requests for the same profile just note
-# that a login is already in flight and return — the frontend's single
-# `sso.login.completed` listener will retry every queued domain when SSO
-# finishes.
-_sso_login_threads: dict[str, threading.Thread] = {}
-_sso_login_lock = threading.Lock()
-
-
 def _ensure_single_sso_login(hub, profile: str, domain: str, tool: str) -> None:
-    """Spawn a background `aws sso login` for `profile`, deduped per profile.
+    """Get the SSO session of `profile` back through the shared login handler.
 
-    If a login thread for the same profile is already alive, do nothing —
-    the existing thread will publish the WS event that triggers retries
-    for every domain that was queued against this profile (including the
-    one passed in here).
+    The handler renews silently when possible, opens the browser only when
+    needed, and never runs two logins for one SSO session: when several
+    domains share the profile (the common case) the later requests join the
+    login in progress. Either way the frontend gets `sso.login.completed`
+    (with source "codeartifact") and retries every domain it queued.
     """
-    with _sso_login_lock:
-        existing = _sso_login_threads.get(profile)
-        if existing is not None and existing.is_alive():
-            logger.info(
-                "SSO login for profile '%s' already in flight; piggybacking " "for domain '%s' (tool=%s)",
-                profile,
-                domain,
-                tool,
-            )
-            return
-        thread = threading.Thread(
-            target=_do_sso_login_and_publish,
-            args=(hub, profile),
-            daemon=True,
-            name=f"sso-login-{profile}",
-        )
-        _sso_login_threads[profile] = thread
-        thread.start()
+    from cli_tool.sidecar.services import login_coordinator
+
+    status, _attempt = login_coordinator.request_login(hub, profile=profile, source="codeartifact", automatic=False)
+    logger.info("Login for CodeArtifact domain '%s' (tool=%s, profile '%s'): %s", domain, tool, profile, status)
 
 
 @router.post("/login")

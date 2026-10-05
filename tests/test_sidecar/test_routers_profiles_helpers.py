@@ -47,8 +47,8 @@ class TestDoRefreshAll:
             return_value={"session-1": ["dev"]},
         )
         mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._refresh_all_sessions",
-            return_value=(None, None, ["dev"]),
+            "cli_tool.sidecar.routers.profiles._login_sessions",
+            return_value=(["dev"]),
         )
 
         hub = EventHub()
@@ -103,6 +103,8 @@ class TestDoRefreshOne:
         msgs = []
         while not q.empty():
             msgs.append(q.get_nowait())
+        # the shared login handler also publishes sso.session.* events
+        msgs = [m for m in msgs if m["event"].startswith("profile.")]
         assert msgs[0] == {"event": "profile.refreshing", "name": "missing"}
         assert msgs[1]["event"] == "profile.refreshed"
         assert msgs[1]["success"] is False
@@ -124,6 +126,8 @@ class TestDoRefreshOne:
         msgs = []
         while not q.empty():
             msgs.append(q.get_nowait())
+        # the shared login handler also publishes sso.session.* events
+        msgs = [m for m in msgs if m["event"].startswith("profile.")]
         assert msgs[0] == {"event": "profile.refreshing", "name": "dev"}
         assert msgs[1]["success"] is False
         assert "Refresh failed" in msgs[1]["error"]
@@ -144,6 +148,8 @@ class TestDoRefreshOne:
         msgs = []
         while not q.empty():
             msgs.append(q.get_nowait())
+        # the shared login handler also publishes sso.session.* events
+        msgs = [m for m in msgs if m["event"].startswith("profile.")]
         assert msgs[0] == {"event": "profile.refreshing", "name": "dev"}
         assert msgs[1] == {"event": "profile.refreshed", "names": ["dev"], "success": True}
 
@@ -246,8 +252,8 @@ class TestDoRefreshAllDefaultSync:
             return_value={"session-1": ["dev", "prod"]},
         )
         mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._refresh_all_sessions",
-            return_value=(None, None, ["dev", "prod"]),
+            "cli_tool.sidecar.routers.profiles._login_sessions",
+            return_value=(["dev", "prod"]),
         )
         mocker.patch(
             "cli_tool.core.utils.config_manager.get_config_value",
@@ -276,8 +282,8 @@ class TestDoRefreshAllDefaultSync:
         )
         # Default profile (dev) FAILED verification, prod succeeded.
         mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._refresh_all_sessions",
-            return_value=(None, None, ["prod"]),
+            "cli_tool.sidecar.routers.profiles._login_sessions",
+            return_value=(["prod"]),
         )
         mocker.patch(
             "cli_tool.core.utils.config_manager.get_config_value",
@@ -304,8 +310,8 @@ class TestDoRefreshAllDefaultSync:
             return_value={"session-1": ["dev"]},
         )
         mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._refresh_all_sessions",
-            return_value=(None, None, ["dev"]),
+            "cli_tool.sidecar.routers.profiles._login_sessions",
+            return_value=(["dev"]),
         )
         mocker.patch(
             "cli_tool.core.utils.config_manager.get_config_value",
@@ -342,8 +348,8 @@ class TestDoRefreshAllForce:
             return_value={"session-1": ["dev", "prod"]},
         )
         mock_refresh = mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._refresh_all_sessions",
-            return_value=(None, None, ["dev", "prod"]),
+            "cli_tool.sidecar.routers.profiles._login_sessions",
+            return_value=(["dev", "prod"]),
         )
 
         profiles_router._do_refresh_all(EventHub(), force=True)
@@ -370,8 +376,8 @@ class TestDoRefreshAllForce:
             return_value={"session-1": ["dev"]},
         )
         mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._refresh_all_sessions",
-            return_value=(None, None, ["dev"]),
+            "cli_tool.sidecar.routers.profiles._login_sessions",
+            return_value=(["dev"]),
         )
 
         profiles_router._do_refresh_all(EventHub(), force=False)
@@ -392,7 +398,7 @@ class TestDoRefreshAllForce:
             return_value=([], []),
         )
         mock_refresh = mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._refresh_all_sessions",
+            "cli_tool.sidecar.routers.profiles._login_sessions",
         )
         mocker.patch(
             "cli_tool.commands.aws_login.commands.refresh._group_profiles_by_session",
@@ -420,8 +426,8 @@ class TestDoRefreshAllSilentFirst:
             side_effect=lambda profs: {"s": [p for p, _ in profs]},
         )
         mock_browser = mocker.patch(
-            f"{REFRESH}._refresh_all_sessions",
-            side_effect=lambda groups: (None, None, [p for ps in groups.values() for p in ps]),
+            "cli_tool.sidecar.routers.profiles._login_sessions",
+            side_effect=lambda hub, groups: [p for ps in groups.values() for p in ps],
         )
         return mock_group, mock_browser
 
@@ -573,7 +579,7 @@ class TestForce:
         mocker.patch("cli_tool.commands.aws_login.core.config.list_aws_profiles", return_value=[("dev", "sso")])
         mocker.patch(f"{REFRESH}._classify_profiles", return_value=([("dev", "x")], []))
         mocker.patch(f"{REFRESH}._group_profiles_by_session", return_value={"s": ["dev"]})
-        mocker.patch(f"{REFRESH}._refresh_all_sessions", return_value=(None, None, ["dev"]))
+        mocker.patch("cli_tool.sidecar.routers.profiles._login_sessions", return_value=(["dev"]))
 
     def test_forced_refresh_all_replaces_role_credentials_after_the_login(self, mocker, no_cache_deletion):
         self._stale_dev(mocker)

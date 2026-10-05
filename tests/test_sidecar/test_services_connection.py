@@ -243,7 +243,7 @@ class TestEnsureSingleConnectionSsoLogin:
     def test_launches_sso_login_for_profile(self, mocker):
         launched = threading.Event()
 
-        def fake_run_sso_login_sync(hub, profile, source):
+        def fake_run_sso_login_sync(hub, profile, source, **kwargs):
             launched.set()
 
         mocker.patch("cli_tool.sidecar.services.sso_service.run_sso_login_sync", side_effect=fake_run_sso_login_sync)
@@ -254,7 +254,7 @@ class TestEnsureSingleConnectionSsoLogin:
         release = threading.Event()
         calls = []
 
-        def fake_run_sso_login_sync(hub, profile, source):
+        def fake_run_sso_login_sync(hub, profile, source, **kwargs):
             calls.append(profile)
             release.wait(timeout=2.0)
 
@@ -266,6 +266,39 @@ class TestEnsureSingleConnectionSsoLogin:
         release.set()
         time.sleep(0.1)
         assert calls == ["dev"]
+
+    def test_one_login_for_tunnels_on_different_profiles_of_the_same_sso_session(self, mocker):
+        """Profiles of one SSO session share its token: two tunnels using two
+        of them must not open two browser tabs."""
+        release = threading.Event()
+        calls = []
+
+        def fake_run_sso_login_sync(hub, profile, source, **kwargs):
+            calls.append(profile)
+            release.wait(timeout=2.0)
+            return True
+
+        mocker.patch("cli_tool.sidecar.services.sso_service.run_sso_login_sync", side_effect=fake_run_sso_login_sync)
+        mocker.patch(
+            "cli_tool.commands.aws_login.core.config.get_profile_config",
+            side_effect=lambda name: {"sso_session": "corp"},
+        )
+        hub = EventHub()
+        connection_service._ensure_single_connection_sso_login(hub, "db-dev", "db-a")
+        time.sleep(0.05)
+        connection_service._ensure_single_connection_sso_login(hub, "db-prod", "db-b")
+        release.set()
+        time.sleep(0.1)
+        assert calls == ["db-dev"]
+
+    def test_goes_through_the_shared_handler_as_an_automatic_request(self, mocker):
+        request = mocker.patch(
+            "cli_tool.sidecar.services.login_coordinator.request_login",
+            return_value=("started", None),
+        )
+        hub = EventHub()
+        connection_service._ensure_single_connection_sso_login(hub, "dev", "mydb")
+        request.assert_called_once_with(hub, profile="dev", source="connection", automatic=True)
 
 
 @pytest.mark.unit

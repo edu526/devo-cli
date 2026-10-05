@@ -174,3 +174,36 @@ class TestRunSsoLoginSync:
         completed_event = next(e for e in published_events if e[0] == "sso.login.completed")
         assert completed_event[1]["success"] is False
         assert "aws not found" in completed_event[1]["error"]
+
+
+class TestRunSsoLoginSyncBySession:
+    @pytest.fixture
+    def mock_popen(self, mocker):
+        process = MagicMock()
+        process.stdout = MagicMock()
+        process.stdout.readline.side_effect = [""]
+        process.wait.return_value = 0
+        return mocker.patch("subprocess.Popen", return_value=process)
+
+    def test_logs_in_to_the_named_sso_session(self, mock_popen, mocker):
+        verify = mocker.patch("cli_tool.sidecar.services.sso_service.verify_credentials")
+        mock_popen.return_value.returncode = 0
+
+        assert run_sso_login_sync(EventHub(), "corp", "discover", sso_session="corp") is True
+
+        assert mock_popen.call_args[0][0] == ["aws", "sso", "login", "--sso-session", "corp"]
+        verify.assert_not_called()  # no profile to verify; the exit code decides
+
+    def test_reports_failure_from_the_exit_code(self, mock_popen, mocker):
+        mocker.patch("cli_tool.sidecar.services.sso_service.verify_credentials")
+        mock_popen.return_value.returncode = 1
+
+        assert run_sso_login_sync(EventHub(), "corp", "discover", sso_session="corp") is False
+
+    def test_profile_login_is_unchanged(self, mock_popen, mocker):
+        mocker.patch("cli_tool.sidecar.services.sso_service.verify_credentials", return_value={"account": "1"})
+        mock_popen.return_value.returncode = 0
+
+        assert run_sso_login_sync(EventHub(), "dev", "profile") is True
+
+        assert mock_popen.call_args[0][0] == ["aws", "sso", "login", "--profile", "dev"]

@@ -172,7 +172,6 @@ def _do_refresh_all(hub: EventHub, force: bool = False, allow_browser: bool = Tr
         from cli_tool.commands.aws_login.commands.refresh import (
             _classify_profiles,
             _group_profiles_by_session,
-            _refresh_all_sessions,
             _silent_refresh_profiles,
         )
         from cli_tool.commands.aws_login.core.config import list_aws_profiles
@@ -209,7 +208,7 @@ def _do_refresh_all(hub: EventHub, force: bool = False, allow_browser: bool = Tr
         needs_login: list[str] = []
         if to_refresh and allow_browser:
             session_profiles = _group_profiles_by_session(to_refresh)
-            _, _, browser_verified = _refresh_all_sessions(session_profiles)
+            browser_verified = _login_sessions(hub, session_profiles)
             if force:
                 browser_verified = _renew_role_credentials(browser_verified)
             verified = verified + browser_verified
@@ -229,6 +228,26 @@ def _do_refresh_all(hub: EventHub, force: bool = False, allow_browser: bool = Tr
     except Exception as exc:
         logger.exception("refresh_all failed")
         hub.publish("profile.refreshed", {"names": [], "success": False, "error": str(exc)})
+
+
+def _login_sessions(hub: EventHub, session_profiles: dict[str, list[str]]) -> list[str]:
+    """Browser login for each SSO session, one after another, through the
+    shared login handler (which also serves tunnels, CodeArtifact and the
+    background renewal, so a session never gets two login tabs). Returns the
+    profiles whose credentials work afterwards.
+    """
+    from cli_tool.commands.aws_login.commands.refresh import _verify_in_parallel
+    from cli_tool.sidecar.services import login_coordinator
+
+    verified: list[str] = []
+    for profs in session_profiles.values():
+        if not profs:
+            continue
+        # These sessions just failed the silent renewal (or the user forced a
+        # re-login): go straight to the browser.
+        if login_coordinator.login_and_wait(hub, profile=profs[0], source="refresh_all", known_expired=True):
+            verified += [name for name, ok in zip(profs, _verify_in_parallel(profs)) if ok]
+    return verified
 
 
 def _renew_role_credentials(profile_names: list[str]) -> list[str]:
@@ -348,7 +367,7 @@ def _do_refresh_one(hub: EventHub, name: str, force: bool = False) -> None:
     """
     from cli_tool.commands.aws_login.commands.refresh import _silent_refresh_profiles
     from cli_tool.commands.aws_login.core.config import get_profile_config
-    from cli_tool.sidecar.services.sso_service import run_sso_login_sync
+    from cli_tool.sidecar.services import login_coordinator
 
     hub.publish("profile.refreshing", {"name": name})
 
@@ -368,7 +387,8 @@ def _do_refresh_one(hub: EventHub, name: str, force: bool = False) -> None:
         _sync_default_credentials_if_in([name])
         return
 
-    success = run_sso_login_sync(hub, name, source="profile")
+    # Silent renewal just failed (or the user forced a re-login): log in.
+    success = login_coordinator.login_and_wait(hub, profile=name, source="profile", known_expired=True)
     if success and force:
         success = bool(_renew_role_credentials([name]))
     if success:

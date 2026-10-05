@@ -393,14 +393,6 @@
     }
   }
 
-  // Tracks profiles we've already sent an "SSO token expired" notification
-  // for, so N connections sharing one profile (a common setup) don't each
-  // fire their own OS notification for what is really one shared event.
-  // Cleared when that profile's auto-triggered SSO login finishes (see the
-  // "sso.login.completed" / source "connection" handler below), so the next
-  // real expiry episode notifies again.
-  const notifiedExpiredProfiles = new Set<string>();
-
   onMount(() => {
     load();
     const offDb = ws.on("databases.sync", async () => {
@@ -427,24 +419,15 @@
           connections = [...connections, { name, state, local_port, error }];
         }
 
-        if (
-          state === "expired_credentials" &&
-          (!existing || existing.state !== "expired_credentials")
-        ) {
-          const profile = databases[name]?.profile || "default";
-          if (!notifiedExpiredProfiles.has(profile)) {
-            notifiedExpiredProfiles.add(profile);
-            notifyUser(
-              "AWS SSO Expired",
-              `AWS SSO token expired for ${name}. Devo is opening your browser to refresh it.`,
-            );
-          }
-        } else if (state === "error" && (!existing || existing.state !== "error")) {
+        // Expired credentials are not announced here: the sidecar's login
+        // handler renews silently when it can and, only when a browser login
+        // is really needed, the app-wide login watcher shows one notification
+        // per SSO session (no matter how many tunnels share it).
+        if (state === "error" && (!existing || existing.state !== "error")) {
           notifyUser("Connection Error", error || `Connection to ${name} failed unexpectedly.`);
         } else if (state === "connected" && existing?.state === "expired_credentials") {
-          // Closes the loop on the "AWS SSO Expired" notification above: the
-          // background auto-refresh succeeded and the tunnel is back up
-          // without the user having to do anything in the app.
+          // The credentials were renewed (silently or after a login) and the
+          // tunnel is back up without the user having to do anything here.
           notifyUser("Reconnected", `${name} is back online after the SSO refresh.`);
         }
       }
@@ -485,7 +468,6 @@
     const offConnSsoCompleted = ws.on("sso.login.completed", (msg: WsMessage) => {
       const m = msg as { profile?: string; source?: string; success?: boolean; error?: string };
       if (m.source !== "connection" || !m.profile) return;
-      notifiedExpiredProfiles.delete(m.profile);
       if (!m.success) {
         notifyUser(
           "AWS SSO Refresh Failed",

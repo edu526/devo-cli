@@ -11,18 +11,29 @@ from cli_tool.sidecar.state import EventHub
 logger = logging.getLogger(__name__)
 
 
-def run_sso_login_sync(hub: EventHub, profile_name: str, source: str) -> bool:
+def run_sso_login_sync(hub: EventHub, profile_name: str, source: str, sso_session: Optional[str] = None) -> bool:
     """Run `aws sso login` using Popen to capture stdout and emit WS events.
 
     Listens for device code URLs and emits `sso.login.url_ready` if found,
     so the UI can display a manual fallback if the browser fails to open.
     At the end, validates credentials and emits `sso.login.completed`.
     Returns True if the credentials are valid, False otherwise.
+
+    Don't call this directly from request handlers: go through
+    `login_coordinator`, which makes sure one SSO session never has two
+    logins (two browser tabs) at once.
+
+    With `sso_session` it logs in to that `[sso-session]` by name (no profile
+    needed, e.g. account discovery); success is then the CLI's exit code,
+    since there is no profile whose credentials could be verified.
     """
-    logger.info("Starting SSO login for profile '%s' (source=%s)", profile_name, source)
+    logger.info("Starting SSO login for '%s' (source=%s)", sso_session or profile_name, source)
     hub.publish("sso.login.started", {"profile": profile_name, "source": source})
 
-    cmd = ["aws", "sso", "login", "--profile", profile_name]
+    if sso_session:
+        cmd = ["aws", "sso", "login", "--sso-session", sso_session]
+    else:
+        cmd = ["aws", "sso", "login", "--profile", profile_name]
 
     process = None
     try:
@@ -96,6 +107,11 @@ def run_sso_login_sync(hub: EventHub, profile_name: str, source: str) -> bool:
 
         # Wait up to 120s for the user to complete the browser flow
         process.wait(timeout=120)
+
+        if process.returncode == 0 and sso_session:
+            logger.info("SSO login successful for session '%s'", sso_session)
+            hub.publish("sso.login.completed", {"profile": profile_name, "source": source, "success": True})
+            return True
 
         if process.returncode == 0:
             # AWS SSO credentials may take a moment to propagate after login completes.

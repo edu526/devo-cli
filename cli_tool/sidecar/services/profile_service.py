@@ -270,16 +270,6 @@ def list_sso_sessions() -> list[dict[str, Any]]:
     )
 
 
-def _run_aws_sso_login(session_name: str) -> None:
-    """Run `aws sso login --sso-session <name>`. Blocks until the user
-    finishes the browser flow (or it times out)."""
-    subprocess.run(
-        ["aws", "sso", "login", "--sso-session", session_name],
-        timeout=180,
-        check=False,
-    )
-
-
 def _list_accounts(access_token: str, sso_region: str) -> list[dict[str, Any]]:
     """Run `aws sso list-accounts` and return the accountList."""
     result = subprocess.run(
@@ -350,7 +340,9 @@ def _do_discover(hub: EventHub, session_name: str) -> None:
         # `aws sso login` is a no-op in that case anyway, but skipping
         # avoids spawning a subprocess and the visual "starting" flicker.
         if not get_sso_cache_token(sso_start_url):
-            _run_aws_sso_login(session_name)
+            from cli_tool.sidecar.services import login_coordinator
+
+            login_coordinator.login_and_wait(hub, sso_session=session_name, source="discover", known_expired=True, timeout=200)
 
         access_token = get_sso_cache_token(sso_start_url)
         if not access_token:

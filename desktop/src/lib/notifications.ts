@@ -41,3 +41,29 @@ export async function notifyUser(title: string, body: string): Promise<void> {
     console.error("Failed to send desktop notification:", err);
   }
 }
+
+// The same "login required" condition is reported by two paths (the sidecar's
+// background renewal and the launch-time refresh) and can repeat; show it once.
+const LOGIN_NOTIFY_WINDOW_MS = 2 * 60 * 1000;
+let lastLoginNotice: { key: string; at: number } | null = null;
+
+/** Tell the user, once per condition, that AWS profiles need a browser login. */
+export function notifyLoginRequired(names: string[]): void {
+  if (names.length === 0) return;
+  const key = [...names].sort().join("|");
+  const now = Date.now();
+  if (lastLoginNotice && lastLoginNotice.key === key && now - lastLoginNotice.at < LOGIN_NOTIFY_WINDOW_MS) return;
+  lastLoginNotice = { key, at: now };
+
+  const shown = names.slice(0, 3).join(", ");
+  const extra = names.length > 3 ? ` and ${names.length - 3} more` : "";
+  void notifyUser(
+    "AWS login required",
+    `${shown}${extra} can't be renewed automatically. Open Devo and click Refresh to log in.`,
+  );
+}
+
+/** Test hook: forget the last notice so tests start clean. */
+export function _resetLoginNotice(): void {
+  lastLoginNotice = null;
+}

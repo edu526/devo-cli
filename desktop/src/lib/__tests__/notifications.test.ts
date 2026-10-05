@@ -87,3 +87,73 @@ describe("notifyUser", () => {
     expect(mockSendNotification).not.toHaveBeenCalled();
   });
 });
+
+describe("notifyLoginRequired", () => {
+  async function fresh() {
+    vi.resetModules();
+    const mod = await import("../notifications");
+    mod._resetLoginNotice();
+    return mod.notifyLoginRequired;
+  }
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  beforeEach(() => {
+    mockIsPermissionGranted.mockReset().mockResolvedValue(true);
+    mockRequestPermission.mockReset().mockResolvedValue("granted");
+    mockSendNotification.mockReset();
+  });
+
+  it("does nothing for an empty list", async () => {
+    const notify = await fresh();
+    notify([]);
+    await flush();
+    expect(mockSendNotification).not.toHaveBeenCalled();
+  });
+
+  it("names the profiles that need a login", async () => {
+    const notify = await fresh();
+    notify(["dev", "prod"]);
+    await flush();
+    expect(mockSendNotification).toHaveBeenCalledOnce();
+    const sent = mockSendNotification.mock.calls[0]![0] as { title: string; body: string };
+    expect(sent.title).toBe("AWS login required");
+    expect(sent.body).toContain("dev, prod");
+  });
+
+  it("summarises long lists", async () => {
+    const notify = await fresh();
+    notify(["a", "b", "c", "d", "e"]);
+    await flush();
+    expect((mockSendNotification.mock.calls[0]![0] as { body: string }).body).toContain("a, b, c and 2 more");
+  });
+
+  it("shows the same condition only once, whichever path reports it", async () => {
+    const notify = await fresh();
+    notify(["a", "b"]);
+    notify(["b", "a"]); // same set, different order
+    await flush();
+    expect(mockSendNotification).toHaveBeenCalledOnce();
+  });
+
+  it("shows a different condition right away", async () => {
+    const notify = await fresh();
+    notify(["a"]);
+    notify(["a", "z"]);
+    await flush();
+    expect(mockSendNotification).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows the same condition again once the window has passed", async () => {
+    vi.useFakeTimers();
+    try {
+      const notify = await fresh();
+      notify(["a"]);
+      await vi.advanceTimersByTimeAsync(3 * 60 * 1000);
+      notify(["a"]);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(mockSendNotification).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

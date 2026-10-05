@@ -17,6 +17,13 @@ export const appStatus = writable<AppStatus>("loading");
 export const appError = writable<string | null>(null);
 /** True once the sidecar rejected both the token and its refresh. */
 export const authLost = writable<boolean>(false);
+/** AWS SSO sessions waiting for a login the user has to start: session -> profiles. */
+export const loginNeeded = writable<Record<string, string[]>>({});
+/** AWS SSO sessions whose browser login is open right now. */
+export const loginActive = writable<Set<string>>(new Set());
+/** The "Log in" button's request is in flight. */
+export const loginInProgress = writable<boolean>(false);
+export const loginError = writable<string | null>(null);
 export const currentPage = writable<Page>("databases");
 function createViewModeStore(pageId: string) {
   const key = `devo_view_mode_${pageId}`;

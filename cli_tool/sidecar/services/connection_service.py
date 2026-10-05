@@ -30,48 +30,21 @@ def _hub_observer(hub: EventHub):
     return _emit
 
 
-# Module-level state for in-flight SSO logins triggered by a *live* connection
-# whose tokens expired mid-session, keyed by profile. Mirrors
-# sidecar/routers/codeartifact.py's _ensure_single_sso_login: several DB
-# connections commonly share one SSO profile, so if they all notice expired
-# tokens around the same time we want one browser tab, not one per
-# connection.
-_sso_login_threads: dict[str, threading.Thread] = {}
-_sso_login_lock = threading.Lock()
-
-
-def _do_connection_sso_login(hub: EventHub, profile: str) -> None:
-    from cli_tool.sidecar.services.sso_service import run_sso_login_sync
-
-    try:
-        run_sso_login_sync(hub, profile, source="connection")
-    finally:
-        with _sso_login_lock:
-            _sso_login_threads.pop(profile, None)
-
-
 def _ensure_single_connection_sso_login(hub: EventHub, profile: Optional[str], name: str) -> None:
-    """Auto-launch `aws sso login` when a live connection's tokens expire,
-    deduped per profile, so the user doesn't have to reconnect manually just
-    to trigger the browser flow. The connection loop itself keeps polling
-    and resumes on its own once _wait_for_valid_tokens sees valid tokens —
-    this only saves the user the step of starting the refresh.
+    """When a live connection's tokens expire, ask the shared login handler to
+    get the SSO session back, so the user doesn't have to reconnect manually.
+    The handler renews silently when it can, opens the browser only when it
+    must, and never opens two logins for one SSO session (several tunnels and
+    other parts of the app may ask at the same time). The connection loop keeps
+    polling and resumes on its own once _wait_for_valid_tokens sees valid
+    tokens.
     """
     if not profile:
         return
-    with _sso_login_lock:
-        existing = _sso_login_threads.get(profile)
-        if existing is not None and existing.is_alive():
-            logger.info("SSO login for profile '%s' already in flight; connection '%s' will pick it up", profile, name)
-            return
-        thread = threading.Thread(
-            target=_do_connection_sso_login,
-            args=(hub, profile),
-            daemon=True,
-            name=f"sso-login-conn-{profile}",
-        )
-        _sso_login_threads[profile] = thread
-        thread.start()
+    from cli_tool.sidecar.services import login_coordinator
+
+    status, _attempt = login_coordinator.request_login(hub, profile=profile, source="connection", automatic=True)
+    logger.info("Login for connection '%s' (profile '%s'): %s", name, profile, status)
 
 
 def start_connection(

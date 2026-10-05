@@ -104,8 +104,8 @@ class TestRefreshAllHappyPath:
             return_value={"session-1": ["dev"]},
         )
         mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._refresh_all_sessions",
-            return_value=(None, None, ["dev"]),
+            "cli_tool.sidecar.routers.profiles._login_sessions",
+            return_value=(["dev"]),
         )
 
         with TestClient(app) as client:
