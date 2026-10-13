@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.15.1 (2026-10-13)
+
+### Bug Fixes
+
+- **desktop**: Log why verifying AWS credentials failed
+  ([`ed2d189`](https://github.com/edu526/devo-cli/commit/ed2d189fb0fa39dc366441504a43513323b21bf6))
+
+
 ## v3.15.0 (2026-10-05)
 
 ### Features
