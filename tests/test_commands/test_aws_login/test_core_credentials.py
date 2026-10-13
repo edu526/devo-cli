@@ -394,6 +394,29 @@ def test_verify_credentials_returns_none_on_exception(mocker):
 
 
 @pytest.mark.unit
+def test_verify_credentials_logs_why_it_failed(mocker, caplog):
+    """The AWS CLI's error is what tells an expired SSO session apart from a
+    timeout or a network problem, so it must reach the log."""
+    error = "aws: [ERROR]: Error when retrieving token from sso: Token has expired and refresh failed"
+    mocker.patch("subprocess.run", return_value=MagicMock(returncode=255, stderr=f"\n{error}\n"))
+
+    with caplog.at_level("INFO", logger="cli_tool.commands.aws_login.core.credentials"):
+        assert verify_credentials("dev") is None
+
+    assert f"Could not verify credentials for 'dev': {error}" in caplog.text
+
+
+@pytest.mark.unit
+def test_verify_credentials_logs_a_timeout(mocker, caplog):
+    mocker.patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="aws", timeout=10))
+
+    with caplog.at_level("INFO", logger="cli_tool.commands.aws_login.core.credentials"):
+        assert verify_credentials("dev") is None
+
+    assert "Could not verify credentials for 'dev': timed out" in caplog.text
+
+
+@pytest.mark.unit
 def test_verify_credentials_passes_profile_to_command(mocker):
     """The profile name is passed to aws sts get-caller-identity."""
     identity = {"Account": "123", "Arn": "arn:...", "UserId": "user"}

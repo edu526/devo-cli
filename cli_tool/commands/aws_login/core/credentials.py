@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import logging
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +14,7 @@ from cli_tool.commands.aws_login.core.config import get_aws_credentials_path, ge
 _UTC_OFFSET = "+00:00"
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 _SSO_START_URL_KEY = "startUrl"
 _EXPIRES_AT_KEY = "expiresAt"
@@ -310,7 +312,12 @@ def check_profile_needs_refresh(profile_name, threshold_minutes=10, cached_only=
 
 
 def verify_credentials(profile_name):
-    """Verify if credentials are valid and show info."""
+    """Verify if credentials are valid and show info.
+
+    Logs why it failed at INFO (sidecar.log in debug mode; silent in the CLI,
+    which configures no logging): to callers an expired SSO session, a
+    timeout and a network error are all just None.
+    """
     cmd = ["aws", "sts", "get-caller-identity", "--profile", profile_name, "--output", "json"]
 
     try:
@@ -323,6 +330,12 @@ def verify_credentials(profile_name):
                 "arn": identity.get("Arn"),
                 "user_id": identity.get("UserId"),
             }
+        error = " ".join((result.stderr or "").split()) or f"exit code {result.returncode}"
+        logger.info("Could not verify credentials for '%s': %s", profile_name, error[:500])
         return None
-    except Exception:
+    except subprocess.TimeoutExpired:
+        logger.info("Could not verify credentials for '%s': timed out after 10 s", profile_name)
+        return None
+    except Exception as e:
+        logger.info("Could not verify credentials for '%s': %s", profile_name, e)
         return None
