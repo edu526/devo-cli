@@ -30,13 +30,17 @@ def _configure_logging(log_level: str) -> None:
     file_handler = logging.handlers.RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3, encoding="utf-8")
     file_handler.setFormatter(fmt)
 
-    stderr_handler = logging.StreamHandler(sys.stderr)
-    stderr_handler.setFormatter(fmt)
-
     root = logging.getLogger()
     root.setLevel(level)
     root.addHandler(file_handler)
-    root.addHandler(stderr_handler)
+
+    # Echo to the terminal only when someone runs the sidecar by hand. Under
+    # Tauri stderr is a pipe that sidecar.rs appends to this same log file, so
+    # echoing there wrote every line twice.
+    if sys.stderr is not None and sys.stderr.isatty():
+        stderr_handler = logging.StreamHandler(sys.stderr)
+        stderr_handler.setFormatter(fmt)
+        root.addHandler(stderr_handler)
 
     # Silence noisy third-party loggers
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)

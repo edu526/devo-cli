@@ -1,11 +1,52 @@
 """Unit tests for cli_tool.sidecar.bootstrap module."""
 
+import logging
+import logging.handlers
 import socket
 from unittest.mock import MagicMock
 
 import pytest
 
-from cli_tool.sidecar.bootstrap import _bind_socket, run
+from cli_tool.sidecar import bootstrap
+from cli_tool.sidecar.bootstrap import _bind_socket, _configure_logging, run
+
+# ---------------------------------------------------------------------------
+# _configure_logging
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestConfigureLogging:
+    @pytest.fixture(autouse=True)
+    def isolated_root_logger(self, mocker, tmp_path):
+        mocker.patch.object(bootstrap, "LOG_FILE", tmp_path / "sidecar.log")
+        root = logging.getLogger()
+        self.before, level = list(root.handlers), root.level
+        yield
+        for handler in self._added():
+            root.removeHandler(handler)
+            handler.close()
+        root.setLevel(level)
+
+    def _added(self):
+        return [h for h in logging.getLogger().handlers if h not in self.before]
+
+    def test_under_tauri_logs_only_to_the_file(self, mocker):
+        """sidecar.rs appends the sidecar's stderr to sidecar.log, so echoing
+        records there too wrote every line twice."""
+        mocker.patch("sys.stderr", MagicMock(**{"isatty.return_value": False}))
+
+        _configure_logging("info")
+
+        assert [type(h) for h in self._added()] == [logging.handlers.RotatingFileHandler]
+
+    def test_run_by_hand_in_a_terminal_also_logs_to_stderr(self, mocker):
+        mocker.patch("sys.stderr", MagicMock(**{"isatty.return_value": True}))
+
+        _configure_logging("info")
+
+        assert sorted(type(h).__name__ for h in self._added()) == ["RotatingFileHandler", "StreamHandler"]
+
 
 # ---------------------------------------------------------------------------
 # _bind_socket
