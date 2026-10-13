@@ -1,8 +1,9 @@
 """The one place where the sidecar starts an AWS SSO browser login.
 
 Everything that may need a login goes through here: SSM tunnels whose
-credentials expired, the background renewal, Refresh / Refresh All, the
-"Log in" banner, CodeArtifact and the account-discovery wizard. That gives:
+credentials expired, Refresh / Refresh All, the "Log in" banner, CodeArtifact
+and the account-discovery wizard. The background renewal never asks for one:
+it only tells the UI to offer the "Log in" banner. That gives:
 
 - one login per SSO session at a time: a request for a session that is
   already logging in joins that attempt instead of opening another tab
@@ -13,7 +14,7 @@ credentials expired, the background renewal, Refresh / Refresh All, the
 - the browser only opens when it is really needed: before running
   `aws sso login` (which always opens it) the attempt first tries to renew
   silently, unless the caller just found the session dead itself
-- a backoff for *automatic* requests (expired tunnels, background renewal):
+- a backoff for *automatic* requests (expired tunnels):
   when an automatic login is not completed (tab ignored, cancelled, timed
   out) the next automatic one for that session waits 15 min, then 30, up to
   2 h — so nobody comes back to a pile of login tabs. Explicit requests
@@ -229,7 +230,7 @@ def _run_attempt(
             sources = {s for _w, s in attempt.requesters}
             # An explicit requester joining an automatic attempt makes it count
             # as explicit: a failure must not hold back the user's next click.
-            _record_result(key, success, automatic and all(s in ("connection", "auto_renew") for s in sources))
+            _record_result(key, success, automatic and all(s == "connection" for s in sources))
             attempt.success = success
             _running.pop(key, None)
         attempt.done.set()

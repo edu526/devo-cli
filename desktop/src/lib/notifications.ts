@@ -59,7 +59,7 @@ export function notifyLoginRequired(names: string[]): void {
   const extra = names.length > 3 ? ` and ${names.length - 3} more` : "";
   void notifyUser(
     "AWS login required",
-    `${shown}${extra} can't be renewed automatically. Open Devo and click Refresh to log in.`,
+    `${shown}${extra} can't be renewed automatically. Open Devo and click Log in.`,
   );
 }
 

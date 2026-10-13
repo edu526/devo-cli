@@ -440,11 +440,12 @@ def _auto_renew(hub: EventHub, profiles: list[dict[str, Any]], state: dict[str, 
     background for as long as Devo is open. Listing no longer renews them as a
     side effect (it reads the AWS CLI cache), so it is done here explicitly.
 
-    When a whole SSO session can't be renewed silently, the shared login
-    handler opens the browser login for it (also with the window hidden). If
-    the handler holds the login back — a recent automatic login for that
-    session was not completed — a single `profile.needs_login` event is
-    published instead, so the UI can offer a "Log in" button. Failing profiles
+    It never opens the browser itself: it watches every profile, including
+    ones nobody is using, so a short-lived role (1 h) would pop a login tab
+    every 45 min whenever the SSO session can't be renewed silently. When a
+    whole session can't be renewed, a single `profile.needs_login` event is
+    published instead and the UI offers a "Log in" button; tunnels that need
+    credentials still ask the login handler on their own. Failing profiles
     are not retried silently for `_RENEW_RETRY_COOLDOWN` unless the session's
     SSO token becomes valid again (the user logged in), and sessions with a
     login in progress are skipped. Disable with `aws_login.auto_renew = false`.
@@ -506,21 +507,18 @@ def _auto_renew(hub: EventHub, profiles: list[dict[str, Any]], state: dict[str, 
         if key not in renewed_sessions:
             dead_sessions.setdefault(key, []).append(name)
 
-    held_back: dict[str, list[str]] = {}
-    for key, names in dead_sessions.items():
-        status, _attempt = login_coordinator.request_login(hub, profile=names[0], source="auto_renew", automatic=True, known_expired=True)
-        logger.info("auto-renew: session '%s' needs a login: %s", key, status)
-        if status == login_coordinator.SUPPRESSED and key not in notified:
-            held_back[key] = names
-        notified.add(key)
+    newly_dead = {key: names for key, names in dead_sessions.items() if key not in notified}
+    for key, names in newly_dead.items():
+        logger.info("auto-renew: session '%s' needs a login (%s); offering the Log in button", key, ", ".join(names))
+    notified.update(dead_sessions)
 
-    if held_back:
+    if newly_dead:
         hub.publish(
             "profile.needs_login",
             {
-                "sessions": sorted(held_back),
-                "names": [n for names in held_back.values() for n in names],
-                "by_session": {session: names for session, names in sorted(held_back.items())},
+                "sessions": sorted(newly_dead),
+                "names": [n for names in newly_dead.values() for n in names],
+                "by_session": {session: names for session, names in sorted(newly_dead.items())},
             },
         )
 

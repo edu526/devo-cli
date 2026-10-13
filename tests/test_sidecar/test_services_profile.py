@@ -463,11 +463,10 @@ class TestAutoRenew:
         mocker.stopall()
         mocker.patch.object(profile_service, "read_cached_credentials_expiration", return_value=None)
         self.config = mocker.patch(CONFIG_VALUE, side_effect=lambda key, default=None: default)
-        # Dead sessions go to the shared login handler; never run a real login.
-        self.request_login = mocker.patch(
-            "cli_tool.sidecar.services.login_coordinator.request_login",
-            return_value=("started", None),
-        )
+        # The background renewal must never start a login (= open the browser).
+        self.request_login = mocker.patch("cli_tool.sidecar.services.login_coordinator.request_login")
+        yield
+        self.request_login.assert_not_called()
 
     def test_renews_only_stale_profiles(self, mocker):
         silent = mocker.patch(SILENT, return_value=(["old", "soon"], []))
@@ -497,7 +496,10 @@ class TestAutoRenew:
         assert profile_service._auto_renew(EventHub(), [_p("a", -5)], {}) is False
         silent.assert_not_called()
 
-    def test_dead_session_asks_the_login_handler_once(self, mocker):
+    def test_dead_session_offers_a_login_instead_of_opening_the_browser(self, mocker):
+        """A 1 h role nobody is using must not pop a login tab every 45 min:
+        the UI gets a "Log in" button instead (request_login is never called,
+        see the fixture)."""
         mocker.patch(SILENT, return_value=([], [("a", "stale"), ("b", "stale")]))
         hub = EventHub()
         q = hub.subscribe()
@@ -505,15 +507,17 @@ class TestAutoRenew:
         renewed = profile_service._auto_renew(hub, [_p("a", -5), _p("b", -5)], {})
 
         assert renewed is False
-        self.request_login.assert_called_once_with(hub, profile="a", source="auto_renew", automatic=True, known_expired=True)
-        # the handler's own events drive the UI; no needs_login here
-        assert _events(q) == []
+        assert _events(q) == [
+            {
+                "event": "profile.needs_login",
+                "sessions": ["corp"],
+                "names": ["a", "b"],
+                "by_session": {"corp": ["a", "b"]},
+            }
+        ]
 
-    def test_held_back_login_publishes_one_needs_login_event(self, mocker):
-        """When the handler holds an automatic login back (a recent one wasn't
-        completed), the UI is told so it can offer a "Log in" button."""
+    def test_a_dead_session_is_reported_only_once(self, mocker):
         mocker.patch(SILENT, return_value=([], [("a", "stale"), ("b", "stale")]))
-        self.request_login.return_value = ("suppressed", None)
         hub = EventHub()
         q = hub.subscribe()
         state: dict = {}
@@ -586,7 +590,6 @@ class TestAutoRenew:
 
     def test_notifies_again_after_the_session_recovered_and_died_again(self, mocker):
         silent = mocker.patch(SILENT, return_value=([], [("a", "stale")]))
-        self.request_login.return_value = ("suppressed", None)
         hub = EventHub()
         q = hub.subscribe()
         state: dict = {}
@@ -641,16 +644,8 @@ class TestAutoRenew:
 
         assert _events(q) == []
 
-    def test_each_dead_session_gets_its_own_login_request(self, mocker):
-        mocker.patch(SILENT, return_value=([], [("a", "stale"), ("z", "stale")]))
-
-        profile_service._auto_renew(EventHub(), [_p("a", -5, session="corp"), _p("z", -5, session="personal")], {})
-
-        assert sorted(c.kwargs["profile"] for c in self.request_login.call_args_list) == ["a", "z"]
-
     def test_sessions_are_reported_independently(self, mocker):
         mocker.patch(SILENT, return_value=([], [("a", "stale"), ("z", "stale")]))
-        self.request_login.return_value = ("suppressed", None)
         hub = EventHub()
         q = hub.subscribe()
 

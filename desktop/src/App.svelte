@@ -207,8 +207,9 @@
     stopAuthLost = onAuthLost(() => authLost.set(true));
     ws.connect(info.port);
     // The sidecar renews AWS credentials in the background and, when a whole
-    // SSO session expired, opens the browser login itself. This keeps the
-    // banner and the notifications in sync with that.
+    // SSO session expired, asks for a login (the "Log in" banner) — or opens
+    // the browser itself when a tunnel needs it. This keeps the banner and
+    // the notifications in sync with that.
     stopNeedsLogin = startLoginWatcher();
     appStatus.set("ready");
 

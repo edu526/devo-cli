@@ -228,7 +228,7 @@ class TestAutomaticBackoff:
 
         lc.request_login(hub, profile="db-dev", source="connection", automatic=True)
         _wait_idle()
-        status, _ = lc.request_login(hub, profile="db-dev", source="auto_renew", automatic=True)
+        status, _ = lc.request_login(hub, profile="db-prod", source="connection", automatic=True)
 
         assert status == lc.SUPPRESSED
         assert run.call_count == 1

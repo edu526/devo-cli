@@ -5,15 +5,16 @@ import { loginActive, loginError, loginInProgress, loginNeeded } from "./stores"
 import { ws, type WsMessage } from "./ws";
 
 /**
- * UI side of the sidecar's single login handler. The sidecar decides when a
- * browser login is needed and opens it itself (also while Devo is hidden in
- * the tray); this module only reflects that state:
+ * UI side of the sidecar's single login handler. The sidecar opens the
+ * browser itself only when something needs it right away (a tunnel whose
+ * credentials expired, also while Devo is hidden in the tray); the background
+ * renewal only reports sessions it couldn't renew. This module reflects that:
  *
  * - `loginActive`: SSO sessions whose browser login is open right now
  *   (`sso.session.login_started` / `login_finished`)
- * - `loginNeeded`: sessions that need a login the sidecar did not start on its
- *   own (an automatic one was recently ignored), or whose login failed. The
- *   banner offers a "Log in" button for them.
+ * - `loginNeeded`: sessions the background renewal couldn't renew
+ *   (`profile.needs_login`), or whose login failed. The banner offers a
+ *   "Log in" button for them.
  */
 
 // Stop showing "waiting for the browser" if the sidecar never reports back.
