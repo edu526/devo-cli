@@ -620,38 +620,52 @@
     <div class="sessions">
       {#each sessions as session (session.name)}
         {@const active = sessionActive(session)}
-        <div class="session" class:expiring={session.status === "expiring"} class:expired={!active}>
-          <span class="session-dot" aria-hidden="true"></span>
-          <div class="session-text">
-            <span class="session-title">
-              SSO session <strong>{session.name}</strong>
-              <span class="session-state">
-                · {active ? `${formatTimeLeft(session.secondsRemaining)} left` : "expired"}
+        {#if !active && session.stale.length > 0}
+          <!-- Something to do: profiles need credentials only a login brings back. -->
+          <div class="session expired">
+            <span class="session-dot" aria-hidden="true"></span>
+            <div class="session-text">
+              <span class="session-title">
+                SSO session <strong>{session.name}</strong> <span class="session-state">· expired</span>
               </span>
-            </span>
-            <span class="session-hint">
-              {#if active}
-                Until then Devo renews the credentials of its {plural(session.profiles.length, "profile")} on its own.
-              {:else if session.stale.length > 0}
-                {plural(session.stale.length, "profile")} need new credentials. Log in to renew them.
+              <span class="session-hint">
+                {plural(session.stale.length, "profile")}
+                {session.stale.length === 1 ? "needs" : "need"} new credentials. Log in to renew them.
+              </span>
+            </div>
+            <button
+              class="btn-primary"
+              onclick={() => loginSession(session.name)}
+              disabled={anyBusyRefresh}
+              title="Sign in, then get new credentials for every profile of this session."
+            >
+              {#if sessionLogin === session.name}
+                <span class="spinner-sm"></span> Logging in…
               {:else}
-                Its profiles keep working until their own credentials expire, then they need a login.
+                Log in
               {/if}
-            </span>
+            </button>
           </div>
-          <button
-            class={!active && session.stale.length > 0 ? "btn-primary" : "btn-secondary"}
-            onclick={() => loginSession(session.name)}
-            disabled={anyBusyRefresh}
-            title="Sign in again, then get new credentials for every profile of this session."
+        {:else}
+          <!-- Nothing to do: just say where things stand. Signing in again
+               while it is active doesn't extend it (the organization sets
+               how long it lasts), so no button here. -->
+          <p
+            class="session-note"
+            class:expiring={session.status === "expiring"}
+            class:expired={!active}
+            title="How long an SSO session lasts is set by your organization in IAM Identity Center; signing in again doesn't extend it."
           >
-            {#if sessionLogin === session.name}
-              <span class="spinner-sm"></span> Logging in…
+            <span class="session-dot" aria-hidden="true"></span>
+            {#if active}
+              SSO session <strong>{session.name}</strong> active for {formatTimeLeft(session.secondsRemaining)} more.
+              Devo renews its {plural(session.profiles.length, "profile")} on its own until then.
             {:else}
-              {active ? "Log in again" : "Log in"}
+              SSO session <strong>{session.name}</strong> expired. Its profiles keep working until their own
+              credentials run out.
             {/if}
-          </button>
-        </div>
+          </p>
+        {/if}
       {/each}
     </div>
   {/if}
@@ -1087,12 +1101,34 @@
     border-radius: 8px;
   }
 
-  .session.expiring {
+  .session-note.expiring {
     --session-color: var(--warning);
   }
 
   .session.expired {
     --session-color: var(--danger);
+  }
+
+  .session-note {
+    --session-color: var(--success);
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+
+  .session-note.expired {
+    --session-color: var(--text-faint);
+  }
+
+  .session-note strong {
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+
+  .session-note .session-dot {
+    display: inline-block;
+    margin-right: 0.45rem;
+    vertical-align: middle;
   }
 
   .session-dot {
