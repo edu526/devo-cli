@@ -595,6 +595,8 @@ export const hostsApi = {
     }),
   /** Read-only: never writes the hosts file. */
   status: () => req<HostnameForwardingStatus>("GET", "/hosts/status"),
+  /** Make the hosts file match the databases: add the missing entries, remove the stale ones. */
+  sync: () => req<HostnameForwardingStatus>("POST", "/hosts/sync"),
   /** Why the hosts file can't be written even as administrator (antivirus, read-only…). */
   lockReason: () => req<{ message: string }>("GET", "/hosts/lock-reason"),
   /** Pause/resume hostname forwarding for every database. */
@@ -616,8 +618,10 @@ export interface HostnameForwardingStatus {
   enabled: boolean;
   /** `enabled`: its hostname is forwarded; `mapped`: the hosts file has its entry. */
   databases: Record<string, { enabled: boolean; mapped: boolean }>;
-  /** Enabled databases whose hosts entry is missing or stale. */
+  /** Enabled databases whose hosts entry is missing or points elsewhere. */
   missing: string[];
+  /** Hostnames in Devo's block of the hosts file that no forwarded database uses. */
+  stale: string[];
 }
 
 export interface HostSetupEntry {

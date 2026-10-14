@@ -16,6 +16,7 @@ from cli_tool.sidecar.services.hosts_service import (
     set_database_forwarding,
     set_forwarding,
     setup_hosts,
+    sync_hosts,
 )
 
 router = APIRouter(prefix="/hosts", tags=["hosts"], dependencies=[Depends(require_bearer)])
@@ -77,6 +78,16 @@ def create_host(body: HostIn) -> dict[str, Any]:
 def setup_endpoint(body: SetupIn | None = None) -> dict[str, Any]:
     try:
         return setup_hosts(body.db_names if body else None)
+    except NeedsElevation as exc:
+        raise _elevation_required(exc)
+
+
+@router.post("/sync")
+def sync_endpoint() -> dict[str, Any]:
+    """Make the hosts file match the databases: add the missing entries,
+    remove the stale ones. Returns the status, like GET /hosts/status."""
+    try:
+        return sync_hosts()
     except NeedsElevation as exc:
         raise _elevation_required(exc)
 

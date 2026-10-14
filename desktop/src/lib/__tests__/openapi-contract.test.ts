@@ -86,6 +86,9 @@ const SIDECAR_SPEC: OpenAPIV3.Document = {
     "/api/v1/hosts/status": {
       get: { responses: { "200": { description: "OK" } } },
     },
+    "/api/v1/hosts/sync": {
+      post: { responses: { "200": { description: "OK" } } },
+    },
     "/api/v1/hosts/lock-reason": {
       get: { responses: { "200": { description: "OK" } } },
     },
@@ -211,6 +214,7 @@ describe("openapi contract: frontend ↔ sidecar", () => {
     await hostsApi.setup();
     await hostsApi.remove("x");
     await hostsApi.status();
+    await hostsApi.sync();
     await hostsApi.lockReason();
     await hostsApi.setForwarding(false);
     await hostsApi.setDatabaseForwarding("d", false);

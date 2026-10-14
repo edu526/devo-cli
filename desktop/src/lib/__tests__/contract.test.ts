@@ -63,6 +63,7 @@ const SIDECAR_ENDPOINTS: SidecarEndpoint[] = [
   { method: "POST", path: "/api/v1/hosts/setup" },
   { method: "DELETE", path: "/api/v1/hosts/{hostname}" },
   { method: "GET", path: "/api/v1/hosts/status" },
+  { method: "POST", path: "/api/v1/hosts/sync" },
   { method: "GET", path: "/api/v1/hosts/lock-reason" },
   { method: "PUT", path: "/api/v1/hosts/forwarding" },
   { method: "PUT", path: "/api/v1/hosts/forwarding/{name}" },
@@ -158,6 +159,7 @@ describe("sidecar ↔ frontend contract", () => {
     await hostsApi.setup();
     await hostsApi.remove("x");
     await hostsApi.status();
+    await hostsApi.sync();
     await hostsApi.lockReason();
     await hostsApi.setForwarding(false);
     await hostsApi.setDatabaseForwarding("d", false);

@@ -105,6 +105,8 @@
   // "*" while the switch for all databases changes, else the database's name
   let changingForwarding = $state<string | null>(null);
   const missingHosts = $derived(forwarding?.missing ?? []);
+  // Hostnames Devo still maps but no forwarded database uses (deleted, host changed…)
+  const staleHosts = $derived(forwarding?.stale ?? []);
 
   function errorText(e: unknown): string {
     return e instanceof Error ? e.message : String(e);
@@ -122,7 +124,7 @@
     settingUpHosts = true;
     actionError = null;
     try {
-      await withHostsElevation(() => hostsApi.setup(missingHosts));
+      await withHostsElevation(() => hostsApi.sync());
     } catch (e) {
       actionError = errorText(e);
     } finally {
@@ -792,17 +794,26 @@
     </div>
   {/if}
 
-  {#if missingHosts.length > 0}
+  {#if missingHosts.length > 0 || staleHosts.length > 0}
     <div
       class="alert-warning"
       style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
     >
       <div>
-        <strong>Missing local DNS mappings</strong>
-        <br />
-        <span class="muted"
-          >Some connections require their hostname to be mapped to 127.0.0.X in your hosts file.</span
-        >
+        <strong>Hosts file out of sync</strong>
+        {#if missingHosts.length > 0}
+          <br />
+          <span class="muted"
+            >Not mapped to their tunnel yet: {missingHosts.join(", ")}.</span
+          >
+        {/if}
+        {#if staleHosts.length > 0}
+          <br />
+          <span class="muted"
+            >Still mapped, but no database uses them (they won't reach the real database):
+            {staleHosts.join(", ")}.</span
+          >
+        {/if}
       </div>
       <button class="btn-primary" onclick={syncHosts} disabled={settingUpHosts}>
         {#if settingUpHosts}<span class="spinner-sm"></span>{/if} Sync Hosts

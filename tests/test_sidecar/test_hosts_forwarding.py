@@ -312,3 +312,38 @@ class TestTunnelsWhilePaused:
 
         with pytest.raises(ValueError, match="hosts setup"):
             start_connection("a")
+
+
+@pytest.mark.unit
+class TestStaleEntriesAndSync:
+    def test_status_lists_hostnames_no_forwarded_database_uses(self, hosts, two_dbs):
+        hosts.path.write_text(_hosts(("127.0.0.2", "a.rds"), ("127.0.0.3", "b.rds"), ("127.0.0.9", "deleted.rds")))
+        SSMConfigManager().set_hostname_forwarding(False, "b")
+
+        assert hosts_service.hosts_status()["stale"] == ["b.rds", "deleted.rds"]
+
+    def test_sync_maps_the_missing_and_removes_the_stale(self, hosts, two_dbs):
+        hosts.path.write_text(_hosts(("127.0.0.2", "a.rds"), ("127.0.0.9", "deleted.rds")))
+
+        status = hosts_service.sync_hosts()
+
+        assert hosts.entries() == [("127.0.0.2", "a.rds"), ("127.0.0.3", "b.rds")]
+        assert status["missing"] == [] and status["stale"] == []
+
+    def test_sync_without_rights_asks_to_run_hosts_sync_elevated(self, hosts, two_dbs):
+        hosts.path.write_text(_hosts(("127.0.0.9", "deleted.rds")))
+        hosts.writable = False
+
+        with pytest.raises(NeedsElevation) as exc:
+            hosts_service.sync_hosts()
+
+        assert exc.value.action == "hosts-sync"
+        assert exc.value.params["cli_args"][-1] == "sync"
+
+    def test_endpoint(self, mocker):
+        sync = mocker.patch("cli_tool.sidecar.routers.hosts.sync_hosts", return_value={"missing": [], "stale": []})
+
+        response = _client(hosts_router).post("/hosts/sync", headers=AUTH)
+
+        assert response.status_code == 200
+        sync.assert_called_once_with()

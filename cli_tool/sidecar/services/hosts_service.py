@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 from cli_tool.commands.ssm.core import hostname_forwarding
 from cli_tool.commands.ssm.core.config import SSMConfigManager
-from cli_tool.commands.ssm.core.hosts_setup import setup_databases
+from cli_tool.commands.ssm.core.hosts_setup import setup_databases, stale_hostnames, sync_databases
 from cli_tool.commands.ssm.utils import HostsManager
 from cli_tool.commands.ssm.utils.hosts_manager import describe_hosts_lock
 from cli_tool.core.utils.config_manager import get_config_dir
@@ -157,10 +157,12 @@ def hosts_status() -> dict[str, Any]:
     `enabled` is the setting for all databases. Per database: `enabled` (its
     hostname is forwarded, by that setting or its own exception) and `mapped`
     (the hosts file points its hostname at its loopback IP). `missing` lists
-    the enabled ones not mapped.
+    the enabled ones not mapped, `stale` the hostnames in Devo's block that no
+    forwarded database uses (sync_hosts fixes both).
     """
     ssm_config = SSMConfigManager().load()
-    managed = {host: ip for ip, host in HostsManager().get_managed_entries()}
+    entries = HostsManager().get_managed_entries()
+    managed = {host: ip for ip, host in entries}
     databases = {}
     for name, cfg in (ssm_config.get("databases") or {}).items():
         local_address = cfg.get("local_address", "127.0.0.1")
@@ -172,7 +174,18 @@ def hosts_status() -> dict[str, Any]:
         "enabled": hostname_forwarding.global_enabled(ssm_config),
         "databases": databases,
         "missing": sorted(n for n, d in databases.items() if d["enabled"] and not d["mapped"]),
+        "stale": stale_hostnames(ssm_config, entries),
     }
+
+
+def sync_hosts() -> dict[str, Any]:
+    """Make the hosts file match the databases (`devo ssm hosts sync`): map the
+    missing ones, remove the stale entries. Returns hosts_status(); raises
+    NeedsElevation when the file needs it."""
+    _succeeded, failed, _removed = sync_databases()
+    if any(f.get("needs_elevation") for f in failed):
+        raise _hosts_command_elevation(["sync"], "hosts-sync")
+    return hosts_status()
 
 
 def hosts_lock_reason() -> dict[str, str]:
