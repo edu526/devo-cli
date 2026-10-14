@@ -27,6 +27,7 @@
   import { viewModes } from "../lib/stores";
   import { ws, type WsMessage } from "../lib/ws";
   import { notifyUser } from "../lib/notifications";
+  import { explainError, stateLabel } from "../lib/connection-status";
   import { Settings, RefreshCw, X, Link2, Link2Off } from "@lucide/svelte";
   import { open as openUrl } from "@tauri-apps/plugin-shell";
 
@@ -672,7 +673,8 @@
   // --- Display Helpers ---
   function stateClass(state: string): string {
     if (state === "connected") return "badge-green";
-    if (state === "error" || state === "expired_credentials") return "badge-red";
+    if (state === "error") return "badge-red";
+    if (state === "expired_credentials") return "badge-yellow";
     if (state === "reconnecting") return "badge-blue";
     if (state === "starting" || state === "connecting") return "badge-yellow";
     return "badge-gray";
@@ -690,6 +692,24 @@
     return isStopped(connState(row));
   }
 
+  /** Starting a tunnel whose credentials expired opens the login first. */
+  function startLabel(row: Row): string {
+    return connState(row) === "expired_credentials" ? "Log in & connect" : "Start";
+  }
+
+  /** What to tell the user under a tunnel: its error explained, or why it's waiting. */
+  function problemOf(row: Row): { summary: string; detail: string | null } | null {
+    const state = connState(row);
+    if (state === "expired_credentials") {
+      const profile = row.db.profile ?? "default";
+      return { summary: `The AWS credentials of profile "${profile}" expired. Log in to connect.`, detail: null };
+    }
+    const explained = explainError(row.conn?.error);
+    if (!explained) return null;
+    if (state === "reconnecting") return { ...explained, summary: `Reconnecting: ${explained.summary}` };
+    return explained;
+  }
+
   function formatUptime(seconds: number | undefined): string {
     if (seconds === undefined || seconds === null) return "—";
     if (seconds < 60) return `${Math.floor(seconds)}s`;
@@ -699,6 +719,18 @@
     return `${h}h ${m}m`;
   }
 </script>
+
+{#snippet problemNote(state: string, problem: { summary: string; detail: string | null })}
+  <div class="lc-error" class:warning={state === "expired_credentials"} class:info={state === "reconnecting"}>
+    {problem.summary}
+    {#if problem.detail}
+      <details class="lc-error-detail">
+        <summary>Details</summary>
+        <code>{problem.detail}</code>
+      </details>
+    {/if}
+  </div>
+{/snippet}
 
 {#snippet forwardingToggle(name: string, cls: string)}
   {#if forwarding}
@@ -879,13 +911,13 @@
             <th>Host</th>
             <th>Port</th>
             <th>Uptime</th>
-            <th>Error</th>
             <th class="actions-col">Actions</th>
           </tr>
         </thead>
         <tbody>
           {#each rows as row (row.name)}
-            <tr>
+            {@const problem = problemOf(row)}
+            <tr class:has-problem={problem !== null}>
               <td class="name">
                 {row.name}
                 <button
@@ -894,7 +926,7 @@
                   title="Edit configuration"><Settings size={14} /></button
                 >
               </td>
-              <td><span class="badge {stateClass(connState(row))}">{connState(row)}</span></td>
+              <td><span class="badge {stateClass(connState(row))}">{stateLabel(connState(row))}</span></td>
               <td class="host-cell truncate">
                 <code>{row.db.host}</code>
                 {#if !forwarded(row.name)}
@@ -905,9 +937,6 @@
               </td>
               <td>{row.db.port} → {localEndpoint(row)}</td>
               <td class="uptime-cell">{formatUptime(row.conn?.uptime_seconds)}</td>
-              <td class="error-cell truncate" title={row.conn?.error ?? ""}>
-                {connState(row) === "reconnecting" && row.conn?.error ? "↻ " : ""}{row.conn?.error ?? ""}
-              </td>
               <td class="actions-cell">
                 <div class="actions-wrap">
                   {@render forwardingToggle(row.name, "btn-sm btn-secondary")}
@@ -920,7 +949,7 @@
                       {#if busyConns.has(row.name)}
                         <span class="spinner-sm"></span> Starting…
                       {:else}
-                        Start
+                        {startLabel(row)}
                       {/if}
                     </button>
                   {:else}
@@ -947,6 +976,11 @@
                 </div>
               </td>
             </tr>
+            {#if problem}
+              <tr class="problem-row">
+                <td colspan="6">{@render problemNote(connState(row), problem)}</td>
+              </tr>
+            {/if}
           {/each}
         </tbody>
       </table>
@@ -954,11 +988,12 @@
   {:else}
     <div class="list-cards">
       {#each rows as row (row.name)}
+        {@const problem = problemOf(row)}
         <div class="list-card">
           <div class="lc-main">
             <div class="lc-header">
               <span class="lc-title">{row.name}</span>
-              <span class="badge {stateClass(connState(row))}">{connState(row)}</span>
+              <span class="badge {stateClass(connState(row))}">{stateLabel(connState(row))}</span>
               <button
                 class="btn-icon lc-edit-btn"
                 onclick={() => openEdit(row.name, row.db)}
@@ -985,10 +1020,8 @@
                 {formatUptime(row.conn?.uptime_seconds)}
               </span>
             </div>
-            {#if row.conn?.error}
-              <div class="lc-error" title={row.conn.error}>
-                {connState(row) === "reconnecting" ? "Reconnecting: " : ""}{row.conn.error}
-              </div>
+            {#if problem}
+              {@render problemNote(connState(row), problem)}
             {/if}
           </div>
           <div class="lc-actions">
@@ -999,7 +1032,7 @@
                 onclick={() => startOne(row.name)}
                 disabled={busyConns.has(row.name) || busyAll}
               >
-                Start
+                {startLabel(row)}
               </button>
             {:else}
               <button
@@ -1161,10 +1194,14 @@
   .host-cell {
     max-width: 220px;
   }
-  .error-cell {
-    max-width: 200px;
-    color: var(--danger);
-    font-size: 0.8rem;
+  tr.has-problem td {
+    border-bottom: none;
+  }
+  .problem-row td {
+    padding-top: 0;
+  }
+  .problem-row td .lc-error {
+    margin-top: 0;
   }
   .uptime-cell {
     font-family: "JetBrains Mono", monospace;
@@ -1259,6 +1296,35 @@
     border-radius: 4px;
     display: inline-block;
     margin-top: 0.25rem;
+  }
+
+  .lc-error.warning {
+    color: var(--warning);
+    background: color-mix(in srgb, var(--warning) 10%, transparent);
+  }
+
+  .lc-error.info {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+
+  .lc-error-detail {
+    margin-top: 0.25rem;
+    font-size: 0.78rem;
+  }
+
+  .lc-error-detail summary {
+    cursor: pointer;
+    color: var(--text-muted);
+    user-select: none;
+  }
+
+  .lc-error-detail code {
+    display: block;
+    margin-top: 0.25rem;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   .lc-actions {
