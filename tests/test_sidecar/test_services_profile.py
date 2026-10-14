@@ -455,6 +455,13 @@ def _events(q):
     return out
 
 
+def _probe_due(state):
+    """Make every dead session due for its next silent probe."""
+    past = datetime.now(timezone.utc) - timedelta(seconds=1)
+    for key, (_when, delay) in state["dead"].items():
+        state["dead"][key] = (past, delay)
+
+
 @pytest.mark.unit
 class TestAutoRenew:
     @pytest.fixture(autouse=True)
@@ -523,7 +530,7 @@ class TestAutoRenew:
         state: dict = {}
 
         profile_service._auto_renew(hub, [_p("a", -5), _p("b", -5)], state)
-        state["retry_after"].clear()
+        _probe_due(state)
         profile_service._auto_renew(hub, [_p("a", -5), _p("b", -5)], state)
 
         assert _events(q) == [
@@ -535,6 +542,43 @@ class TestAutoRenew:
             }
         ]
 
+    def test_a_dead_session_costs_one_probe_per_backoff_not_one_per_profile(self, mocker):
+        """Its other profiles coming due one by one must not each spawn `aws`:
+        only a login brings the session back."""
+        silent = mocker.patch(SILENT, return_value=([], [("a", "stale")]))
+        state: dict = {}
+        profile_service._auto_renew(EventHub(), [_p("a", -5), _p("b", 30 * 60)], state)
+
+        profile_service._auto_renew(EventHub(), [_p("a", -5), _p("b", 10 * 60)], state)  # b now due too
+
+        assert silent.call_count == 1
+
+    def test_a_dead_session_backs_off_up_to_an_hour(self, mocker):
+        mocker.patch(SILENT, return_value=([], [("a", "stale")]))
+        state: dict = {}
+        delays = []
+        for _ in range(6):
+            profile_service._auto_renew(EventHub(), [_p("a", -5)], state)
+            delays.append(state["dead"]["corp"][1])
+            _probe_due(state)
+
+        assert delays == [300, 600, 1200, 2400, 3600, 3600]
+
+    def test_a_profile_failing_while_its_sso_token_is_valid_is_not_a_dead_session(self, mocker):
+        """A login would not fix it (e.g. its role was removed): no "Log in"
+        banner, and retried only after the cooldown, not on every tick."""
+        silent = mocker.patch(SILENT, return_value=([], [("a", "stale")]))
+        hub = EventHub()
+        q = hub.subscribe()
+        state: dict = {}
+
+        profile_service._auto_renew(hub, [_p("a", -5, sso="valid")], state)
+        profile_service._auto_renew(hub, [_p("a", -5, sso="valid")], state)
+
+        assert _events(q) == []
+        assert state["dead"] == {}
+        assert silent.call_count == 1
+
     def test_sessions_with_a_login_in_progress_are_not_retried_silently(self, mocker):
         silent = mocker.patch(SILENT)
         mocker.patch("cli_tool.sidecar.services.login_coordinator.is_running", side_effect=lambda key: key == "corp")
@@ -543,7 +587,7 @@ class TestAutoRenew:
 
         silent.assert_not_called()
 
-    def test_failed_profiles_are_not_retried_during_the_cooldown(self, mocker):
+    def test_a_dead_session_is_not_probed_again_before_its_backoff(self, mocker):
         silent = mocker.patch(SILENT, return_value=([], [("a", "stale")]))
         hub = EventHub()
         q = hub.subscribe()
@@ -568,11 +612,12 @@ class TestAutoRenew:
         assert silent.call_count == 2
         assert renewed is True
 
-    def test_retries_after_the_cooldown_has_passed(self, mocker):
+    def test_a_dead_session_is_probed_again_after_its_backoff(self, mocker):
+        """In case it was only the network (e.g. right after a wake from sleep)."""
         silent = mocker.patch(SILENT, return_value=([], [("a", "stale")]))
         state: dict = {}
         profile_service._auto_renew(EventHub(), [_p("a", -5)], state)
-        state["retry_after"]["a"] = datetime.now(timezone.utc) - timedelta(seconds=1)
+        _probe_due(state)
 
         profile_service._auto_renew(EventHub(), [_p("a", -5)], state)
 
@@ -601,7 +646,6 @@ class TestAutoRenew:
         profile_service._auto_renew(hub, [_p("a", -5, sso="valid")], state)
 
         silent.return_value = ([], [("a", "stale")])  # session dies again later
-        state["retry_after"].clear()
         profile_service._auto_renew(hub, [_p("a", -5)], state)
 
         kinds = [e["event"] for e in _events(q)]
@@ -615,8 +659,8 @@ class TestAutoRenew:
         profile_service._auto_renew(hub, [_p("a", -5)], state)
         _events(q)
 
-        silent.return_value = (["a"], [])
-        state["retry_after"].clear()
+        silent.return_value = (["a"], [])  # the network is back
+        _probe_due(state)
         profile_service._auto_renew(hub, [_p("a", -5)], state)
 
         assert _events(q) == [{"event": "profile.login_resolved", "sessions": ["corp"]}]

@@ -26,6 +26,7 @@ _POLL_INTERVAL = 30  # seconds between polls
 _FIRST_POLL_DELAY = 3  # first poll right after startup, so stale credentials are renewed at once
 _RENEW_BEFORE_SECONDS = 15 * 60  # renew credentials that expire within this window
 _RENEW_RETRY_COOLDOWN = 5 * 60  # don't retry a failed silent renewal sooner than this
+_DEAD_SESSION_MAX_RETRY = 60 * 60  # a dead session is probed again after 5, 10, 20, 40, then every 60 min
 _DEFAULT_SYNC_INTERVAL_SECONDS = 10 * 60  # resync [default] on this cadence
 # ponytail: 8 workers caps concurrency for aws configure export-credentials subprocess calls
 _MAX_WORKERS = 8
@@ -445,10 +446,16 @@ def _auto_renew(hub: EventHub, profiles: list[dict[str, Any]], state: dict[str, 
     every 45 min whenever the SSO session can't be renewed silently. When a
     whole session can't be renewed, a single `profile.needs_login` event is
     published instead and the UI offers a "Log in" button; tunnels that need
-    credentials still ask the login handler on their own. Failing profiles
-    are not retried silently for `_RENEW_RETRY_COOLDOWN` unless the session's
-    SSO token becomes valid again (the user logged in), and sessions with a
-    login in progress are skipped. Disable with `aws_login.auto_renew = false`.
+    credentials still ask the login handler on their own.
+
+    Only a login brings a dead session back, so it is not retried with every
+    profile that comes due: one probe after 5 min, then 10, 20, 40 and every
+    60 min (in case it was only the network, e.g. right after a wake from
+    sleep), and at once when its SSO token is valid again (someone logged
+    in, here or elsewhere). A profile that fails while its session works is
+    a problem of its own, never reported as needing a login, and retried
+    after `_RENEW_RETRY_COOLDOWN`. Sessions with a login in progress are
+    skipped. Disable with `aws_login.auto_renew = false`.
 
     `state` is the caller's memory between calls. Returns True when at least
     one profile was renewed (the caller should re-read the profile info).
@@ -463,19 +470,25 @@ def _auto_renew(hub: EventHub, profiles: list[dict[str, Any]], state: dict[str, 
 
     now = datetime.now(timezone.utc)
     retry_after: dict[str, datetime] = state.setdefault("retry_after", {})
-    notified: set[str] = state.setdefault("notified", set())
+    # session -> (next probe, current delay in s); also the sessions the UI was told about
+    dead: dict[str, tuple[datetime, float]] = state.setdefault("dead", {})
+
+    def sso_valid(p: dict[str, Any]) -> bool:
+        return (p.get("sso_token") or {}).get("status") == "valid"
+
+    # Dead sessions whose SSO token is valid again: someone logged in.
+    recovered = {_session_key(p) for p in profiles if sso_valid(p) and _session_key(p) in dead}
+    for key in recovered:
+        del dead[key]
 
     def blocked(p: dict[str, Any]) -> bool:
-        if login_coordinator.is_running(_session_key(p)):
+        key = _session_key(p)
+        if login_coordinator.is_running(key):
             return True  # a login is already getting this session back
+        if key in dead:
+            return dead[key][0] > now
         until = retry_after.get(p["name"])
-        session_alive = (p.get("sso_token") or {}).get("status") == "valid"
-        return until is not None and until > now and not session_alive
-
-    recovered: set[str] = set()
-    for p in profiles:
-        if (p.get("sso_token") or {}).get("status") == "valid" and _session_key(p) in notified:
-            recovered.add(_session_key(p))
+        return until is not None and until > now
 
     todo = [(p["name"], "stale") for p in profiles if _needs_renewal(p) and not blocked(p)]
     renewed: list[str] = []
@@ -490,27 +503,35 @@ def _auto_renew(hub: EventHub, profiles: list[dict[str, Any]], state: dict[str, 
 
     # Sessions we had reported as needing a login that work again (renewed, or
     # the user logged in): tell the UI so it can drop its "login required" notice.
-    recovered |= renewed_sessions & notified
+    for key in renewed_sessions & dead.keys():
+        del dead[key]
+        recovered.add(key)
     if recovered:
-        notified.difference_update(recovered)
         hub.publish("profile.login_resolved", {"sessions": sorted(recovered)})
 
     if not todo:
         return False
 
-    dead_sessions: dict[str, list[str]] = {}
+    failed_sessions: dict[str, list[str]] = {}
     for name, _reason in failing:
-        retry_after[name] = now + timedelta(seconds=_RENEW_RETRY_COOLDOWN)
-        key = _session_key(by_name[name])
-        # A session where something did renew is alive: that failure is about
-        # the profile itself, not something a login would fix.
-        if key not in renewed_sessions:
-            dead_sessions.setdefault(key, []).append(name)
+        p = by_name[name]
+        # A session that renewed something, or whose SSO token is valid, is
+        # alive: that failure is about the profile itself, not something a
+        # login would fix.
+        if _session_key(p) in renewed_sessions or sso_valid(p):
+            retry_after[name] = now + timedelta(seconds=_RENEW_RETRY_COOLDOWN)
+        else:
+            failed_sessions.setdefault(_session_key(p), []).append(name)
 
-    newly_dead = {key: names for key, names in dead_sessions.items() if key not in notified}
-    for key, names in newly_dead.items():
-        logger.info("auto-renew: session '%s' needs a login (%s); offering the Log in button", key, ", ".join(names))
-    notified.update(dead_sessions)
+    newly_dead: dict[str, list[str]] = {}
+    for key, names in failed_sessions.items():
+        if key in dead:
+            delay = min(_DEAD_SESSION_MAX_RETRY, dead[key][1] * 2)
+        else:
+            delay = _RENEW_RETRY_COOLDOWN
+            newly_dead[key] = names
+            logger.info("auto-renew: session '%s' needs a login (%s); offering the Log in button", key, ", ".join(names))
+        dead[key] = (now + timedelta(seconds=delay), delay)
 
     if newly_dead:
         hub.publish(
