@@ -181,7 +181,6 @@ def _do_refresh_all(
     """
     try:
         from cli_tool.commands.aws_login.commands.refresh import (
-            _classify_profiles,
             _group_profiles_by_session,
             _silent_refresh_profiles,
         )
@@ -201,7 +200,7 @@ def _do_refresh_all(
             # Decide from the AWS CLI's credential cache: spawning `aws` once per
             # profile just to classify took ~2 s each, in series. Anything the
             # cache can't vouch for goes through the silent renewal below.
-            to_refresh, valid = _classify_profiles(profiles, cached_only=True)
+            to_refresh, valid = _classify_stale(profiles)
         if force:
             # Same semantics as `devo aws-login refresh --force`: move the
             # still-valid profiles onto the refresh list so the explicit
@@ -248,6 +247,23 @@ def _do_refresh_all(
     except Exception as exc:
         logger.exception("refresh_all failed")
         hub.publish("profile.refreshed", {"names": [], "success": False, "error": str(exc)})
+
+
+def _classify_stale(profiles: list[tuple[str, str]]) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    """Split profiles into (stale, valid), as (name, reason) pairs, with the
+    background renewal's threshold: a profile it flags is one refresh-all
+    renews. Reads the AWS CLI's credential cache only (no subprocess per
+    profile); a profile without a cache entry counts as stale.
+    """
+    from cli_tool.commands.aws_login.core.credentials import check_profile_needs_refresh
+    from cli_tool.sidecar.services.profile_service import RENEW_BEFORE_SECONDS
+
+    stale: list[tuple[str, str]] = []
+    valid: list[tuple[str, str]] = []
+    for name, _source in profiles:
+        needs, _expiration, reason = check_profile_needs_refresh(name, threshold_minutes=RENEW_BEFORE_SECONDS // 60, cached_only=True)
+        (stale if needs else valid).append((name, reason))
+    return stale, valid
 
 
 def _login_targets(profiles: list[tuple[str, str]], names: list[str], sessions: list[str]) -> list[str]:

@@ -1,14 +1,12 @@
 import type { ProfileRecord } from "./api";
 
 /**
- * Same rule the sidecar uses to decide what a refresh should touch: expired,
- * unknown, or expiring within 10 minutes (`check_profile_needs_refresh`).
+ * Whether the profile's credentials should be renewed now. The sidecar
+ * decides (`needs_renewal`), with the same threshold its background renewal
+ * and refresh-all use, so the UI never disagrees with them about what is stale.
  */
-const REFRESH_WITHIN_SECONDS = 10 * 60;
-
 export function needsRefresh(profile: ProfileRecord): boolean {
-  if (profile.status === "expired" || profile.status === "unknown") return true;
-  return profile.seconds_remaining !== null && profile.seconds_remaining <= REFRESH_WITHIN_SECONDS;
+  return profile.needs_renewal === true;
 }
 
 export function anyNeedsRefresh(profiles: ProfileRecord[]): boolean {

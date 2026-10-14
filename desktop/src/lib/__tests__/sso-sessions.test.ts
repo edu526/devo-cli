@@ -18,7 +18,7 @@ describe("sessionsFromProfiles", () => {
   it("groups profiles by SSO session with the session's token state", () => {
     const sessions = sessionsFromProfiles([
       profile({ name: "dev" }),
-      profile({ name: "prod", status: "expired", seconds_remaining: 0 }),
+      profile({ name: "prod", status: "expired", seconds_remaining: 0, needs_renewal: true }),
       profile({ name: "other", sso_session: "acme", sso_token: { status: "expired", expiration: null, seconds_remaining: 0 } }),
     ]);
 

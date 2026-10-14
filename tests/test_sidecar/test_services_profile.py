@@ -452,6 +452,23 @@ class TestBuildProfileInfoAccountAndRole:
         assert info["account_id"] == "111122223333"
         assert info["role_name"] == "Developer"
 
+    @pytest.mark.parametrize(
+        "expires_in, expected",
+        [(None, True), (-60, True), (10 * 60, True), (15 * 60, True), (16 * 60, False), (3 * 3600, False)],
+    )
+    def test_needs_renewal_follows_the_renewal_threshold(self, mocker, expires_in, expected):
+        now = datetime.now(timezone.utc)
+        expiration = None if expires_in is None else now + timedelta(seconds=expires_in)
+        mocker.patch.object(profile_service, "read_cached_credentials_expiration", return_value=expiration)
+        mocker.patch.object(profile_service, "get_profile_credentials_expiration", return_value=None)
+        mocker.patch.object(profile_service, "_get_sso_token_info", return_value=None)
+        mocker.patch.object(profile_service, "_get_sso_session_name", return_value=None)
+        mocker.patch.object(profile_service, "_get_account_and_role", return_value=(None, None))
+
+        info = profile_service._build_profile_info("dev", "sso", None, now)
+
+        assert info["needs_renewal"] is expected
+
     def test_unknown_profile_has_neither(self, mocker):
         mocker.patch("cli_tool.commands.aws_login.core.config.get_profile_config", return_value=None)
         assert profile_service._get_account_and_role("gone") == (None, None)

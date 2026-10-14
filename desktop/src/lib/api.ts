@@ -75,6 +75,8 @@ export interface ProfileRecord {
   /** The AWS account and SSO role it signs in to. */
   account_id?: string | null;
   role_name?: string | null;
+  /** The sidecar's call: renew its credentials now (expired, missing or about to expire). */
+  needs_renewal?: boolean;
 }
 
 export interface SsoTokenInfo {

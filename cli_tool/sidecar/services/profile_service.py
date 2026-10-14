@@ -24,7 +24,11 @@ logger = logging.getLogger(__name__)
 _WARN_SECONDS = 5 * 60  # emit once when crossing below 5 minutes
 _POLL_INTERVAL = 30  # seconds between polls
 _FIRST_POLL_DELAY = 3  # first poll right after startup, so stale credentials are renewed at once
-_RENEW_BEFORE_SECONDS = 15 * 60  # renew credentials that expire within this window
+# Credentials that expire within this window are renewed. The one threshold
+# for the whole app: the background renewal, refresh-all and the UI (through
+# each profile's `needs_renewal`) all use it. Different ones made the
+# "Log in" banner's button find nothing to do.
+RENEW_BEFORE_SECONDS = 15 * 60
 _RENEW_RETRY_COOLDOWN = 5 * 60  # don't retry a failed silent renewal sooner than this
 _DEAD_SESSION_MAX_RETRY = 60 * 60  # a dead session is probed again after 5, 10, 20, 40, then every 60 min
 _DEFAULT_SYNC_INTERVAL_SECONDS = 10 * 60  # resync [default] on this cadence
@@ -64,6 +68,7 @@ def _build_profile_info(name: str, src: str, default_name: str | None, now: date
         "sso_session": sso_session,
         "account_id": account_id,
         "role_name": role_name,
+        "needs_renewal": status in ("expired", "unknown") or (seconds_remaining is not None and seconds_remaining <= RENEW_BEFORE_SECONDS),
     }
 
 
@@ -445,7 +450,7 @@ def _session_key(profile: dict[str, Any]) -> str:
 
 def _needs_renewal(profile: dict[str, Any]) -> bool:
     secs = profile.get("seconds_remaining")
-    return profile.get("status") in ("expired", "unknown") or (secs is not None and secs <= _RENEW_BEFORE_SECONDS)
+    return profile.get("status") in ("expired", "unknown") or (secs is not None and secs <= RENEW_BEFORE_SECONDS)
 
 
 def _auto_renew(hub: EventHub, profiles: list[dict[str, Any]], state: dict[str, Any]) -> bool:

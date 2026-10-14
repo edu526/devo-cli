@@ -39,7 +39,7 @@ class TestDoRefreshAll:
             return_value=[("dev", "sso")],
         )
         mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._classify_profiles",
+            "cli_tool.sidecar.routers.profiles._classify_stale",
             return_value=([("dev", "sso")], []),
         )
         mocker.patch(
@@ -66,7 +66,7 @@ class TestDoRefreshAll:
             return_value=[("dev", "sso")],
         )
         mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._classify_profiles",
+            "cli_tool.sidecar.routers.profiles._classify_stale",
             return_value=([], []),
         )
         hub = EventHub()
@@ -244,7 +244,7 @@ class TestDoRefreshAllDefaultSync:
             return_value=[("dev", "sso"), ("prod", "sso")],
         )
         mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._classify_profiles",
+            "cli_tool.sidecar.routers.profiles._classify_stale",
             return_value=([("dev", "sso"), ("prod", "sso")], []),
         )
         mocker.patch(
@@ -273,7 +273,7 @@ class TestDoRefreshAllDefaultSync:
             return_value=[("dev", "sso"), ("prod", "sso")],
         )
         mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._classify_profiles",
+            "cli_tool.sidecar.routers.profiles._classify_stale",
             return_value=([("dev", "sso"), ("prod", "sso")], []),
         )
         mocker.patch(
@@ -302,7 +302,7 @@ class TestDoRefreshAllDefaultSync:
             return_value=[("dev", "sso")],
         )
         mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._classify_profiles",
+            "cli_tool.sidecar.routers.profiles._classify_stale",
             return_value=([("dev", "sso")], []),
         )
         mocker.patch(
@@ -330,7 +330,7 @@ class TestDoRefreshAllForce:
     def test_force_true_refreshes_valid_profiles_too(self, mocker):
         """When force=True, profiles that are still valid must also be renewed.
 
-        Without force, _classify_profiles returns ([("dev", ...)], valid=[]);
+        Without force, _classify_stale returns ([("dev", ...)], valid=[]);
         the second profile is dropped because it's valid. With force=True
         it must be added back to the refresh list and sent through.
         """
@@ -340,7 +340,7 @@ class TestDoRefreshAllForce:
         )
         # dev needs refresh, prod is still valid.
         mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._classify_profiles",
+            "cli_tool.sidecar.routers.profiles._classify_stale",
             return_value=([("dev", "sso")], [("prod", "sso")]),
         )
         mock_group = mocker.patch(
@@ -368,7 +368,7 @@ class TestDoRefreshAllForce:
             return_value=[("dev", "sso"), ("prod", "sso")],
         )
         mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._classify_profiles",
+            "cli_tool.sidecar.routers.profiles._classify_stale",
             return_value=([("dev", "sso")], [("prod", "sso")]),
         )
         mock_group = mocker.patch(
@@ -394,7 +394,7 @@ class TestDoRefreshAllForce:
             return_value=[],
         )
         mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._classify_profiles",
+            "cli_tool.sidecar.routers.profiles._classify_stale",
             return_value=([], []),
         )
         mock_refresh = mocker.patch(
@@ -420,7 +420,7 @@ class TestDoRefreshAllSilentFirst:
 
     def _common(self, mocker, stale):
         mocker.patch("cli_tool.commands.aws_login.core.config.list_aws_profiles", return_value=stale)
-        mocker.patch(f"{REFRESH}._classify_profiles", return_value=(list(stale), []))
+        mocker.patch("cli_tool.sidecar.routers.profiles._classify_stale", return_value=(list(stale), []))
         mock_group = mocker.patch(
             f"{REFRESH}._group_profiles_by_session",
             side_effect=lambda profs: {"s": [p for p, _ in profs]},
@@ -528,7 +528,7 @@ class TestDoRefreshAllTargets:
             return_value=[(name, "sso") for name in self.CONFIGS],
         )
         mocker.patch.object(profiles_router, "get_profile_config", side_effect=self.CONFIGS.get)
-        classify = mocker.patch(f"{REFRESH}._classify_profiles", return_value=([], [("dev", "x"), ("prod", "x")]))
+        classify = mocker.patch("cli_tool.sidecar.routers.profiles._classify_stale", return_value=([], [("dev", "x"), ("prod", "x")]))
         login = mocker.patch.object(
             profiles_router,
             "_login_sessions",
@@ -592,14 +592,34 @@ class TestDoRefreshAllTargets:
 
 
 @pytest.mark.unit
+class TestClassifyStaleUsesTheRenewalThreshold:
+    """refresh-all must call stale what the background renewal flags, or the
+    banner's Log in finds nothing to do."""
+
+    def test_asks_with_the_background_renewal_window_from_the_cache(self, mocker):
+        from cli_tool.sidecar.services.profile_service import RENEW_BEFORE_SECONDS
+
+        check = mocker.patch(
+            "cli_tool.commands.aws_login.core.credentials.check_profile_needs_refresh",
+            side_effect=lambda name, **kw: (name == "stale", None, "Expiring soon" if name == "stale" else "Valid"),
+        )
+
+        stale, valid = profiles_router._classify_stale([("stale", "sso"), ("fine", "sso")])
+
+        assert stale == [("stale", "Expiring soon")]
+        assert valid == [("fine", "Valid")]
+        check.assert_any_call("stale", threshold_minutes=RENEW_BEFORE_SECONDS // 60, cached_only=True)
+
+
+@pytest.mark.unit
 class TestDoRefreshAllClassifiesFromCache:
     def test_classification_uses_the_cache_not_a_subprocess_per_profile(self, mocker):
         mocker.patch("cli_tool.commands.aws_login.core.config.list_aws_profiles", return_value=[("dev", "sso")])
-        classify = mocker.patch(f"{REFRESH}._classify_profiles", return_value=([], []))
+        classify = mocker.patch("cli_tool.sidecar.routers.profiles._classify_stale", return_value=([], []))
 
         profiles_router._do_refresh_all(EventHub())
 
-        classify.assert_called_once_with([("dev", "sso")], cached_only=True)
+        classify.assert_called_once_with([("dev", "sso")])
 
 
 @pytest.mark.unit
@@ -660,7 +680,7 @@ class TestDoRefreshOneSilentFirst:
 class TestForce:
     def _stale_dev(self, mocker):
         mocker.patch("cli_tool.commands.aws_login.core.config.list_aws_profiles", return_value=[("dev", "sso")])
-        mocker.patch(f"{REFRESH}._classify_profiles", return_value=([("dev", "x")], []))
+        mocker.patch("cli_tool.sidecar.routers.profiles._classify_stale", return_value=([("dev", "x")], []))
         mocker.patch(f"{REFRESH}._group_profiles_by_session", return_value={"s": ["dev"]})
         mocker.patch("cli_tool.sidecar.routers.profiles._login_sessions", return_value=(["dev"]))
 

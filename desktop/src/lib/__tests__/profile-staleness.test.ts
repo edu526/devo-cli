@@ -2,29 +2,23 @@ import { describe, expect, it } from "vitest";
 import type { ProfileRecord } from "../api";
 import { anyNeedsRefresh, needsRefresh } from "../profile-staleness";
 
-function p(status: ProfileRecord["status"], secs: number | null): ProfileRecord {
-  return { name: "x", source: "sso", expiration: null, seconds_remaining: secs, status, is_default: false };
+function p(needs_renewal: boolean | undefined): ProfileRecord {
+  return { name: "x", source: "sso", expiration: null, seconds_remaining: 3600, status: "valid", is_default: false, needs_renewal };
 }
 
 describe("profile-staleness", () => {
-  it("expired and unknown profiles need a refresh", () => {
-    expect(needsRefresh(p("expired", 0))).toBe(true);
-    expect(needsRefresh(p("unknown", null))).toBe(true);
+  it("follows the sidecar's decision", () => {
+    expect(needsRefresh(p(true))).toBe(true);
+    expect(needsRefresh(p(false))).toBe(false);
   });
 
-  it("uses the sidecar's 10-minute window", () => {
-    expect(needsRefresh(p("valid", 9 * 60))).toBe(true);
-    expect(needsRefresh(p("valid", 10 * 60))).toBe(true);
-    expect(needsRefresh(p("valid", 11 * 60))).toBe(false);
-  });
-
-  it("a long-valid profile does not", () => {
-    expect(needsRefresh(p("valid", 3 * 3600))).toBe(false);
+  it("assumes nothing when the sidecar didn't say", () => {
+    expect(needsRefresh(p(undefined))).toBe(false);
   });
 
   it("anyNeedsRefresh", () => {
     expect(anyNeedsRefresh([])).toBe(false);
-    expect(anyNeedsRefresh([p("valid", 3600), p("valid", 7200)])).toBe(false);
-    expect(anyNeedsRefresh([p("valid", 3600), p("expired", 0)])).toBe(true);
+    expect(anyNeedsRefresh([p(false), p(false)])).toBe(false);
+    expect(anyNeedsRefresh([p(false), p(true)])).toBe(true);
   });
 });
