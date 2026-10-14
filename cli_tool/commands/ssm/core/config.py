@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Dict, Optional
 
+from cli_tool.commands.ssm.core.hostname_forwarding import KEY as hostname_forwarding_key
 from cli_tool.core.utils.config_manager import load_config, save_config
 
 
@@ -31,6 +32,7 @@ class SSMConfigManager:
         profile: Optional[str] = None,
         local_port: Optional[int] = None,
         local_address: str = "127.0.0.1",
+        hostname_forwarding: Optional[bool] = None,
     ):
         """Add a database configuration"""
         config = self.load()
@@ -47,7 +49,36 @@ class SSMConfigManager:
             "local_port": local_port or port,
             "local_address": local_address,
         }
+        if hostname_forwarding is not None:  # an exception to the all-databases setting
+            config["databases"][name][hostname_forwarding_key] = hostname_forwarding
 
+        self.save(config)
+
+    def set_hostname_forwarding(self, enabled: bool, name: Optional[str] = None):
+        """Turn hostname forwarding on/off for every database, or for `name`.
+
+        Only stores the setting: the hosts file is updated by the caller.
+        For every database it also drops the per-database exceptions ("all"
+        means all). For one, it stores an exception, unless it matches the
+        all-databases setting.
+        """
+        config = self.load()
+        databases = config.get("databases", {})
+        if name is None:
+            if enabled:
+                config.pop(hostname_forwarding_key, None)  # on is the default
+            else:
+                config[hostname_forwarding_key] = False
+            for db in databases.values():
+                db.pop(hostname_forwarding_key, None)
+        else:
+            db = databases.get(name)
+            if db is None:
+                raise KeyError(f"Database '{name}' not configured")
+            if enabled == (config.get(hostname_forwarding_key, True) is not False):
+                db.pop(hostname_forwarding_key, None)
+            else:
+                db[hostname_forwarding_key] = enabled
         self.save(config)
 
     def remove_database(self, name: str) -> bool:

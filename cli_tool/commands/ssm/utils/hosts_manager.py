@@ -12,6 +12,54 @@ from typing import List, Tuple
 _HOSTNAME_RE = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$")
 
 
+def _is_windows_admin() -> bool:
+    try:
+        import ctypes
+
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:
+        return False
+
+
+class HostsFileLocked(PermissionError):
+    """Writing the hosts file was denied even with administrator rights.
+
+    The file's own permissions let administrators write it, so something else
+    stops it: usually an antivirus protecting it, sometimes the read-only flag.
+    The message says which, and what the user can do.
+    """
+
+    # The `devo ssm hosts` commands exit with it, so the desktop (which runs
+    # them elevated and only sees the exit code) can tell this case apart.
+    exit_code = 3
+
+
+def describe_hosts_lock() -> str:
+    """Why the hosts file can't be written even as administrator, for the user."""
+    import stat
+
+    from cli_tool.commands.ssm.utils.security_software import active_antivirus
+
+    path = HostsManager.get_hosts_file_path()
+    try:
+        read_only = bool(os.stat(path).st_file_attributes & stat.FILE_ATTRIBUTE_READONLY)
+    except (OSError, AttributeError):  # st_file_attributes only exists on Windows
+        read_only = False
+    if read_only:
+        return f'Your hosts file is marked read-only. Uncheck "Read-only" in its properties ({path}) and try again.'
+
+    antivirus = active_antivirus()
+    if antivirus:
+        return (
+            f"{' / '.join(antivirus)} is blocking changes to your hosts file, even with administrator rights. "
+            "Pause its protection for a moment (or allow changes to the hosts file in its settings) and try again."
+        )
+    return (
+        "Something is blocking changes to your hosts file, even with administrator rights, usually an antivirus. "
+        "Pause it for a moment and try again."
+    )
+
+
 class HostsManager:
     """Manages /etc/hosts entries for SSM port forwarding"""
 
@@ -39,14 +87,17 @@ class HostsManager:
         if not self.HOSTS_FILE.exists():
             return []
 
-        content = self.HOSTS_FILE.read_text()
+        return self._entries_in(self.HOSTS_FILE.read_text())
 
-        if self.MARKER_START not in content:
+    @classmethod
+    def _entries_in(cls, content: str) -> List[Tuple[str, str]]:
+        """(ip, hostname) entries of the managed section of `content`."""
+        if cls.MARKER_START not in content:
             return []
 
         # Extract managed section
-        start_idx = content.find(self.MARKER_START)
-        end_idx = content.find(self.MARKER_END)
+        start_idx = content.find(cls.MARKER_START)
+        end_idx = content.find(cls.MARKER_END)
 
         if start_idx == -1 or end_idx == -1:
             return []
@@ -130,10 +181,9 @@ class HostsManager:
             elif self.MARKER_END in line:
                 in_managed_section = False
                 filtered_lines.append(line)
-            elif in_managed_section and hostname in line and not line.strip().startswith("#"):
-                parts = line.strip().split()
-                if len(parts) >= 2:
-                    removed_ips.append(parts[0])
+            elif in_managed_section and hostname in line.split()[1:] and not line.strip().startswith("#"):
+                # Whole-name match: "db.x.rds…" must not take "reader-db.x.rds…" with it.
+                removed_ips.append(line.split()[0])
             else:
                 filtered_lines.append(line)
 
@@ -148,11 +198,17 @@ class HostsManager:
             return
 
         filtered_lines, removed_ips = self._filter_hostname_from_lines(content.split("\n"), hostname)
+        if not removed_ips:
+            return  # nothing to do: don't write (that needs elevation)
+        # Several hostnames can share a loopback IP: keep the aliases still in use.
+        still_used = {ip for ip, _host in self._entries_in("\n".join(filtered_lines))}
+        unused_ips = [ip for ip in dict.fromkeys(removed_ips) if ip not in still_used]
+        self._check_can_remove_aliases(unused_ips)
         self._write_hosts("\n".join(filtered_lines))
 
         # On macOS, remove loopback aliases that are no longer used
         if platform.system() == "Darwin":
-            for ip in removed_ips:
+            for ip in unused_ips:
                 if ip.startswith("127.0.0.") and ip != "127.0.0.1":
                     self._remove_loopback_alias_macos(ip)
 
@@ -165,6 +221,7 @@ class HostsManager:
 
         # Get all managed IPs for cleanup
         managed_ips = [ip for ip, _ in self.get_managed_entries()]
+        self._check_can_remove_aliases(managed_ips)
 
         # Remove entire managed section
         start_idx = content.find(self.MARKER_START)
@@ -181,6 +238,20 @@ class HostsManager:
             for ip in managed_ips:
                 if ip.startswith("127.0.0.") and ip != "127.0.0.1":
                     self._remove_loopback_alias_macos(ip)
+
+    @staticmethod
+    def _check_can_remove_aliases(ips: List[str]):
+        """Raise PermissionError up front when removing these IPs' macOS
+        loopback aliases needs elevation (always, from the sidecar).
+
+        Otherwise the hosts file would be written and the alias removal fail
+        afterwards; the elevated retry then finds the entries gone and never
+        removes the aliases.
+        """
+        if platform.system() != "Darwin" or os.environ.get("DEVO_SIDECAR") != "1":
+            return
+        if any(ip.startswith("127.0.0.") and ip != "127.0.0.1" for ip in ips):
+            raise PermissionError("Permission denied. Needs elevation to remove loopback alias.")
 
     def _read_hosts(self) -> str:
         """Read /etc/hosts file using the validated, constant path."""
@@ -203,6 +274,8 @@ class HostsManager:
             try:
                 hosts_path.write_text(content, encoding="utf-8")
             except PermissionError as e:
+                if _is_windows_admin():
+                    raise HostsFileLocked(describe_hosts_lock()) from e
                 raise PermissionError(
                     "Permission denied. Please run your terminal as Administrator:\n"
                     "  1. Right-click on Command Prompt or PowerShell\n"

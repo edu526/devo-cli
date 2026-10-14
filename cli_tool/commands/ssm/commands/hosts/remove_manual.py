@@ -4,12 +4,15 @@ Used by the desktop app's UAC helper for entries that have no matching
 db name in ~/.devo/config.json (orphan hosts, manual additions).
 """
 
+import logging
+
 import click
 from rich.console import Console
 
-from cli_tool.commands.ssm.utils import HostsManager
+from cli_tool.commands.ssm.utils import HostsFileLocked, HostsManager
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 
 @click.command()
@@ -19,6 +22,8 @@ def hosts_remove_manual(hostname: str) -> None:
     try:
         HostsManager().remove_entry(hostname)
         console.print(f"[green]Removed {hostname} from /etc/hosts[/green]")
+        logger.info("Removed %s from the hosts file", hostname)
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise click.exceptions.Exit(code=1) from e
+        logger.error("Could not remove %s from the hosts file: %s", hostname, e)
+        raise click.exceptions.Exit(code=e.exit_code if isinstance(e, HostsFileLocked) else 1) from e

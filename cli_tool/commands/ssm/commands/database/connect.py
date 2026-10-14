@@ -7,7 +7,7 @@ from typing import Optional
 import click
 from rich.console import Console
 
-from cli_tool.commands.ssm.core import SSMConfigManager
+from cli_tool.commands.ssm.core import SSMConfigManager, hostname_forwarding
 from cli_tool.commands.ssm.core.connection_runner import (
     ForwarderRegistry,
     _build_threads,
@@ -96,15 +96,21 @@ def _connect_databases(databases: dict, no_hosts: bool, no_auto_setup: bool = Fa
     if not _validate_tokens(databases):
         return
 
+    # Hostname forwarding paused (for all, or for these DBs): connect them as
+    # with --no-hosts, so their hostname keeps resolving through normal DNS.
+    ssm_config = SSMConfigManager().load()
+    paused = frozenset(n for n, c in databases.items() if not hostname_forwarding.is_enabled(ssm_config, c))
+
     managed_hosts = {host for _, host in HostsManager().get_managed_entries()}
     if not no_hosts:
-        managed_hosts = _maybe_run_auto_setup(databases, managed_hosts, no_auto_setup)
+        forwarded = {n: c for n, c in databases.items() if n not in paused}
+        managed_hosts = _maybe_run_auto_setup(forwarded, managed_hosts, no_auto_setup)
 
     console.print("[cyan]Starting connections...[/cyan]\n")
 
     table = _make_connection_table()
     registry = ForwarderRegistry()
-    threads, port_conflicts, missing_hosts = _build_threads(databases, no_hosts, managed_hosts, table, registry)
+    threads, port_conflicts, missing_hosts = _build_threads(databases, no_hosts, managed_hosts, table, registry, no_hosts_for=paused)
 
     console.print(table)
     console.print()

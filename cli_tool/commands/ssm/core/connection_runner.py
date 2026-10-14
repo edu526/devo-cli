@@ -993,8 +993,12 @@ def _build_threads(
     managed_hosts: set,
     table: Table,
     registry: ForwarderRegistry,
+    no_hosts_for: frozenset = frozenset(),
 ) -> tuple[list, int, int]:
     """Populate table rows and start a thread per connectable DB.
+
+    `no_hosts_for` names DBs connected as with --no-hosts even when
+    `no_hosts` is off (their hostname forwarding is paused).
 
     Returns (threads, port_conflicts, missing_hosts).
     """
@@ -1016,7 +1020,9 @@ def _build_threads(
         return port
 
     for name, db_config in databases.items():
-        row, actual_local_port, use_hostname_forwarding = _process_db_for_table(name, db_config, no_hosts, managed_hosts, get_unique_local_port)
+        row, actual_local_port, use_hostname_forwarding = _process_db_for_table(
+            name, db_config, no_hosts or name in no_hosts_for, managed_hosts, get_unique_local_port
+        )
         table.add_row(*row)
 
         if actual_local_port is None:

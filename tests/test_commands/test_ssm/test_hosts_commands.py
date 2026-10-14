@@ -293,7 +293,7 @@ def test_hosts_setup_all_fail(runner, mock_ssm_config, mock_hosts_manager):
 
     result = runner.invoke(hosts_setup, [])
 
-    assert result.exit_code == 0
+    assert result.exit_code == 1  # the desktop runs it elevated and reads the exit code
     assert "Setup failed!" in result.output
 
 
@@ -309,7 +309,7 @@ def test_hosts_setup_partial_failure(runner, mock_ssm_config, mock_hosts_manager
 
     result = runner.invoke(hosts_setup, [])
 
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert "partially complete" in result.output
 
 
@@ -393,11 +393,12 @@ def test_hosts_clear_aborted(runner, mock_hosts_manager):
 
 @pytest.mark.unit
 def test_hosts_clear_raises(runner, mock_hosts_manager):
-    """An exception from clear_all is caught and printed as an error."""
+    """An exception from clear_all is printed as an error and fails the command
+    (the desktop runs it elevated and reads the exit code)."""
     mock_hosts_manager.clear_all.side_effect = PermissionError("Operation not permitted")
 
     result = runner.invoke(hosts_clear, input="y\n")
 
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert "Error" in result.output
     assert "Operation not permitted" in result.output

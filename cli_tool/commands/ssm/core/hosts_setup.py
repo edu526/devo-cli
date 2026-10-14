@@ -7,9 +7,10 @@ the same output without duplicating the port-allocation loop.
 
 from typing import Optional
 
+from cli_tool.commands.ssm.core import hostname_forwarding
 from cli_tool.commands.ssm.core.config import SSMConfigManager
 from cli_tool.commands.ssm.core.connection_runner import _find_free_port
-from cli_tool.commands.ssm.utils import HostsManager
+from cli_tool.commands.ssm.utils import HostsFileLocked, HostsManager
 
 
 def setup_databases(
@@ -21,11 +22,12 @@ def setup_databases(
     """Assign loopback IPs, allocate free local ports and add /etc/hosts entries.
 
     If `db_names` is None, every configured database is processed. Otherwise only
-    the named subset is touched.
+    the named subset is touched. Databases whose hostname forwarding is paused
+    are always skipped (see hostname_forwarding).
 
     Returns (succeeded, failed) where each element is a JSON-serializable dict:
       - succeeded: {"name", "host", "ip", "local_port", "port_reassigned"}
-      - failed:    {"name", "host", "error", "needs_elevation"}
+      - failed:    {"name", "host", "error", "needs_elevation", "locked"}
 
     The loop always runs to completion (a failure on one db does not stop the
     rest), matching the original CLI behaviour. `needs_elevation` is True when
@@ -34,10 +36,12 @@ def setup_databases(
     """
     cm = config_manager or SSMConfigManager()
     hm = hosts_manager or HostsManager()
+    ssm_config = cm.load()
     databases = cm.list_databases()
 
     if db_names is not None:
         databases = {n: c for n, c in databases.items() if n in db_names}
+    databases = {n: c for n, c in databases.items() if hostname_forwarding.is_enabled(ssm_config, c)}
 
     succeeded: list[dict] = []
     failed: list[dict] = []
@@ -72,6 +76,8 @@ def setup_databases(
                     "host": host,
                     "error": str(e),
                     "needs_elevation": isinstance(e, PermissionError),
+                    # denied even as administrator (antivirus, read-only file…)
+                    "locked": isinstance(e, HostsFileLocked),
                 }
             )
             continue

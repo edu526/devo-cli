@@ -308,6 +308,19 @@ Prompts for confirmation before removing all entries.
 devo ssm hosts clear
 ```
 
+#### Paused hostname forwarding
+
+Devo Desktop can pause hostname forwarding for all databases or for one, so
+their hostnames resolve through normal DNS (e.g. to reach them over a VPN).
+`ssm.hostname_forwarding` in `~/.devo/config.json` is the setting for all
+databases; `ssm.databases.<name>.hostname_forwarding`, when present, is an
+exception for that one (e.g. one forwarded while the rest is paused). The CLI
+follows it:
+
+- `devo ssm connect` connects paused databases on `127.0.0.1`, as with
+  `--no-hosts`, and doesn't offer to set up their hosts entries
+- `devo ssm hosts setup` skips paused databases
+
 ### forward
 
 Manual port forwarding without saving configuration.
