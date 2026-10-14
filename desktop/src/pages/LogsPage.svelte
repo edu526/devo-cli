@@ -6,6 +6,7 @@
   import SearchInput from "../lib/SearchInput.svelte";
   import { Play, Pause, RefreshCw, Copy, Check } from "@lucide/svelte";
   import { parseLogLine, groupLogLines, type LogLevel, type LogEntry } from "../lib/log-parser";
+  import { copyToClipboard } from "../lib/clipboard";
 
   let nextId = 1;
   let logEntries: LogEntry[] = $state([]);
@@ -76,27 +77,6 @@
     return lines.join("\n");
   }
 
-  async function copyToClipboard(text: string): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      // ponytail: clipboard API can be blocked (no secure context, denied
-      // permission). Fall back to the legacy execCommand path so the user
-      // is never left without a copy option.
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.select();
-      try {
-        document.execCommand("copy");
-      } catch {
-        /* swallow — nothing else we can do without clipboard access */
-      }
-      document.body.removeChild(ta);
-    }
-  }
 
   async function copyError(entry: (typeof $errorLog)[number]): Promise<void> {
     await copyToClipboard(formatErrorReport([entry]));

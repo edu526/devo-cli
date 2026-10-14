@@ -28,7 +28,8 @@
   import { ws, type WsMessage } from "../lib/ws";
   import { notifyUser } from "../lib/notifications";
   import { explainError, stateLabel } from "../lib/connection-status";
-  import { Settings, RefreshCw, X, Link2, Link2Off } from "@lucide/svelte";
+  import { copyToClipboard } from "../lib/clipboard";
+  import { Settings, RefreshCw, X, Link2, Link2Off, Copy, Check } from "@lucide/svelte";
   import { open as openUrl } from "@tauri-apps/plugin-shell";
 
   const viewMode = viewModes.databases;
@@ -221,6 +222,24 @@
   function localEndpoint(row: Row): string {
     const port = row.conn?.local_port ?? row.db.local_port ?? "auto";
     return forwarded(row.name) ? String(port) : `127.0.0.1:${port}`;
+  }
+
+  /**
+   * Where a SQL client connects: the database's own host and port while its
+   * hostname is forwarded, else the local tunnel.
+   */
+  function connectAddress(row: Row): string {
+    return forwarded(row.name) ? `${row.db.host}:${row.db.port}` : localEndpoint(row);
+  }
+
+  let copiedName: string | null = $state(null);
+  let copiedTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async function copyAddress(row: Row) {
+    await copyToClipboard(connectAddress(row));
+    copiedName = row.name;
+    if (copiedTimer !== null) clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => (copiedName = null), 1500);
   }
 
   let showModal = $state(false);
@@ -693,8 +712,9 @@
   }
 
   /** Starting a tunnel whose credentials expired opens the login first. */
-  function startLabel(row: Row): string {
-    return connState(row) === "expired_credentials" ? "Log in & connect" : "Start";
+  function startLabel(row: Row, compact = false): string {
+    if (connState(row) !== "expired_credentials") return "Start";
+    return compact ? "Log in" : "Log in & connect";
   }
 
   /** What to tell the user under a tunnel: its error explained, or why it's waiting. */
@@ -730,6 +750,18 @@
       </details>
     {/if}
   </div>
+{/snippet}
+
+{#snippet copyAddressButton(row: Row)}
+  <button
+    class="btn-icon copy-btn"
+    class:copied={copiedName === row.name}
+    onclick={() => copyAddress(row)}
+    title="Copy {connectAddress(row)}"
+    aria-label="Copy {connectAddress(row)}"
+  >
+    {#if copiedName === row.name}<Check size={13} />{:else}<Copy size={13} />{/if}
+  </button>
 {/snippet}
 
 {#snippet forwardingToggle(name: string, cls: string)}
@@ -927,13 +959,17 @@
                 >
               </td>
               <td><span class="badge {stateClass(connState(row))}">{stateLabel(connState(row))}</span></td>
-              <td class="host-cell truncate">
-                <code>{row.db.host}</code>
-                {#if !forwarded(row.name)}
-                  <span class="badge badge-gray" title="Resolves through normal DNS: hostname forwarding is paused"
-                    >DNS</span
-                  >
-                {/if}
+              <td class="host-cell">
+                <!-- Only the hostname is cut short: the copy button and the badge stay visible. -->
+                <div class="host-wrap">
+                  <code class="host-text" title={row.db.host}>{row.db.host}</code>
+                  {@render copyAddressButton(row)}
+                  {#if !forwarded(row.name)}
+                    <span class="badge badge-gray" title="Resolves through normal DNS: hostname forwarding is paused"
+                      >DNS</span
+                    >
+                  {/if}
+                </div>
               </td>
               <td>{row.db.port} → {localEndpoint(row)}</td>
               <td class="uptime-cell">{formatUptime(row.conn?.uptime_seconds)}</td>
@@ -949,7 +985,7 @@
                       {#if busyConns.has(row.name)}
                         <span class="spinner-sm"></span> Starting…
                       {:else}
-                        {startLabel(row)}
+                        {startLabel(row, true)}
                       {/if}
                     </button>
                   {:else}
@@ -1003,6 +1039,7 @@
             <div class="lc-meta">
               <span class="lc-meta-item">
                 <span class="muted">Host:</span> <code>{row.db.host}</code>
+                {@render copyAddressButton(row)}
                 {#if !forwarded(row.name)}
                   <span class="badge badge-gray" title="Resolves through normal DNS: hostname forwarding is paused"
                     >DNS</span
@@ -1191,8 +1228,21 @@
     margin: 0;
     font-size: 0.78rem;
   }
-  .host-cell {
-    max-width: 220px;
+  .host-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    max-width: 180px;
+  }
+  .host-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .host-wrap .copy-btn,
+  .host-wrap .badge {
+    flex-shrink: 0;
   }
   tr.has-problem td {
     border-bottom: none;
@@ -1223,6 +1273,15 @@
   }
   .lc-edit-btn {
     margin-left: 0.25rem;
+  }
+  .copy-btn {
+    display: inline-flex;
+    vertical-align: middle;
+    color: var(--text-secondary);
+  }
+  .copy-btn.copied {
+    color: var(--success);
+    opacity: 1;
   }
 
   /* List Cards */
