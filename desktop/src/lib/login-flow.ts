@@ -35,9 +35,14 @@ function finishLogin(): void {
 }
 
 /**
- * "Log in" button: run the sidecar's refresh-all flow, which renews silently
- * what it can and opens the browser (through the same handler) for the rest.
- * Returns false if one is already running or the request failed.
+ * "Log in" button: run the sidecar's refresh-all flow on what the banner
+ * shows, which renews silently what it can and opens the browser (through
+ * the same handler) for the rest. Returns false if one is already running or
+ * the request failed.
+ *
+ * The targets must be sent: left to decide on its own, refresh-all only
+ * renews profiles with under 10 minutes left, while the background renewal
+ * reports them from 15, so it could find nothing to do and the banner stayed.
  */
 export async function startLogin(): Promise<boolean> {
   if (get(loginInProgress)) return false;
@@ -47,7 +52,7 @@ export async function startLogin(): Promise<boolean> {
   loginError.set(null);
   loginTimeout = setTimeout(finishLogin, LOGIN_TIMEOUT_MS);
   try {
-    await profilesApi.refreshAll(false, { allowBrowser: true });
+    await profilesApi.refreshAll(false, { allowBrowser: true, targets: loginTargets() });
     return true;
   } catch (e) {
     finishLogin();
@@ -62,6 +67,17 @@ export async function startLogin(): Promise<boolean> {
     }
     return false;
   }
+}
+
+/** The banner's profiles, plus the sessions it only knows by name. */
+function loginTargets(): { profiles: string[]; sessions: string[] } {
+  const needed = get(loginNeeded);
+  return {
+    profiles: Object.values(needed).flat(),
+    sessions: Object.entries(needed)
+      .filter(([, names]) => names.length === 0)
+      .map(([session]) => session),
+  };
 }
 
 function setActive(session: string, active: boolean): void {

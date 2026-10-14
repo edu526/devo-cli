@@ -351,6 +351,31 @@ class TestRefreshAll:
         assert thread_args[1] is False  # force untouched
         assert thread_args[2] is False
 
+    def test_targets_reach_the_thread(self, mocker):
+        captured: list[dict] = []
+
+        def fake_thread(*args, **kwargs):
+            captured.append({"kwargs": kwargs})
+            return mocker.MagicMock()
+
+        mocker.patch("threading.Thread", side_effect=fake_thread)
+        client, _ = _make_client()
+        client.post("/profiles:refresh_all", json={"profiles": ["dev"], "sessions": ["corp"]}, headers=AUTH)
+        # args = (hub, force, allow_browser, lock, targets)
+        assert captured[0]["kwargs"]["args"][4] == {"profiles": ["dev"], "sessions": ["corp"]}
+
+    def test_no_targets_lets_refresh_all_pick_the_stale_profiles(self, mocker):
+        captured: list[dict] = []
+
+        def fake_thread(*args, **kwargs):
+            captured.append({"kwargs": kwargs})
+            return mocker.MagicMock()
+
+        mocker.patch("threading.Thread", side_effect=fake_thread)
+        client, _ = _make_client()
+        client.post("/profiles:refresh_all", json={"force": False}, headers=AUTH)
+        assert captured[0]["kwargs"]["args"][4] is None
+
 
 @pytest.mark.unit
 class TestRefreshProfile:

@@ -150,7 +150,12 @@ def create_profile_endpoint(body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
-def _do_refresh_all(hub: EventHub, force: bool = False, allow_browser: bool = True) -> None:
+def _do_refresh_all(
+    hub: EventHub,
+    force: bool = False,
+    allow_browser: bool = True,
+    targets: dict[str, list[str]] | None = None,
+) -> None:
     """Synchronous body of the refresh_all background thread.
 
     When `force` is False (the default) only profiles that are expired
@@ -165,6 +170,12 @@ def _do_refresh_all(hub: EventHub, force: bool = False, allow_browser: bool = Tr
     instead — used for unattended runs such as app launch. `force` always
     runs the full login: it is an explicit request to re-authenticate.
 
+    `targets` ({"profiles": [...], "sessions": [...]}) renews exactly those
+    profiles, plus every profile of those SSO sessions, instead of picking the
+    stale ones: it is what the "Log in" banner asks for. The background renewal
+    flags profiles a few minutes earlier than this classification would, so
+    re-deciding here could find nothing to do while the banner stays up.
+
     Imports are kept inside the function so the heavy `aws_login` module
     tree is not loaded on sidecar startup.
     """
@@ -176,12 +187,21 @@ def _do_refresh_all(hub: EventHub, force: bool = False, allow_browser: bool = Tr
         )
         from cli_tool.commands.aws_login.core.config import list_aws_profiles
 
-        logger.info("Starting refresh_all (force=%s) — classifying profiles", force)
         profiles = list_aws_profiles()
-        # Decide from the AWS CLI's credential cache: spawning `aws` once per
-        # profile just to classify took ~2 s each, in series. Anything the
-        # cache can't vouch for goes through the silent renewal below.
-        to_refresh, valid = _classify_profiles(profiles, cached_only=True)
+        if targets is not None:
+            names = _login_targets(profiles, targets.get("profiles", []), targets.get("sessions", []))
+            logger.info("Starting refresh_all for %d profile(s) that need a login", len(names))
+            if not names:
+                # Deleted, or not SSO: no login brings them back. Drop the notice.
+                logger.warning("refresh_all: no SSO profile matches %s", targets)
+                hub.publish("profile.login_resolved", {"sessions": targets.get("sessions", [])})
+            to_refresh, valid = [(name, "Login required") for name in names], []
+        else:
+            logger.info("Starting refresh_all (force=%s) — classifying profiles", force)
+            # Decide from the AWS CLI's credential cache: spawning `aws` once per
+            # profile just to classify took ~2 s each, in series. Anything the
+            # cache can't vouch for goes through the silent renewal below.
+            to_refresh, valid = _classify_profiles(profiles, cached_only=True)
         if force:
             # Same semantics as `devo aws-login refresh --force`: move the
             # still-valid profiles onto the refresh list so the explicit
@@ -230,6 +250,23 @@ def _do_refresh_all(hub: EventHub, force: bool = False, allow_browser: bool = Tr
         hub.publish("profile.refreshed", {"names": [], "success": False, "error": str(exc)})
 
 
+def _login_targets(profiles: list[tuple[str, str]], names: list[str], sessions: list[str]) -> list[str]:
+    """SSO profiles among `profiles` that are named in `names` or belong to one
+    of `sessions`. A session is matched by any key the sidecar reports it
+    under: the `[sso-session]` name, the legacy start URL or the profile name.
+    """
+    wanted, keys = set(names), set(sessions)
+    found: list[str] = []
+    for name, _source in profiles:
+        cfg = get_profile_config(name) or {}
+        if not (cfg.get("sso_session") or cfg.get("sso_start_url")):
+            continue  # no SSO login renews it
+        session_keys = {cfg.get("sso_session") or name, cfg.get("sso_session") or cfg.get("sso_start_url")}
+        if name in wanted or session_keys & keys:
+            found.append(name)
+    return found
+
+
 def _login_sessions(hub: EventHub, session_profiles: dict[str, list[str]]) -> list[str]:
     """Browser login for each SSO session, one after another, through the
     shared login handler (which also serves tunnels, CodeArtifact and the
@@ -273,10 +310,16 @@ def _renew_role_credentials(profile_names: list[str]) -> list[str]:
 _refresh_all_running = threading.Lock()
 
 
-def _run_refresh_all(hub: EventHub, force: bool, allow_browser: bool, running: threading.Lock) -> None:
+def _run_refresh_all(
+    hub: EventHub,
+    force: bool,
+    allow_browser: bool,
+    running: threading.Lock,
+    targets: dict[str, list[str]] | None = None,
+) -> None:
     """Thread body: run the refresh, then release the lock the request took."""
     try:
-        _do_refresh_all(hub, force, allow_browser)
+        _do_refresh_all(hub, force, allow_browser, targets)
     finally:
         running.release()
 
@@ -327,11 +370,18 @@ def refresh_all(
       - {"allow_browser": false} never opens a browser: stale profiles are
         renewed silently when possible and the rest are listed in
         `needs_login` on the `profile.refreshed` event. Default true.
+      - {"profiles": [...], "sessions": [...]} renews those profiles and every
+        profile of those SSO sessions, whatever time their credentials have
+        left, instead of only the stale ones. Sent by the "Log in" banner.
     """
     app_state = _state(request)
     hub = app_state.event_hub
-    force = bool((body or {}).get("force", False))
-    allow_browser = bool((body or {}).get("allow_browser", True))
+    body = body or {}
+    force = bool(body.get("force", False))
+    allow_browser = bool(body.get("allow_browser", True))
+    targets = None
+    if "profiles" in body or "sessions" in body:
+        targets = {key: [str(v) for v in body.get(key) or []] for key in ("profiles", "sessions")}
 
     running = _refresh_all_running
     if not running.acquire(blocking=False):
@@ -340,7 +390,7 @@ def refresh_all(
             "message": "A refresh is already in progress — watch WS for profile.refreshed",
         }
     try:
-        t = threading.Thread(target=_run_refresh_all, args=(hub, force, allow_browser, running), daemon=True)
+        t = threading.Thread(target=_run_refresh_all, args=(hub, force, allow_browser, running, targets), daemon=True)
         t.start()
     except Exception:
         running.release()

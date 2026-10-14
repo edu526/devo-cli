@@ -91,8 +91,20 @@ describe("login-flow", () => {
   describe("the Log in button", () => {
     it("runs the refresh flow that renews silently and logs in only what needs it", async () => {
       expect(await startLogin()).toBe(true);
-      expect(refreshAll).toHaveBeenCalledWith(false, { allowBrowser: true });
+      expect(refreshAll).toHaveBeenCalledWith(false, {
+        allowBrowser: true,
+        targets: { profiles: [], sessions: [] },
+      });
       expect(get(loginInProgress)).toBe(true);
+    });
+
+    it("asks for exactly what the banner shows, not whatever refresh-all finds stale", async () => {
+      loginNeeded.set({ corp: ["a", "b"], legacy: [] });
+      await startLogin();
+      expect(refreshAll).toHaveBeenCalledWith(false, {
+        allowBrowser: true,
+        targets: { profiles: ["a", "b"], sessions: ["legacy"] },
+      });
     });
 
     it("never runs twice at once", async () => {

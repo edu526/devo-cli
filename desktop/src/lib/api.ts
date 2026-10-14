@@ -558,10 +558,14 @@ export const profilesApi = {
    * renewed silently come back in `needs_login` on the `profile.refreshed`
    * WebSocket event.
    */
-  refreshAll: (force = true, options?: { allowBrowser?: boolean }) =>
+  refreshAll: (
+    force = true,
+    options?: { allowBrowser?: boolean; targets?: { profiles: string[]; sessions: string[] } },
+  ) =>
     req<{ status: string; message: string }>("POST", "/profiles:refresh_all", {
       force,
       ...(options?.allowBrowser === undefined ? {} : { allow_browser: options.allowBrowser }),
+      ...(options?.targets ?? {}),
     }),
   /** `force` always runs the browser login and replaces the cached role credentials. */
   refresh: (name: string, options?: { force?: boolean }) =>

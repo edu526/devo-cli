@@ -509,6 +509,78 @@ class TestDoRefreshAllSilentFirst:
 
 
 @pytest.mark.unit
+class TestDoRefreshAllTargets:
+    """The banner's "Log in" names what to renew: refresh-all must not decide
+    again (its 10 min rule found nothing while the banner, raised at 15 min,
+    stayed up and the button did nothing)."""
+
+    CONFIGS = {
+        "dev": {"sso_session": "corp"},
+        "prod": {"sso_session": "corp"},
+        "old": {"sso_start_url": "https://old.awsapps.com/start"},
+        "static": {"region": "us-east-1"},
+    }
+
+    @pytest.fixture
+    def setup(self, mocker):
+        mocker.patch(
+            "cli_tool.commands.aws_login.core.config.list_aws_profiles",
+            return_value=[(name, "sso") for name in self.CONFIGS],
+        )
+        mocker.patch.object(profiles_router, "get_profile_config", side_effect=self.CONFIGS.get)
+        classify = mocker.patch(f"{REFRESH}._classify_profiles", return_value=([], [("dev", "x"), ("prod", "x")]))
+        login = mocker.patch.object(
+            profiles_router,
+            "_login_sessions",
+            side_effect=lambda hub, groups: [p for ps in groups.values() for p in ps],
+        )
+        mocker.patch(f"{REFRESH}._group_profiles_by_session", side_effect=lambda profs: {"s": [p for p, _ in profs]})
+        return classify, login
+
+    @staticmethod
+    def _events(q):
+        msgs = []
+        while not q.empty():
+            msgs.append(q.get_nowait())
+        return msgs
+
+    def test_renews_the_named_profiles_even_when_classified_valid(self, setup, no_silent_refresh):
+        classify, login = setup
+        hub = EventHub()
+        q = hub.subscribe()
+
+        profiles_router._do_refresh_all(hub, targets={"profiles": ["dev"], "sessions": []})
+
+        classify.assert_not_called()
+        assert no_silent_refresh.call_args[0][0] == [("dev", "Login required")]
+        login.assert_called_once()
+        assert self._events(q)[-1] == {"event": "profile.refreshed", "names": ["dev"], "success": True}
+
+    def test_a_session_means_every_profile_of_it(self, setup, no_silent_refresh):
+        profiles_router._do_refresh_all(EventHub(), targets={"profiles": [], "sessions": ["corp", "https://old.awsapps.com/start"]})
+
+        renewed = [name for name, _reason in no_silent_refresh.call_args[0][0]]
+        assert renewed == ["dev", "prod", "old"]
+
+    def test_profiles_no_login_renews_are_ignored(self, setup, no_silent_refresh):
+        profiles_router._do_refresh_all(EventHub(), targets={"profiles": ["static", "gone", "prod"], "sessions": []})
+
+        assert no_silent_refresh.call_args[0][0] == [("prod", "Login required")]
+
+    def test_nothing_left_to_log_in_drops_the_notice(self, setup, no_silent_refresh):
+        _, login = setup
+        hub = EventHub()
+        q = hub.subscribe()
+
+        profiles_router._do_refresh_all(hub, targets={"profiles": ["gone"], "sessions": ["gone-session"]})
+
+        login.assert_not_called()
+        events = self._events(q)
+        assert {"event": "profile.login_resolved", "sessions": ["gone-session"]} in events
+        assert events[-1] == {"event": "profile.refreshed", "names": [], "success": True}
+
+
+@pytest.mark.unit
 class TestDoRefreshAllClassifiesFromCache:
     def test_classification_uses_the_cache_not_a_subprocess_per_profile(self, mocker):
         mocker.patch("cli_tool.commands.aws_login.core.config.list_aws_profiles", return_value=[("dev", "sso")])
