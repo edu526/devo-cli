@@ -96,7 +96,7 @@ class TestRefreshAllHappyPath:
             return_value=[("dev", "sso")],
         )
         mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._classify_profiles",
+            "cli_tool.sidecar.routers.profiles._classify_stale",
             return_value=([("dev", "sso")], []),
         )
         mocker.patch(
@@ -138,7 +138,7 @@ class TestRefreshAllHappyPath:
             return_value=[("dev", "sso")],
         )
         mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._classify_profiles",
+            "cli_tool.sidecar.routers.profiles._classify_stale",
             return_value=([], []),
         )
 
@@ -220,7 +220,7 @@ class TestRefreshAllHttpContract:
             return_value=[],
         )
         mocker.patch(
-            "cli_tool.commands.aws_login.commands.refresh._classify_profiles",
+            "cli_tool.sidecar.routers.profiles._classify_stale",
             return_value=([], []),
         )
 
