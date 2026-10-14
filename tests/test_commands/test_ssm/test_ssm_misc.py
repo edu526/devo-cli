@@ -479,7 +479,13 @@ class TestProbeStateGuard:
         record = ConnectionRecord(name="x")
         registry = ForwarderRegistry()
         main_finished = threading.Event()
+        # The patches below replace time.sleep/monotonic process-wide (connection_runner.time
+        # is the time module): keep the real one to wait for the threads.
+        real_sleep = time.sleep
 
+        # Tokens are fine: the real check runs `aws configure export-credentials`,
+        # seconds on a loaded machine, past the time the loop is given below.
+        mocker.patch.object(SSMSession, "_is_token_expired", staticmethod(lambda **kw: False))
         # SSM subprocess raises a generic error (not an expired-credential case)
         mocker.patch(
             "cli_tool.commands.ssm.core.connection_runner._run_attempt",
@@ -529,9 +535,20 @@ class TestProbeStateGuard:
 
         t = threading.Thread(target=run_and_signal, daemon=True)
         t.start()
-        t.join(timeout=2.0)
-        # Give the probe a moment to finish its state-guard check.
-        time.sleep(0.2)
+        # The probe thread is started before the attempt, and the loop waits
+        # 0.5 s for it before returning (it is blocked on main_finished).
+        probe = None
+        for _ in range(500):
+            probe = record.probe_thread
+            if probe is not None:
+                break
+            real_sleep(0.01)
+        assert probe is not None
+        t.join(timeout=10.0)
+        assert not t.is_alive()
+        # Wait for the probe to finish its state-guard check, not a guessed delay.
+        probe.join(timeout=10.0)
+        assert not probe.is_alive()
 
         assert record.state == ERROR
         assert record.error is not None and "ssm crashed" in record.error
