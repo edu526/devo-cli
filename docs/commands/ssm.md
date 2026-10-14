@@ -300,6 +300,11 @@ the databases with hostname forwarding on, and remove the stale ones
 another host now, or paused). Entries outside Devo's block are never
 touched.
 
+It also repairs databases set up on the same loopback IP and port: only one
+of them could be reached through its hostname (the other one's tunnel might
+answer instead). One of each pair gets its own 127.0.0.X; clients keep
+using the same hostname and port.
+
 ```bash
 devo ssm hosts sync
 ```

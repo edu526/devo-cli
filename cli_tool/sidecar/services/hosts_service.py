@@ -173,7 +173,7 @@ def sync_hosts() -> dict[str, Any]:
     """Make the hosts file match the databases (`devo ssm hosts sync`): map the
     missing ones, remove the stale entries. Returns hosts_status(); raises
     NeedsElevation when the file needs it."""
-    _succeeded, failed, _removed = sync_databases()
+    _succeeded, failed, _removed, _moved = sync_databases()
     if any(f.get("needs_elevation") for f in failed):
         raise _hosts_command_elevation(["sync"], "hosts-sync")
     return hosts_status()

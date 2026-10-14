@@ -18,12 +18,15 @@ def setup_databases(
     *,
     config_manager: Optional[SSMConfigManager] = None,
     hosts_manager: Optional[HostsManager] = None,
+    new_address_for: frozenset = frozenset(),
 ) -> tuple[list[dict], list[dict]]:
     """Assign loopback IPs, allocate free local ports and add /etc/hosts entries.
 
     If `db_names` is None, every configured database is processed. Otherwise only
     the named subset is touched. Databases whose hostname forwarding is paused
-    are always skipped (see hostname_forwarding).
+    are always skipped (see hostname_forwarding). `new_address_for` names
+    databases that get a new loopback IP even if they have one (see
+    shared_addresses); like any new IP it is saved once the hosts file has it.
 
     Returns (succeeded, failed) where each element is a JSON-serializable dict:
       - succeeded: {"name", "host", "ip", "local_port", "port_reassigned"}
@@ -54,7 +57,7 @@ def setup_databases(
         host = db_config["host"]
 
         # Compute (do not persist yet) the loopback IP
-        needs_address = "local_address" not in db_config or db_config["local_address"] == "127.0.0.1"
+        needs_address = "local_address" not in db_config or db_config["local_address"] == "127.0.0.1" or name in new_address_for
         local_address = hm.get_next_loopback_ip(taken_ips) if needs_address else db_config["local_address"]
         taken_ips.add(local_address)
 
@@ -115,21 +118,65 @@ def stale_hostnames(ssm_config: dict, managed_entries: list[tuple[str, str]]) ->
     return sorted({host for _ip, host in managed_entries if host not in wanted})
 
 
+def shared_addresses(databases: dict) -> list[dict]:
+    """Databases set up on the same loopback IP and port.
+
+    Their hostnames end up at the same 127.0.0.X:<port>, where only one local
+    forwarder can listen: connecting to one database's hostname can reach the
+    other one's tunnel (a writer's name landing on its reader), and stopping
+    one breaks the other. Each group as {"ip", "port", "databases"}, in config
+    order. The same IP with different ports doesn't clash.
+    """
+    groups: dict[tuple, list[str]] = {}
+    for name, cfg in databases.items():
+        ip = cfg.get("local_address")
+        if ip and ip != "127.0.0.1":
+            groups.setdefault((ip, cfg.get("port")), []).append(name)
+    return [{"ip": ip, "port": port, "databases": names} for (ip, port), names in groups.items() if len(names) > 1]
+
+
 def sync_databases(
     *,
     config_manager: Optional[SSMConfigManager] = None,
     hosts_manager: Optional[HostsManager] = None,
-) -> tuple[list[dict], list[dict], list[str]]:
-    """Make the hosts file match the databases: set up the forwarded ones
-    (setup_databases) and remove the stale entries (stale_hostnames).
+) -> tuple[list[dict], list[dict], list[str], list[dict]]:
+    """Make the hosts file match the databases: give databases sharing a
+    loopback IP and port their own (shared_addresses), set up the forwarded
+    ones (setup_databases) and remove the stale entries (stale_hostnames).
 
-    Returns (succeeded, failed, removed): `failed` also holds the stale
+    Returns (succeeded, failed, removed, moved): `failed` also holds the stale
     entries that couldn't be removed, as {"name": None, "host", "error",
-    "needs_elevation", "locked"}.
+    "needs_elevation", "locked"}; `moved` the databases given their own IP, as
+    {"name", "from", "to", "shared_with"}. Clients keep using the same
+    hostname and port: only the 127.0.0.X behind it changes.
     """
     cm = config_manager or SSMConfigManager()
     hm = hosts_manager or HostsManager()
-    succeeded, failed = setup_databases(config_manager=cm, hosts_manager=hm)
+
+    # The first database of each group keeps the IP, the others move.
+    ssm_config = cm.load()
+    databases = cm.list_databases()
+    to_move: dict[str, dict] = {}
+    for group in shared_addresses(databases):
+        for name in group["databases"][1:]:
+            to_move[name] = {"name": name, "from": group["ip"], "shared_with": group["databases"][0]}
+
+    moved: list[dict] = []
+    # A paused database has no hosts entry: just give it another IP.
+    paused = [n for n in to_move if not hostname_forwarding.is_enabled(ssm_config, databases[n])]
+    if paused:
+        config = cm.load()
+        taken = {c.get("local_address") for c in config["databases"].values()} - {None, "127.0.0.1"}
+        for name in paused:
+            new_ip = hm.get_next_loopback_ip(taken)
+            taken.add(new_ip)
+            config["databases"][name]["local_address"] = new_ip
+            moved.append({**to_move[name], "to": new_ip})
+        cm.save(config)
+
+    forwarded_moves = frozenset(to_move) - frozenset(paused)
+    succeeded, failed = setup_databases(config_manager=cm, hosts_manager=hm, new_address_for=forwarded_moves)
+    moved += [{**to_move[s["name"]], "to": s["ip"]} for s in succeeded if s["name"] in forwarded_moves]
 
     removed: list[str] = []
     for host in stale_hostnames(cm.load(), hm.get_managed_entries()):
@@ -146,4 +193,4 @@ def sync_databases(
                     "locked": isinstance(e, HostsFileLocked),
                 }
             )
-    return succeeded, failed, removed
+    return succeeded, failed, removed, moved

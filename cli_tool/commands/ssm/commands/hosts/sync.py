@@ -17,12 +17,16 @@ def hosts_sync():
     """Make /etc/hosts match the databases: add missing entries, remove stale ones.
 
     Stale entries are hostnames in Devo's block that no database forwards
-    anymore (deleted, with another host now, or paused).
+    anymore (deleted, with another host now, or paused). Databases sharing a
+    loopback IP and port get their own IP; clients keep the same hostname.
     """
-    succeeded, failed, removed = sync_databases()
+    succeeded, failed, removed, moved = sync_databases()
 
     for entry in succeeded:
         console.print(f"[green]✓[/green] {entry['name']}: {entry['host']} -> {entry['ip']}:{entry['local_port']}")
+    for move in moved:
+        console.print(f"[green]✓[/green] {move['name']}: own IP {move['to']} (shared {move['from']} with {move['shared_with']})")
+        logger.info("%s moved from %s to %s (shared it with %s)", move["name"], move["from"], move["to"], move["shared_with"])
     for host in removed:
         console.print(f"[green]✓[/green] removed stale {host}")
     for entry in failed:

@@ -411,7 +411,7 @@ class TestHostsSync:
             "127.0.0.1 localhost\n" + _hosts(("127.0.0.2", "kept.rds"), ("127.0.0.4", "paused.rds"), ("127.0.0.9", "deleted-db.rds"))
         )
 
-        succeeded, failed, removed = sync_databases()
+        succeeded, failed, removed, _moved = sync_databases()
 
         assert failed == []
         assert removed == ["deleted-db.rds", "paused.rds"]
@@ -448,3 +448,82 @@ class TestHostsSync:
         mocker.patch.object(HostsManager, "remove_entry", side_effect=PermissionError("denied"))
         denied = CliRunner().invoke(hosts_sync)
         assert denied.exit_code == 1
+
+
+@pytest.mark.unit
+class TestSharedLoopbackAddresses:
+    """Two databases on one 127.0.0.X:<port>: only one local forwarder can listen
+    there, so one hostname can reach the other database's tunnel."""
+
+    def test_detects_same_ip_and_port_only(self):
+        from cli_tool.commands.ssm.core.hosts_setup import shared_addresses
+
+        databases = {
+            "prod": _db("prod.rds", "127.0.0.7"),
+            "prod-reader": _db("prod-reader.rds", "127.0.0.7"),
+            "mysql": {**_db("mysql.rds", "127.0.0.7"), "port": 3306},  # same IP, other port: fine
+            "fresh": _db("fresh.rds", "127.0.0.1"),  # not set up
+        }
+
+        assert shared_addresses(databases) == [{"ip": "127.0.0.7", "port": 5432, "databases": ["prod", "prod-reader"]}]
+
+    def test_sync_gives_the_second_one_its_own_ip_and_keeps_the_hostname(self, hosts_file):
+        from cli_tool.commands.ssm.core.hosts_setup import sync_databases
+
+        save_config({"ssm": {"databases": {"prod": _db("prod.rds", "127.0.0.7"), "prod-reader": _db("prod-reader.rds", "127.0.0.7")}}})
+        hosts_file.write_text(_hosts(("127.0.0.7", "prod.rds"), ("127.0.0.7", "prod-reader.rds")))
+
+        _succeeded, failed, _removed, moved = sync_databases()
+
+        assert failed == []
+        assert moved == [{"name": "prod-reader", "from": "127.0.0.7", "to": "127.0.0.2", "shared_with": "prod"}]
+        assert sorted(HostsManager().get_managed_entries()) == [("127.0.0.2", "prod-reader.rds"), ("127.0.0.7", "prod.rds")]
+        databases = SSMConfigManager().list_databases()
+        assert databases["prod"]["local_address"] == "127.0.0.7"
+        assert databases["prod-reader"]["local_address"] == "127.0.0.2"
+        assert databases["prod-reader"]["port"] == 5432  # what clients use doesn't change
+
+    def test_a_paused_one_just_gets_another_ip_in_the_config(self, hosts_file):
+        from cli_tool.commands.ssm.core.hosts_setup import sync_databases
+
+        save_config(
+            {
+                "ssm": {
+                    "databases": {
+                        "prod": _db("prod.rds", "127.0.0.7"),
+                        "old": _db("old.rds", "127.0.0.7", hostname_forwarding=False),
+                    }
+                }
+            }
+        )
+        hosts_file.write_text(_hosts(("127.0.0.7", "prod.rds")))
+
+        _succeeded, _failed, _removed, moved = sync_databases()
+
+        assert [(m["name"], m["to"]) for m in moved] == [("old", "127.0.0.2")]
+        assert HostsManager().get_managed_entries() == [("127.0.0.7", "prod.rds")]  # no entry for a paused one
+
+    def test_without_rights_nothing_moves_until_the_elevated_run(self, hosts_file, mocker):
+        from cli_tool.commands.ssm.core.hosts_setup import sync_databases
+
+        save_config({"ssm": {"databases": {"prod": _db("prod.rds", "127.0.0.7"), "prod-reader": _db("prod-reader.rds", "127.0.0.7")}}})
+        hosts_file.write_text(_hosts(("127.0.0.7", "prod.rds"), ("127.0.0.7", "prod-reader.rds")))
+        mocker.patch.object(HostsManager, "_write_hosts", side_effect=PermissionError("denied"))
+
+        _succeeded, failed, _removed, moved = sync_databases()
+
+        assert moved == [] and any(f["needs_elevation"] for f in failed)
+        assert SSMConfigManager().get_database("prod-reader")["local_address"] == "127.0.0.7"  # config follows the file
+
+    def test_the_command_says_what_moved(self, hosts_file):
+        from click.testing import CliRunner
+
+        from cli_tool.commands.ssm.commands.hosts.sync import hosts_sync
+
+        save_config({"ssm": {"databases": {"prod": _db("prod.rds", "127.0.0.7"), "prod-reader": _db("prod-reader.rds", "127.0.0.7")}}})
+        hosts_file.write_text(_hosts(("127.0.0.7", "prod.rds"), ("127.0.0.7", "prod-reader.rds")))
+
+        result = CliRunner().invoke(hosts_sync)
+
+        assert result.exit_code == 0
+        assert "prod-reader: own IP 127.0.0.2 (shared 127.0.0.7 with prod)" in result.output
