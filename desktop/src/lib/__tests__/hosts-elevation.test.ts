@@ -54,10 +54,14 @@ describe("elevationHint", () => {
     expect(elevationHint(new Error("boom"))).toBeNull();
   });
 
-  it("reads the hint from the 401 detail", () => {
+  it("reads the hint from the 403 detail", () => {
     const h = hint({ cli_args: ["ssm"] });
-    expect(elevationHint(new ApiError(401, h))).toEqual(h);
-    expect(elevationHint(new ApiError(401, JSON.stringify(h)))).toEqual(h);
+    expect(elevationHint(new ApiError(403, h))).toEqual(h);
+    expect(elevationHint(new ApiError(403, JSON.stringify(h)))).toEqual(h);
+  });
+
+  it("is not a 401: that one means an expired sidecar token", () => {
+    expect(elevationHint(new ApiError(401, hint({ cli_args: ["ssm"] })))).toBeNull();
   });
 });
 
@@ -75,7 +79,7 @@ describe("withHostsElevation", () => {
     mockInvoke.mockResolvedValue(0);
     const request = vi
       .fn()
-      .mockRejectedValueOnce(new ApiError(401, hint({ ...unix, cli_args: ["ssm", "hosts", "clear", "--yes"] })))
+      .mockRejectedValueOnce(new ApiError(403, hint({ ...unix, cli_args: ["ssm", "hosts", "clear", "--yes"] })))
       .mockResolvedValueOnce("recorded");
 
     await expect(withHostsElevation(request)).resolves.toBe("recorded");
@@ -88,7 +92,7 @@ describe("withHostsElevation", () => {
 
   it("reports a failed elevated command (Windows returns its exit code) without repeating", async () => {
     mockInvoke.mockResolvedValue(1);
-    const request = vi.fn().mockRejectedValue(new ApiError(401, hint({ ...unix, cli_args: ["ssm"] })));
+    const request = vi.fn().mockRejectedValue(new ApiError(403, hint({ ...unix, cli_args: ["ssm"] })));
 
     await expect(withHostsElevation(request)).rejects.toThrow("exit code 1");
     expect(request).toHaveBeenCalledTimes(1);
@@ -96,7 +100,7 @@ describe("withHostsElevation", () => {
 
   describe("a hosts file locked even for administrators (exit code 3)", () => {
     const locked = () =>
-      vi.fn().mockRejectedValue(new ApiError(401, hint({ ...unix, cli_args: ["ssm", "hosts", "clear"] })));
+      vi.fn().mockRejectedValue(new ApiError(403, hint({ ...unix, cli_args: ["ssm", "hosts", "clear"] })));
 
     it("shows why, as the sidecar explains it (Windows reports the code)", async () => {
       mockInvoke.mockResolvedValue(3);
@@ -127,18 +131,18 @@ describe("withHostsElevation", () => {
 
   it("says so in plain words when the hosts file still needs elevation afterwards", async () => {
     mockInvoke.mockResolvedValue(0);
-    const request = vi.fn().mockRejectedValue(new ApiError(401, hint({ ...unix, cli_args: ["ssm"] })));
+    const request = vi.fn().mockRejectedValue(new ApiError(403, hint({ ...unix, cli_args: ["ssm"] })));
 
     const error = await withHostsElevation(request).catch((e: Error) => e);
 
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toContain("didn't change");
-    expect((error as Error).message).not.toContain("{"); // not the raw 401 detail
+    expect((error as Error).message).not.toContain("{"); // not the raw 403 detail
   });
 
   it("does not repeat the request when the admin prompt is cancelled", async () => {
     mockInvoke.mockRejectedValue(new Error("UAC prompt was cancelled or access denied"));
-    const request = vi.fn().mockRejectedValue(new ApiError(401, hint({ ...unix, cli_args: ["ssm"] })));
+    const request = vi.fn().mockRejectedValue(new ApiError(403, hint({ ...unix, cli_args: ["ssm"] })));
 
     await expect(withHostsElevation(request)).rejects.toThrow("cancelled");
     expect(request).toHaveBeenCalledTimes(1);

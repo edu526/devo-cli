@@ -139,6 +139,18 @@ describe("api", () => {
       expect(getToken()).toBe("new-tok");
     });
 
+    it("a hosts elevation request (403) goes straight to the caller, no token refresh", async () => {
+      mockInvoke.mockResolvedValueOnce({ port: 1, token: "tok" });
+      await initApi();
+      const detail = { message: "Elevated privileges required", command: "", action: "hosts-clear", params: {} };
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(new Response(JSON.stringify({ detail }), { status: 403 }));
+
+      await expect(hostsApi.setForwarding(false)).rejects.toMatchObject({ status: 403, detail });
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
     it("surfaces the original 401 when /auth/refresh itself fails", async () => {
       mockInvoke.mockResolvedValueOnce({ port: 1, token: "old-tok" });
       await initApi();

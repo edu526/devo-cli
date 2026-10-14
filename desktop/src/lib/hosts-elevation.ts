@@ -3,7 +3,7 @@ import { ApiError, hostsApi, type ElevationHint } from "./api";
 
 /**
  * Hosts-file changes the sidecar can't make without admin rights come back as
- * a 401 whose detail names the `devo` command to run elevated. That command
+ * a 403 whose detail names the `devo` command to run elevated. That command
  * runs through Tauri's `run_elevated` (UAC / osascript / pkexec), and the
  * request is then repeated: it finds the hosts file already done and records
  * the change.
@@ -65,13 +65,13 @@ function exitCodeIn(error: unknown): number | null {
 }
 
 export function elevationHint(e: unknown): ElevationHint | null {
-  if (!(e instanceof ApiError) || e.status !== 401) return null;
+  if (!(e instanceof ApiError) || e.status !== 403) return null;
   let detail = e.detail;
   if (typeof detail === "string") {
     try {
       detail = JSON.parse(detail);
     } catch {
-      return null; // a plain auth 401, not an elevation request
+      return null; // a plain 403, not an elevation request
     }
   }
   const hint = detail as Partial<ElevationHint> | null;

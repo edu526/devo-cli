@@ -244,7 +244,7 @@ class TestEndpoints:
         assert response.status_code == 200
         set_one.assert_called_once_with("a", False)
 
-    def test_needs_elevation_is_a_401_with_the_command_to_run(self, mocker):
+    def test_needs_elevation_is_a_403_with_the_command_to_run(self, mocker):
         mocker.patch(
             "cli_tool.sidecar.routers.hosts.set_forwarding",
             side_effect=NeedsElevation("cmd", action="hosts-clear", params={"cli_args": ["ssm", "hosts", "clear", "--yes"]}),
@@ -252,7 +252,7 @@ class TestEndpoints:
 
         response = _client(hosts_router).put("/hosts/forwarding", json={"enabled": False}, headers=AUTH)
 
-        assert response.status_code == 401
+        assert response.status_code == 403
         assert response.json()["detail"]["params"]["cli_args"] == ["ssm", "hosts", "clear", "--yes"]
 
     def test_lock_reason(self, mocker):

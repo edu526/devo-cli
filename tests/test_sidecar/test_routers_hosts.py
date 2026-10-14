@@ -41,14 +41,14 @@ class TestCreateHost:
         assert response.status_code == 201
         assert response.json() == {"ip": "10.0.0.1", "hostname": "mydb"}
 
-    def test_needs_elevation_returns_401(self, mocker):
+    def test_needs_elevation_returns_403(self, mocker):
         mocker.patch(
             "cli_tool.sidecar.routers.hosts.add_host",
             side_effect=NeedsElevation("sudo devo ssm hosts add 10.0.0.1 mydb"),
         )
         client, _ = _make_client()
         response = client.post("/hosts", json={"ip": "10.0.0.1", "hostname": "mydb"}, headers=AUTH)
-        assert response.status_code == 401
+        assert response.status_code == 403
         detail = response.json()["detail"]
         assert "command" in detail
         assert detail["command"] == "sudo devo ssm hosts add 10.0.0.1 mydb"
@@ -62,14 +62,14 @@ class TestDeleteHost:
         response = client.delete("/hosts/mydb", headers=AUTH)
         assert response.status_code == 204
 
-    def test_needs_elevation_returns_401(self, mocker):
+    def test_needs_elevation_returns_403(self, mocker):
         mocker.patch(
             "cli_tool.sidecar.routers.hosts.remove_host",
             side_effect=NeedsElevation("sudo devo ssm hosts remove mydb"),
         )
         client, _ = _make_client()
         response = client.delete("/hosts/mydb", headers=AUTH)
-        assert response.status_code == 401
+        assert response.status_code == 403
         detail = response.json()["detail"]
         assert "command" in detail
         assert detail["command"] == "sudo devo ssm hosts remove mydb"
@@ -101,13 +101,13 @@ class TestSetupHosts:
         response = client.post("/hosts/setup", headers=AUTH)
         assert response.status_code == 200
 
-    def test_setup_needs_elevation_returns_401(self, mocker):
+    def test_setup_needs_elevation_returns_403(self, mocker):
         mocker.patch(
             "cli_tool.sidecar.routers.hosts.setup_hosts",
             side_effect=NeedsElevation("sudo devo ssm hosts setup"),
         )
         client, _ = _make_client()
         response = client.post("/hosts/setup", json={}, headers=AUTH)
-        assert response.status_code == 401
+        assert response.status_code == 403
         detail = response.json()["detail"]
         assert detail["command"] == "sudo devo ssm hosts setup"

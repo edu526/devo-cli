@@ -35,8 +35,10 @@ class ForwardingIn(BaseModel):
 
 
 def _elevation_required(exc: NeedsElevation) -> HTTPException:
+    # 403, not 401: the desktop takes a 401 for an expired sidecar token and
+    # refreshes it and resends the request before giving up.
     return HTTPException(
-        status.HTTP_401_UNAUTHORIZED,
+        status.HTTP_403_FORBIDDEN,
         detail={
             "message": "Elevated privileges required",
             "command": exc.command,
