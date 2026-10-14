@@ -139,8 +139,9 @@ def test_refresh_session_partial_verification_failure(mocker):
 
     mocker.patch("cli_tool.commands.aws_login.commands.refresh.get_profile_config", return_value={"sso_session": "s"})
 
-    verify_results = [True, None, True]  # None counts as failed (falsy)
-    mocker.patch("cli_tool.commands.aws_login.commands.refresh.verify_credentials", side_effect=verify_results)
+    # By name, not call order: the profiles are verified in parallel.
+    verify_results = {"dev": True, "staging": None, "prod": True}  # None counts as failed (falsy)
+    mocker.patch("cli_tool.commands.aws_login.commands.refresh.verify_credentials", side_effect=verify_results.get)
 
     ok, verified, failed, verified_names = _refresh_session("s", ["dev", "staging", "prod"])
 
