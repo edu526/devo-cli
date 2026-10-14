@@ -23,13 +23,14 @@
   import ViewToggle from "../lib/ViewToggle.svelte";
   import FormField from "../lib/FormField.svelte";
   import SearchableSelect from "../lib/SearchableSelect.svelte";
+  import RowMenu, { type RowMenuItem } from "../lib/RowMenu.svelte";
   import { databaseSchema, regionFromHost, validate, type DatabaseForm, type FieldErrors } from "../lib/forms";
   import { viewModes } from "../lib/stores";
   import { ws, type WsMessage } from "../lib/ws";
   import { notifyUser } from "../lib/notifications";
   import { explainError, stateLabel } from "../lib/connection-status";
   import { copyToClipboard } from "../lib/clipboard";
-  import { Settings, RefreshCw, X, Link2, Link2Off, Copy, Check } from "@lucide/svelte";
+  import { X, Link2, Link2Off, Copy, Check } from "@lucide/svelte";
   import { open as openUrl } from "@tauri-apps/plugin-shell";
 
   const viewMode = viewModes.databases;
@@ -711,6 +712,16 @@
     return isStopped(connState(row));
   }
 
+  /** A database's less frequent actions, labeled, in its "⋯" menu. */
+  function dbMenu(row: Row): RowMenuItem[] {
+    const busy = busyConns.has(row.name) || busyAll;
+    return [
+      { label: "Edit…", onselect: () => openEdit(row.name, row.db) },
+      ...(canStart(row) ? [] : [{ label: "Restart tunnel", onselect: () => restartOne(row.name), disabled: busy }]),
+      { label: "Delete database…", onselect: () => remove(row.name), danger: true, disabled: deleting.has(row.name) },
+    ];
+  }
+
   /** Starting a tunnel whose credentials expired opens the login first. */
   function startLabel(row: Row, compact = false): string {
     if (connState(row) !== "expired_credentials") return "Start";
@@ -810,10 +821,12 @@
             Stop All
           </button>
         {/if}
-        <button class="btn-secondary" onclick={startAll} disabled={busyAll || allRows.length === 0}>
-          {#if busyAll}<span class="spinner-sm"></span>{/if}
-          Start All
-        </button>
+        {#if allRows.some(canStart)}
+          <button class="btn-secondary" onclick={startAll} disabled={busyAll}>
+            {#if busyAll}<span class="spinner-sm"></span>{/if}
+            Start All
+          </button>
+        {/if}
         <button class="btn-primary" onclick={openCreate}>
           <span class="btn-glyph">+</span> New Database
         </button>
@@ -950,14 +963,7 @@
           {#each rows as row (row.name)}
             {@const problem = problemOf(row)}
             <tr class:has-problem={problem !== null}>
-              <td class="name">
-                {row.name}
-                <button
-                  class="btn-icon"
-                  onclick={() => openEdit(row.name, row.db)}
-                  title="Edit configuration"><Settings size={14} /></button
-                >
-              </td>
+              <td class="name">{row.name}</td>
               <td><span class="badge {stateClass(connState(row))}">{stateLabel(connState(row))}</span></td>
               <td class="host-cell">
                 <!-- Only the hostname is cut short: the copy button and the badge stay visible. -->
@@ -1000,15 +1006,8 @@
                         Stop
                       {/if}
                     </button>
-                    <button
-                      class="btn-sm btn-secondary"
-                      onclick={() => restartOne(row.name)}
-                      disabled={busyConns.has(row.name) || busyAll}
-                      title="Restart"
-                    >
-                      <RefreshCw size={14} />
-                    </button>
                   {/if}
+                  <RowMenu label="More actions for {row.name}" items={dbMenu(row)} />
                 </div>
               </td>
             </tr>
@@ -1030,11 +1029,6 @@
             <div class="lc-header">
               <span class="lc-title">{row.name}</span>
               <span class="badge {stateClass(connState(row))}">{stateLabel(connState(row))}</span>
-              <button
-                class="btn-icon lc-edit-btn"
-                onclick={() => openEdit(row.name, row.db)}
-                title="Edit configuration"><Settings size={14} /></button
-              >
             </div>
             <div class="lc-meta">
               <span class="lc-meta-item">
@@ -1080,6 +1074,7 @@
                 Stop
               </button>
             {/if}
+            <RowMenu label="More actions for {row.name}" items={dbMenu(row)} />
           </div>
         </div>
       {/each}
@@ -1270,9 +1265,6 @@
   }
   .btn-icon:hover {
     opacity: 1;
-  }
-  .lc-edit-btn {
-    margin-left: 0.25rem;
   }
   .copy-btn {
     display: inline-flex;
