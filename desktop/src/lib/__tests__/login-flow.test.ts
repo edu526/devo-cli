@@ -8,9 +8,9 @@ vi.mock("../notifications", () => ({ notifyLoginRequired: vi.fn(), notifyUser: v
 import { get } from "svelte/store";
 import { profilesApi } from "../api";
 import { notifyLoginRequired, notifyUser } from "../notifications";
-import { loginActive, loginError, loginInProgress, loginNeeded } from "../stores";
+import { loginActive, loginError, loginInProgress, loginNeeded, loginUrls } from "../stores";
 import { ws } from "../ws";
-import { _resetLoginFlow, autoOpenBrowser, startLogin, startLoginWatcher } from "../login-flow";
+import { _resetLoginFlow, autoOpenBrowser, ensureLogin, startLogin, startLoginWatcher } from "../login-flow";
 
 const refreshAll = vi.mocked(profilesApi.refreshAll);
 
@@ -91,6 +91,65 @@ describe("login-flow", () => {
       loginNeeded.set({ corp: ["a"], personal: ["z"] });
       emit("profile.login_resolved", { sessions: ["corp"] });
       expect(get(loginNeeded)).toEqual({ personal: ["z"] });
+    });
+  });
+
+  describe("ensureLogin", () => {
+    const settle = () => new Promise((r) => setTimeout(r, 0));
+
+    it("renews exactly the profiles asked for and says which got credentials", async () => {
+      const done = ensureLogin(["db-dev", "db-prod", "db-dev"]);
+      await settle();
+      expect(refreshAll).toHaveBeenCalledWith(false, {
+        allowBrowser: true,
+        targets: { profiles: ["db-dev", "db-prod"], sessions: [] },
+      });
+
+      emit("profile.refreshed", { names: ["db-dev"], success: true });
+
+      expect([...(await done)]).toEqual(["db-dev"]);
+    });
+
+    it("shares one request between callers asking for the same profiles", async () => {
+      const first = ensureLogin(["db-dev"]);
+      const second = ensureLogin(["db-dev"]);
+      await settle();
+      emit("profile.refreshed", { names: ["db-dev"], success: true });
+
+      expect(await first).toBe(await second);
+      expect(refreshAll).toHaveBeenCalledOnce();
+    });
+
+    it("asks again for what a refresh already running didn't cover", async () => {
+      refreshAll
+        .mockResolvedValueOnce({ status: "already_running", message: "" })
+        .mockResolvedValueOnce({ status: "accepted", message: "" });
+      const done = ensureLogin(["db-dev", "db-prod"]);
+      await settle();
+      emit("profile.refreshed", { names: ["db-dev"], success: true }); // the other run's result
+      await settle();
+      expect(refreshAll).toHaveBeenLastCalledWith(false, {
+        allowBrowser: true,
+        targets: { profiles: ["db-prod"], sessions: [] },
+      });
+      emit("profile.refreshed", { names: ["db-prod"], success: true });
+
+      expect([...(await done)].sort()).toEqual(["db-dev", "db-prod"]);
+    });
+
+    it("fails when the request does", async () => {
+      refreshAll.mockRejectedValue(new Error("down"));
+      await expect(ensureLogin(["db-dev"])).rejects.toThrow("down");
+    });
+  });
+
+  describe("the sign-in page of a login in progress", () => {
+    it("is kept per session until the login ends", () => {
+      emit("sso.login.url_ready", { session: "corp", profile: "a", url: "https://sign-in" });
+      expect(get(loginUrls)).toEqual({ corp: "https://sign-in" });
+
+      emit("sso.session.login_finished", { session: "corp", success: true, renewed: [] });
+      expect(get(loginUrls)).toEqual({});
     });
   });
 

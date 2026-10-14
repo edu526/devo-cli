@@ -96,7 +96,7 @@ class _FanoutHub:
             self._attempt.last_events[event] = payload
             requesters = list(self._attempt.requesters)
         for who, source in requesters:
-            self._hub.publish(event, {**payload, "profile": who, "source": source})
+            self._hub.publish(event, {**payload, "profile": who, "source": source, "session": self._attempt.key})
 
 
 def _auto_allowed(key: str) -> bool:
@@ -152,7 +152,7 @@ def request_login(
         logger.info("Login for session '%s' already in progress; %s/%s joins it", key, source, who)
         for event in ("sso.login.started", "sso.login.url_ready"):
             if event in catch_up:
-                hub.publish(event, {**catch_up[event], "profile": who, "source": source})
+                hub.publish(event, {**catch_up[event], "profile": who, "source": source, "session": key})
         return status, attempt
 
     threading.Thread(

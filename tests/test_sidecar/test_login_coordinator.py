@@ -119,7 +119,27 @@ class TestOneLoginPerSession:
         fake.release.set()
         _wait_idle()
 
-        assert {"event": "sso.login.url_ready", "profile": "p", "source": "profile", "url": "https://x", "code": "AB-12"} in late
+        assert {
+            "event": "sso.login.url_ready",
+            "profile": "p",
+            "source": "profile",
+            "session": "corp",
+            "url": "https://x",
+            "code": "AB-12",
+        } in late
+
+    def test_login_events_say_which_session_they_belong_to(self, mocker):
+        """The window's "Open sign-in page" button needs the URL of the session
+        whose login is pending."""
+        mocker.patch(RUN, side_effect=_Blocking())
+        hub = EventHub()
+        q = hub.subscribe()
+
+        lc.request_login(hub, profile="db-dev", source="connection", automatic=True)
+        time.sleep(0.05)
+        url_events = [e for e in _events(q) if e["event"] == "sso.login.url_ready"]
+
+        assert url_events and all(e["session"] == "corp" for e in url_events)
 
     def test_publishes_session_started_and_finished(self, mocker):
         mocker.patch(RUN, return_value=True)
@@ -180,6 +200,7 @@ class TestBrowserOnlyWhenNeeded:
             "event": "sso.login.completed",
             "profile": "db-dev",
             "source": "profile",
+            "session": "corp",
             "success": True,
             "browser": False,
         } in events

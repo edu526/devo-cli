@@ -1,11 +1,15 @@
 <script lang="ts">
-  import { loginActive, loginError, loginInProgress, loginNeeded } from "./stores";
+  import { loginActive, loginError, loginInProgress, loginNeeded, loginUrls } from "./stores";
   import { startLogin } from "./login-flow";
+  import { open as openUrl } from "@tauri-apps/plugin-shell";
 
   const listed = (items: string[]) =>
     items.length > 3 ? `${items.slice(0, 3).join(", ")} and ${items.length - 3} more` : items.join(", ");
 
   const active = $derived([...$loginActive]);
+  // The sign-in page of a login in progress, to open it again from here: a
+  // login Devo started by itself often opens behind the window in use.
+  const signInUrl = $derived(active.map((s) => $loginUrls[s]).find(Boolean));
   // Sessions waiting for the user, minus the ones whose login is already open.
   const pendingSessions = $derived(Object.keys($loginNeeded).filter((s) => !$loginActive.has(s)));
   const pendingLabel = $derived(
@@ -19,8 +23,11 @@
   <div class="banner" role="status">
     <div class="msg">
       <strong>Signing in to AWS.</strong>
-      Finish the login for {listed(active)} in your browser…
+      Finish the login for {listed(active)} in your browser. It may have opened behind other windows.
     </div>
+    {#if signInUrl}
+      <button class="btn" onclick={() => openUrl(signInUrl)}>Open sign-in page</button>
+    {/if}
   </div>
 {:else if pendingSessions.length > 0}
   <div class="banner" role="status">
