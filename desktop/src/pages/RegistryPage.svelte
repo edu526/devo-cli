@@ -7,6 +7,7 @@
     type CodeArtifactToken,
     type CodeArtifactLoginResult,
   } from "../lib/api";
+  import { askConfirm } from "../lib/confirm";
   import { ws } from "../lib/ws";
   import FormField from "../lib/FormField.svelte";
   import ViewToggle from "../lib/ViewToggle.svelte";
@@ -272,8 +273,13 @@
   }
 
   async function removeDomain(domain: CodeArtifactDomain) {
-    if (!confirm(`Delete registry "${domain.domain}"? This will not invalidate any active tokens.`))
-      return;
+    const confirmed = await askConfirm({
+      title: "Delete registry?",
+      message: `"${domain.domain}" is removed from Devo. Active tokens are not invalidated.`,
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!confirmed) return;
     deleting = { ...deleting, [domain.domain]: true };
     actionError = null;
     try {

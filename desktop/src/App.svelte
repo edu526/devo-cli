@@ -16,6 +16,7 @@
   import SessionExpiredBanner from "./lib/SessionExpiredBanner.svelte";
   import { startLoginWatcher } from "./lib/login-flow";
   import LoginRequiredBanner from "./lib/LoginRequiredBanner.svelte";
+  import ConfirmDialog from "./lib/ConfirmDialog.svelte";
   import { profilesCache, registryCache, configCache } from "./lib/page-stores";
   import { logError } from "./lib/error-log";
   import { theme, applyTheme } from "./lib/theme";
@@ -353,6 +354,8 @@
     </main>
   </div>
 {/if}
+
+<ConfirmDialog />
 
 <style>
   /* ── Theme tokens ────────────────────────────────────────────────────── */

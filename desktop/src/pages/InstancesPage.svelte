@@ -9,6 +9,7 @@
     type ProfileRecord,
     ApiError,
   } from "../lib/api";
+  import { askConfirm } from "../lib/confirm";
   import { instancesCache, profilesCache } from "../lib/page-stores";
   import SearchInput from "../lib/SearchInput.svelte";
   import FormField from "../lib/FormField.svelte";
@@ -128,7 +129,13 @@
   }
 
   async function remove(name: string) {
-    if (!confirm(`Delete instance "${name}"?`)) return;
+    const confirmed = await askConfirm({
+      title: "Delete instance?",
+      message: `"${name}" is removed from Devo's configuration.`,
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!confirmed) return;
     actionError = null;
     deleting = new Set([...deleting, name]);
     try {
