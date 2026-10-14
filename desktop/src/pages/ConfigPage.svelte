@@ -12,6 +12,7 @@
   import { theme, type Theme } from "../lib/theme";
   import { fetchUpdate, getAppVersion, installUpdate, updateAvailable, type ProgressState } from "../lib/update";
   import Switch from "../lib/Switch.svelte";
+  import { autoOpenBrowser as autoOpenBrowserIn } from "../lib/login-flow";
 
   const initialCache = get(configCache);
   let config: Record<string, unknown> = $state(initialCache ?? {});
@@ -110,13 +111,9 @@
     }
   }
 
-  // Off: an expired tunnel's AWS session is offered on the "Log in" banner
-  // (with a notification) instead of opening the browser by itself.
-  // Clicking Connect, Refresh or Log in always opens it when needed.
-  function autoOpenBrowserIn(c: Record<string, unknown>): boolean {
-    return (c.aws_login as Record<string, unknown> | undefined)?.auto_open_browser !== false;
-  }
-
+  // Off: a login Devo would start by itself (at launch, or for an expired
+  // tunnel) is offered on the "Log in" banner instead. Clicking Connect,
+  // Start All, Refresh or Log in always opens the browser when needed.
   let autoOpenBrowser = $state(autoOpenBrowserIn(initialCache ?? {}));
   let autoOpenBrowserBusy = $state(false);
   let autoOpenBrowserError: string | null = $state(null);
@@ -355,9 +352,9 @@
       <div class="setting-text">
         <label for="opt-auto-browser">Open the browser to sign in automatically</label>
         <p id="opt-auto-browser-desc">
-          When a connected tunnel's AWS session expires, Devo opens your browser so you can sign in again. Turn
-          it off to get a notification and a Log in button instead. Clicking Connect, Refresh or Log in opens it
-          either way.
+          When Devo starts, or a connected tunnel's credentials expire, and your AWS session can't be renewed
+          on its own, Devo opens your browser so you can sign in. Turn it off to get a notification and a Log in
+          button instead. Clicking Connect, Start All, Refresh or Log in opens it either way.
         </p>
         {#if autoOpenBrowserError}
           <p class="setting-error">{autoOpenBrowserError}</p>

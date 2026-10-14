@@ -81,6 +81,29 @@ function loginTargets(): { profiles: string[]; sessions: string[] } {
   };
 }
 
+/**
+ * The "Open the browser to sign in automatically" setting
+ * (`aws_login.auto_open_browser`, on unless set to false).
+ */
+export function autoOpenBrowser(config: Record<string, unknown>): boolean {
+  return (config.aws_login as Record<string, unknown> | undefined)?.auto_open_browser !== false;
+}
+
+/**
+ * Devo just opened and the user wants the browser to open by itself: renew
+ * what is stale now, silently where the SSO session still works, through the
+ * browser login where it doesn't. Nothing happens when every profile is
+ * valid. Without this, opening Devo with an expired session only showed the
+ * "Log in" banner, as nothing else asks for a login at launch.
+ */
+export async function loginAtLaunch(): Promise<void> {
+  try {
+    await profilesApi.refreshAll(false, { allowBrowser: true });
+  } catch {
+    // The background renewal still offers the Log in banner.
+  }
+}
+
 function setActive(session: string, active: boolean): void {
   loginActive.update((current) => {
     const next = new Set(current);

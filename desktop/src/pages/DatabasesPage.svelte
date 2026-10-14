@@ -567,13 +567,40 @@
     actionError = null;
     busyAll = true;
     try {
-      await connectionsApi.startAll();
+      const results = await connectionsApi.startAll();
       await load();
+      const waiting = results.filter((r) => r.sso_required && r.profile);
+      if (waiting.length > 0) loginThenStart(waiting.map((r) => [r.name, r.profile!]));
     } catch (e) {
       actionError = e instanceof ApiError ? e.message : String(e);
     } finally {
       busyAll = false;
     }
+  }
+
+  let offStartAllLogin: (() => void) | null = null;
+
+  /**
+   * Start All found tunnels whose credentials expired: one login for their
+   * profiles (each SSO session logs in once, however many tunnels share it),
+   * then start the ones whose profile got new credentials. Before, they were
+   * left on "Login needed" although the user had asked to start them.
+   */
+  function loginThenStart(tunnels: [name: string, profile: string][]) {
+    offStartAllLogin?.();
+    offStartAllLogin = ws.on("profile.refreshed", (msg: WsMessage) => {
+      offStartAllLogin?.();
+      offStartAllLogin = null;
+      if (!msg.success) return;
+      const renewed = new Set((msg.names as string[] | undefined) ?? []);
+      for (const [name, profile] of tunnels) if (renewed.has(profile)) void startOne(name);
+    });
+    const profiles = [...new Set(tunnels.map(([, profile]) => profile))];
+    profilesApi.refreshAll(false, { allowBrowser: true, targets: { profiles, sessions: [] } }).catch((e: unknown) => {
+      offStartAllLogin?.();
+      offStartAllLogin = null;
+      actionError = e instanceof ApiError ? e.message : String(e);
+    });
   }
 
   async function stopAll() {
@@ -688,6 +715,7 @@
   // mounted (or one the user already left).
   onDestroy(() => {
     ssoLoginUnsubscribe?.();
+    offStartAllLogin?.();
   });
 
   // --- Display Helpers ---
