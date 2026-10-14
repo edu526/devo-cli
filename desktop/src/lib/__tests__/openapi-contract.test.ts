@@ -80,6 +80,18 @@ const SIDECAR_SPEC: OpenAPIV3.Document = {
     "/api/v1/hosts/{hostname}": {
       delete: { responses: { "204": { description: "No Content" } } },
     },
+    "/api/v1/hosts/status": {
+      get: { responses: { "200": { description: "OK" } } },
+    },
+    "/api/v1/hosts/lock-reason": {
+      get: { responses: { "200": { description: "OK" } } },
+    },
+    "/api/v1/hosts/forwarding": {
+      put: { responses: { "200": { description: "OK" } } },
+    },
+    "/api/v1/hosts/forwarding/{name}": {
+      put: { responses: { "200": { description: "OK" } } },
+    },
     "/api/v1/profiles": {
       get: { responses: { "200": { description: "OK" } } },
       post: { responses: { "201": { description: "Created" } } },
@@ -194,6 +206,10 @@ describe("openapi contract: frontend ↔ sidecar", () => {
     await hostsApi.add("127.0.0.1", "x");
     await hostsApi.setup();
     await hostsApi.remove("x");
+    await hostsApi.status();
+    await hostsApi.lockReason();
+    await hostsApi.setForwarding(false);
+    await hostsApi.setDatabaseForwarding("d", false);
     await configApi.get();
     await configApi.patch({ foo: 1 });
     await configApi.put({ foo: 1 });

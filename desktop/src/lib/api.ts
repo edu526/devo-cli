@@ -578,7 +578,32 @@ export const hostsApi = {
     req<{ succeeded: HostSetupEntry[]; failed: HostSetupFailure[] }>("POST", "/hosts/setup", {
       db_names: db_names ?? null,
     }),
+  /** Read-only: never writes the hosts file. */
+  status: () => req<HostnameForwardingStatus>("GET", "/hosts/status"),
+  /** Why the hosts file can't be written even as administrator (antivirus, read-only…). */
+  lockReason: () => req<{ message: string }>("GET", "/hosts/lock-reason"),
+  /** Pause/resume hostname forwarding for every database. */
+  setForwarding: (enabled: boolean) =>
+    req<HostnameForwardingStatus>("PUT", "/hosts/forwarding", { enabled }),
+  /** Pause/resume hostname forwarding for one database. */
+  setDatabaseForwarding: (name: string, enabled: boolean) =>
+    req<HostnameForwardingStatus>("PUT", `/hosts/forwarding/${encodeURIComponent(name)}`, { enabled }),
 };
+
+/**
+ * Hostname forwarding points a database's real hostname at its tunnel through
+ * the hosts file. Paused the hostname resolves through normal DNS again and the
+ * tunnel runs on 127.0.0.1. There is a setting for all databases, and each one
+ * can be an exception to it (e.g. one forwarded while the rest is paused).
+ */
+export interface HostnameForwardingStatus {
+  /** The setting for all databases (also the ones added later). */
+  enabled: boolean;
+  /** `enabled`: its hostname is forwarded; `mapped`: the hosts file has its entry. */
+  databases: Record<string, { enabled: boolean; mapped: boolean }>;
+  /** Enabled databases whose hosts entry is missing or stale. */
+  missing: string[];
+}
 
 export interface HostSetupEntry {
   name: string;

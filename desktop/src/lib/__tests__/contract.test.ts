@@ -61,6 +61,10 @@ const SIDECAR_ENDPOINTS: SidecarEndpoint[] = [
   { method: "POST", path: "/api/v1/hosts" },
   { method: "POST", path: "/api/v1/hosts/setup" },
   { method: "DELETE", path: "/api/v1/hosts/{hostname}" },
+  { method: "GET", path: "/api/v1/hosts/status" },
+  { method: "GET", path: "/api/v1/hosts/lock-reason" },
+  { method: "PUT", path: "/api/v1/hosts/forwarding" },
+  { method: "PUT", path: "/api/v1/hosts/forwarding/{name}" },
   { method: "GET", path: "/api/v1/profiles" },
   { method: "GET", path: "/api/v1/profiles/{name}" },
   { method: "POST", path: "/api/v1/profiles:refresh_all" },
@@ -151,6 +155,10 @@ describe("sidecar ↔ frontend contract", () => {
     await hostsApi.add("127.0.0.1", "x");
     await hostsApi.setup();
     await hostsApi.remove("x");
+    await hostsApi.status();
+    await hostsApi.lockReason();
+    await hostsApi.setForwarding(false);
+    await hostsApi.setDatabaseForwarding("d", false);
     await configApi.get();
     await configApi.patch({ foo: 1 });
     await configApi.put({ foo: 1 });

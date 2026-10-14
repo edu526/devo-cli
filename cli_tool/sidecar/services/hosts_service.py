@@ -2,11 +2,14 @@
 
 import platform
 import sys
+from pathlib import Path
 from typing import Any, Optional
 
+from cli_tool.commands.ssm.core import hostname_forwarding
 from cli_tool.commands.ssm.core.config import SSMConfigManager
 from cli_tool.commands.ssm.core.hosts_setup import setup_databases
 from cli_tool.commands.ssm.utils import HostsManager
+from cli_tool.commands.ssm.utils.hosts_manager import describe_hosts_lock
 from cli_tool.core.utils.config_manager import get_config_dir
 
 
@@ -109,6 +112,30 @@ def remove_host(hostname: str) -> None:
         )
 
 
+def _hosts_command_elevation(hosts_args: list[str], action: str, **params: Any) -> NeedsElevation:
+    """NeedsElevation for running `devo ssm hosts <hosts_args>` elevated. The
+    desktop runs exactly `cli_args` (after `<python_bin> -m cli_tool.cli`).
+
+    The elevated command runs in a hidden window, so it logs its outcome to
+    sidecar.log (the same file as bootstrap.LOG_FILE): a failure's reason then
+    shows up in Logs.
+    """
+    cli_args = ["ssm", "hosts", "--log-file", str(Path.home() / ".devo" / "sidecar.log"), *hosts_args]
+    python_bin = sys.executable
+    config_dir = get_config_dir()
+    return NeedsElevation(
+        _elevation_command(f"env DEVO_CONFIG_DIR={config_dir} {python_bin} -m cli_tool.cli {' '.join(cli_args)}"),
+        action=action,
+        params={
+            **params,
+            "cli_args": cli_args,
+            "python_bin": python_bin,
+            "config_dir": str(config_dir),
+            "use_env": platform.system() != "Windows",
+        },
+    )
+
+
 def setup_hosts(db_names: Optional[list[str]] = None) -> dict[str, Any]:
     """Run auto-setup for configured databases. Returns structured results.
 
@@ -117,17 +144,104 @@ def setup_hosts(db_names: Optional[list[str]] = None) -> dict[str, Any]:
     matching the behaviour of add_host / remove_host.
     """
     succeeded, failed = setup_databases(db_names)
-    elevation_needed = next((f for f in failed if f.get("needs_elevation")), None)
-    if elevation_needed:
-        python_bin = sys.executable
-        config_dir = get_config_dir()
-        params = {"db_names": db_names} if db_names else {}
-        params["python_bin"] = python_bin
-        params["config_dir"] = str(config_dir)
-        params["use_env"] = platform.system() != "Windows"
-        raise NeedsElevation(
-            _elevation_command(f"env DEVO_CONFIG_DIR={config_dir} {python_bin} -m cli_tool.cli ssm hosts setup"),
-            action="hosts-setup",
-            params=params,
-        )
+    if any(f.get("needs_elevation") for f in failed):
+        extra = {"db_names": db_names} if db_names else {}
+        raise _hosts_command_elevation(["setup", *(db_names or [])], "hosts-setup", **extra)
     return {"succeeded": succeeded, "failed": failed}
+
+
+def hosts_status() -> dict[str, Any]:
+    """Read-only view of hostname forwarding; never writes anything (the page
+    used to "check" by running setup, which wrote the hosts file).
+
+    `enabled` is the setting for all databases. Per database: `enabled` (its
+    hostname is forwarded, by that setting or its own exception) and `mapped`
+    (the hosts file points its hostname at its loopback IP). `missing` lists
+    the enabled ones not mapped.
+    """
+    ssm_config = SSMConfigManager().load()
+    managed = {host: ip for ip, host in HostsManager().get_managed_entries()}
+    databases = {}
+    for name, cfg in (ssm_config.get("databases") or {}).items():
+        local_address = cfg.get("local_address", "127.0.0.1")
+        databases[name] = {
+            "enabled": hostname_forwarding.is_enabled(ssm_config, cfg),
+            "mapped": local_address != "127.0.0.1" and managed.get(cfg.get("host")) == local_address,
+        }
+    return {
+        "enabled": hostname_forwarding.global_enabled(ssm_config),
+        "databases": databases,
+        "missing": sorted(n for n, d in databases.items() if d["enabled"] and not d["mapped"]),
+    }
+
+
+def hosts_lock_reason() -> dict[str, str]:
+    """Why the hosts file can't be written even as administrator, for the user.
+
+    The desktop asks after an elevated `devo ssm hosts` command exits with
+    HostsFileLocked.exit_code: it only sees that code, not the command's output.
+    """
+    return {"message": describe_hosts_lock()}
+
+
+def _map_hostnames(db_names: list[str]) -> None:
+    """Add the hosts entries of `db_names`; NeedsElevation if it can't write."""
+    if db_names:
+        setup_hosts(db_names)
+
+
+def set_forwarding(enabled: bool) -> dict[str, Any]:
+    """Turn hostname forwarding on/off for every database; returns hosts_status().
+
+    Off removes every Devo entry from the hosts file (`devo ssm hosts clear`);
+    on maps them all. Either way the per-database exceptions go ("all" means
+    all). Raises NeedsElevation when the hosts file needs it: once the
+    elevated command ran, calling this again finds the file done and just
+    records the setting.
+
+    Turning on, the setting is recorded first (the elevated `hosts setup`
+    reads it): if the admin prompt is cancelled the databases show up as
+    missing and "Sync Hosts" finishes the job. Turning off, it is recorded
+    once the entries are gone.
+    """
+    cm = SSMConfigManager()
+    if enabled:
+        cm.set_hostname_forwarding(True)
+        _map_hostnames(list(cm.list_databases()))
+    else:
+        try:
+            HostsManager().clear_all()
+        except PermissionError:
+            raise _hosts_command_elevation(["clear", "--yes"], "hosts-clear")
+        cm.set_hostname_forwarding(False)
+    return hosts_status()
+
+
+def set_database_forwarding(name: str, enabled: bool) -> dict[str, Any]:
+    """Turn hostname forwarding on/off for one database; returns hosts_status().
+
+    Works whatever the all-databases setting is (it becomes an exception to
+    it), e.g. forwarding just one while the rest stay paused. Raises KeyError
+    for an unknown database and NeedsElevation like set_forwarding.
+    """
+    cm = SSMConfigManager()
+    ssm_config = cm.load()
+    databases = ssm_config.get("databases") or {}
+    db = databases.get(name)
+    if db is None:
+        raise KeyError(f"Database '{name}' not configured")
+
+    if enabled:
+        cm.set_hostname_forwarding(True, name)
+        _map_hostnames([name])
+    else:
+        host = db["host"]
+        # Another database still forwarded through the same hostname keeps the entry.
+        shared = any(n != name and c.get("host") == host and hostname_forwarding.is_enabled(ssm_config, c) for n, c in databases.items())
+        if not shared:
+            try:
+                HostsManager().remove_entry(host)
+            except PermissionError:
+                raise _hosts_command_elevation(["remove-manual", host], "hosts-remove", hostname=host)
+        cm.set_hostname_forwarding(False, name)
+    return hosts_status()

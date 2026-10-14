@@ -10,8 +10,11 @@
     type DatabaseIn,
     type ConnectionRecord,
     type ProfileRecord,
+    type HostnameForwardingStatus,
     ApiError,
   } from "../lib/api";
+  import { withHostsElevation } from "../lib/hosts-elevation";
+  import { askConfirm } from "../lib/confirm";
   import { databasesCache, connectionsCache, profilesCache } from "../lib/page-stores";
   import SearchInput from "../lib/SearchInput.svelte";
   import ViewToggle from "../lib/ViewToggle.svelte";
@@ -21,8 +24,7 @@
   import { viewModes } from "../lib/stores";
   import { ws, type WsMessage } from "../lib/ws";
   import { notifyUser } from "../lib/notifications";
-  import { invoke } from "@tauri-apps/api/core";
-  import { Settings, RefreshCw, X } from "@lucide/svelte";
+  import { Settings, RefreshCw, X, Link2, Link2Off } from "@lucide/svelte";
   import { open as openUrl } from "@tauri-apps/plugin-shell";
 
   const viewMode = viewModes.databases;
@@ -94,22 +96,22 @@
     });
   }
 
-  // --- Hosts Sync Logic ---
+  // --- Hostname forwarding (hosts file) ---
+  let forwarding = $state<HostnameForwardingStatus | null>(null);
   let settingUpHosts = $state(false);
-  let missingHosts: string[] = $state([]);
+  // "*" while the switch for all databases changes, else the database's name
+  let changingForwarding = $state<string | null>(null);
+  const missingHosts = $derived(forwarding?.missing ?? []);
 
-  async function checkHosts() {
+  function errorText(e: unknown): string {
+    return e instanceof Error ? e.message : String(e);
+  }
+
+  async function refreshForwarding() {
     try {
-      const data = await hostsApi.setup();
-      missingHosts = data.failed.map((r) => r.host);
+      forwarding = await hostsApi.status();
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) {
-        // We know hosts are missing because the backend needs elevation to fix them.
-        // We set a dummy missing host to trigger the warning banner.
-        missingHosts = ["_needs_elevation_"];
-      } else {
-        console.error("Failed to check hosts:", e);
-      }
+      console.error("Failed to check hosts:", e);
     }
   }
 
@@ -117,40 +119,94 @@
     settingUpHosts = true;
     actionError = null;
     try {
-      await hostsApi.setup();
-      missingHosts = [];
+      await withHostsElevation(() => hostsApi.setup(missingHosts));
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) {
-        try {
-          // Optionally, if the backend sends `params: { db_names: [...] }`, we could append them:
-          const detail = typeof e.detail === "string" ? JSON.parse(e.detail) : e.detail;
-          const pythonBin = (detail && detail.params && detail.params.python_bin) ? detail.params.python_bin : "python";
-          const configDir = (detail && detail.params && detail.params.config_dir) ? detail.params.config_dir : "";
-          const useEnv = (detail && detail.params && detail.params.use_env) ? detail.params.use_env : false;
-
-          let args = [];
-          if (configDir && useEnv) {
-            args.push("/usr/bin/env", `DEVO_CONFIG_DIR=${configDir}`);
-          }
-          args.push(pythonBin, "-m", "cli_tool.cli", "ssm", "hosts", "setup");
-
-          if (detail && detail.params && detail.params.db_names && detail.params.db_names.length > 0) {
-            args.push(...detail.params.db_names);
-          }
-
-          await invoke("run_elevated", { args });
-          // If the user approved the elevation, it successfully completed. Refresh the hosts status.
-          await checkHosts();
-          return;
-        } catch (elevateErr) {
-          actionError = elevateErr instanceof Error ? elevateErr.message : String(elevateErr);
-          return;
-        }
-      }
-      actionError = e instanceof ApiError ? e.message : String(e);
+      actionError = errorText(e);
     } finally {
+      await refreshForwarding();
       settingUpHosts = false;
     }
+  }
+
+  function isRunning(name: string): boolean {
+    const conn = connections.find((c) => c.name === name);
+    return conn !== undefined && !isStopped(conn.state);
+  }
+
+  /**
+   * Apply a hostname-forwarding change. Running tunnels of `affected` are
+   * restarted so they listen where the new setting says (the hostname's
+   * loopback IP, or 127.0.0.1); they are stopped before the hosts file changes,
+   * so mapping a hostname back doesn't find its old port taken.
+   */
+  async function changeForwarding(
+    key: string,
+    affected: string[],
+    apply: () => Promise<HostnameForwardingStatus>,
+  ) {
+    const running = affected.filter(isRunning);
+    changingForwarding = key;
+    actionError = null;
+    try {
+      await Promise.all(running.map((n) => connectionsApi.stop(n).catch(() => {})));
+      forwarding = await withHostsElevation(apply);
+    } catch (e) {
+      actionError = errorText(e);
+      await refreshForwarding();
+    } finally {
+      // also when it failed or the admin prompt was cancelled: leave them as they were
+      for (const name of running) await startOne(name);
+      changingForwarding = null;
+    }
+  }
+
+  async function toggleAllForwarding() {
+    if (!forwarding) return;
+    const enable = !forwarding.enabled;
+    if (
+      !enable &&
+      !(await askConfirm({
+        title: "Pause hostname forwarding?",
+        message:
+          "Devo removes its entries from your hosts file, so database hostnames resolve " +
+          "through normal DNS again (e.g. over a VPN). Tunnels keep working on 127.0.0.1.\n\n" +
+          "Needs administrator rights.",
+        confirmLabel: "Pause",
+      }))
+    ) {
+      return;
+    }
+    // "All" means all: the ones that were an exception change too.
+    const changing = Object.keys(databases).filter((n) => forwarded(n) !== enable);
+    await changeForwarding("*", changing, () => hostsApi.setForwarding(enable));
+  }
+
+  async function toggleDbForwarding(name: string) {
+    // Works whatever the setting for all is: e.g. just this one while the rest is paused.
+    await changeForwarding(name, [name], () => hostsApi.setDatabaseForwarding(name, !forwarded(name)));
+  }
+
+  function forwardingTitle(name: string): string {
+    return forwarded(name)
+      ? "Hostname forwarding on: its hostname points at the tunnel. Click to pause it for this database"
+      : "Hostname forwarding paused: its hostname resolves through normal DNS and the tunnel runs on 127.0.0.1. Click to forward it";
+  }
+
+  /** Whether the hostname points at the tunnel (assumed while loading). */
+  function forwarded(name: string): boolean {
+    return forwarding?.databases[name]?.enabled !== false;
+  }
+
+  /** Databases forwarded while forwarding is paused for all. */
+  const forwardedExceptions = $derived(
+    forwarding && !forwarding.enabled
+      ? Object.keys(databases).filter((n) => forwarding?.databases[n]?.enabled)
+      : [],
+  );
+
+  function localEndpoint(row: Row): string {
+    const port = row.conn?.local_port ?? row.db.local_port ?? "auto";
+    return forwarded(row.name) ? String(port) : `127.0.0.1:${port}`;
   }
 
   let showModal = $state(false);
@@ -210,7 +266,7 @@
       databasesCache.set(dbData);
       connectionsCache.set(connData);
       await profilePromise;
-      await checkHosts();
+      await refreshForwarding();
     } catch (e) {
       actionError = String(e);
     } finally {
@@ -297,7 +353,13 @@
   }
 
   async function remove(name: string) {
-    if (!confirm(`Delete database "${name}"?`)) return;
+    const confirmed = await askConfirm({
+      title: "Delete database?",
+      message: `"${name}" is removed from Devo's configuration.`,
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!confirmed) return;
     actionError = null;
     deleting = new Set([...deleting, name]);
     try {
@@ -507,9 +569,12 @@
     return row.conn?.state ?? "stopped";
   }
 
+  function isStopped(state: string): boolean {
+    return state === "stopped" || state === "error" || state === "expired_credentials";
+  }
+
   function canStart(row: Row): boolean {
-    const s = connState(row);
-    return s === "stopped" || s === "error" || s === "expired_credentials";
+    return isStopped(connState(row));
   }
 
   function formatUptime(seconds: number | undefined): string {
@@ -522,6 +587,26 @@
   }
 </script>
 
+{#snippet forwardingToggle(name: string, cls: string)}
+  {#if forwarding}
+    <button
+      class={cls}
+      onclick={() => toggleDbForwarding(name)}
+      disabled={changingForwarding !== null || busyConns.has(name) || busyAll}
+      title={forwardingTitle(name)}
+      aria-label={forwardingTitle(name)}
+    >
+      {#if changingForwarding === name}
+        <span class="spinner-sm"></span>
+      {:else if forwarding.databases[name]?.enabled === false}
+        <Link2Off size={14} />
+      {:else}
+        <Link2 size={14} />
+      {/if}
+    </button>
+  {/if}
+{/snippet}
+
 <div class="page">
   <div class="page-header">
     <h1>
@@ -531,6 +616,17 @@
       <ViewToggle page="databases" />
       <SearchInput bind:value={query} placeholder="Filter databases…" />
       <div class="actions">
+        {#if forwarding?.enabled && allRows.length > 0}
+          <button
+            class="btn-secondary"
+            onclick={toggleAllForwarding}
+            disabled={changingForwarding !== null || busyAll}
+            title="Stop mapping database hostnames to their tunnels in the hosts file, so they resolve through normal DNS"
+          >
+            {#if changingForwarding === "*"}<span class="spinner-sm"></span>{:else}<Link2Off size={14} />{/if}
+            Pause hostnames
+          </button>
+        {/if}
         {#if anyConnected}
           <button class="btn-secondary" onclick={stopAll} disabled={busyAll}>
             {#if busyAll}<span class="spinner-sm"></span>{/if}
@@ -611,6 +707,28 @@
     </div>
   {/if}
 
+  {#if forwarding && !forwarding.enabled}
+    <div
+      class="alert-warning"
+      style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+    >
+      <div>
+        <strong>Hostname forwarding is paused</strong>
+        {#if forwardedExceptions.length > 0}
+          <span class="muted">(except {forwardedExceptions.join(", ")})</span>
+        {/if}
+        <br />
+        <span class="muted"
+          >Database hostnames resolve through normal DNS (e.g. over a VPN). Tunnels still work on
+          127.0.0.1. Forward a single database with the link button on its row.</span
+        >
+      </div>
+      <button class="btn-primary" onclick={toggleAllForwarding} disabled={changingForwarding !== null || busyAll}>
+        {#if changingForwarding === "*"}<span class="spinner-sm"></span>{/if} Resume all
+      </button>
+    </div>
+  {/if}
+
   {#if loading}
     <p class="muted">Loading…</p>
   {:else if allRows.length === 0}
@@ -648,14 +766,22 @@
                 >
               </td>
               <td><span class="badge {stateClass(connState(row))}">{connState(row)}</span></td>
-              <td class="host-cell truncate"><code>{row.db.host}</code></td>
-              <td>{row.db.port} → {row.conn?.local_port ?? row.db.local_port ?? "auto"}</td>
+              <td class="host-cell truncate">
+                <code>{row.db.host}</code>
+                {#if !forwarded(row.name)}
+                  <span class="badge badge-gray" title="Resolves through normal DNS: hostname forwarding is paused"
+                    >DNS</span
+                  >
+                {/if}
+              </td>
+              <td>{row.db.port} → {localEndpoint(row)}</td>
               <td class="uptime-cell">{formatUptime(row.conn?.uptime_seconds)}</td>
               <td class="error-cell truncate" title={row.conn?.error ?? ""}>
                 {connState(row) === "reconnecting" && row.conn?.error ? "↻ " : ""}{row.conn?.error ?? ""}
               </td>
               <td class="actions-cell">
                 <div class="actions-wrap">
+                  {@render forwardingToggle(row.name, "btn-sm btn-secondary")}
                   {#if canStart(row)}
                     <button
                       class="btn-sm btn-primary"
@@ -713,11 +839,16 @@
             <div class="lc-meta">
               <span class="lc-meta-item">
                 <span class="muted">Host:</span> <code>{row.db.host}</code>
+                {#if !forwarded(row.name)}
+                  <span class="badge badge-gray" title="Resolves through normal DNS: hostname forwarding is paused"
+                    >DNS</span
+                  >
+                {/if}
               </span>
               <span class="lc-meta-sep">·</span>
               <span class="lc-meta-item">
                 <span class="muted">Ports:</span>
-                <code>{row.db.port} → {row.conn?.local_port ?? row.db.local_port ?? "auto"}</code>
+                <code>{row.db.port} → {localEndpoint(row)}</code>
               </span>
               <span class="lc-meta-sep">·</span>
               <span class="lc-meta-item">
@@ -732,6 +863,7 @@
             {/if}
           </div>
           <div class="lc-actions">
+            {@render forwardingToggle(row.name, "btn-secondary")}
             {#if canStart(row)}
               <button
                 class="btn-primary"

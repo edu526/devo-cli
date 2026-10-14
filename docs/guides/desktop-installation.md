@@ -132,6 +132,15 @@ signing process.
 - **Connection refused on `127.0.0.1:15432`:** the sidecar only forwards
   if `local_address` is `127.0.0.1`. Set `--no-hosts` if you don't need
   hostname forwarding or add a `/etc/hosts` entry via **Hosts**.
+- **Reaching a database another way (VPN, office network…):** Devo points
+  each database hostname at its tunnel through the hosts file, so the name
+  never reaches the real database. In **Databases**, **Pause hostnames**
+  removes those entries for all databases, so the names resolve through
+  normal DNS again; tunnels keep working on `127.0.0.1:<port>`. **Resume all**
+  puts them back. The link button on a row pauses or forwards just that
+  database, also while the rest is paused. All of them need administrator
+  rights; if an antivirus protects the hosts file, Devo says which one and
+  you'll need to pause it for the change.
 - **WebView2 missing (Windows 10):** install it manually from
   [Microsoft's site](https://developer.microsoft.com/microsoft-edge/webview2/).
 - **AppImage won't launch on Fedora / RHEL:** SELinux may block it. Either

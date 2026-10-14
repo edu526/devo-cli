@@ -4,6 +4,7 @@ import logging
 import threading
 from typing import Any, Optional
 
+from cli_tool.commands.ssm.core import hostname_forwarding
 from cli_tool.commands.ssm.core.config import SSMConfigManager
 from cli_tool.commands.ssm.core.connection_runner import (
     ConnectionRecord,
@@ -71,12 +72,14 @@ def start_connection(
         # first so it unblocks and exits before we replace it.
         registry.stop_one(name)
 
-    db_config = SSMConfigManager().get_database(name)
+    config_manager = SSMConfigManager()
+    db_config = config_manager.get_database(name)
     if db_config is None:
         raise KeyError(f"Database '{name}' not configured")
 
     local_address = db_config.get("local_address", "127.0.0.1")
-    use_hostname_forwarding = local_address != "127.0.0.1" and not no_hosts
+    # Paused hostname forwarding: tunnel on 127.0.0.1, the hostname resolves normally.
+    use_hostname_forwarding = local_address != "127.0.0.1" and not no_hosts and hostname_forwarding.is_enabled(config_manager.load(), db_config)
 
     managed_hosts = {host for _, host in HostsManager().get_managed_entries()}
     if use_hostname_forwarding and db_config["host"] not in managed_hosts:

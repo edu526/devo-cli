@@ -5,6 +5,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
+from cli_tool.commands.ssm.core import hostname_forwarding
 from cli_tool.commands.ssm.core.config import SSMConfigManager
 from cli_tool.sidecar.deps import require_bearer
 
@@ -80,6 +81,9 @@ def patch_database(name: str, body: DatabasePatch) -> dict[str, Any]:
         profile=db.get("profile"),
         local_port=db.get("local_port"),
         local_address=db.get("local_address", "127.0.0.1"),
+        # Not editable here (it goes with the hosts file, see /hosts/forwarding),
+        # but rebuilding the entry must not drop it.
+        hostname_forwarding=db.get(hostname_forwarding.KEY),
     )
     return mgr.get_database(name)
 
