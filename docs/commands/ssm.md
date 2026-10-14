@@ -292,6 +292,18 @@ devo ssm hosts remove NAME
 devo ssm hosts remove mydb
 ```
 
+#### hosts sync
+
+Make /etc/hosts match the databases in one go: add or fix the entries of
+the databases with hostname forwarding on, and remove the stale ones
+(hostnames in Devo's block that no database forwards anymore: deleted, with
+another host now, or paused). Entries outside Devo's block are never
+touched.
+
+```bash
+devo ssm hosts sync
+```
+
 #### hosts clear
 
 Remove all Devo CLI managed entries from /etc/hosts.

@@ -105,3 +105,45 @@ def setup_databases(
         )
 
     return succeeded, failed
+
+
+def stale_hostnames(ssm_config: dict, managed_entries: list[tuple[str, str]]) -> list[str]:
+    """Hostnames in Devo's block of the hosts file that no forwarded database
+    uses: databases deleted, with another host now, or paused. They keep
+    sending that name to a 127.0.0.X nothing listens on."""
+    wanted = {c.get("host") for c in (ssm_config.get("databases") or {}).values() if hostname_forwarding.is_enabled(ssm_config, c)}
+    return sorted({host for _ip, host in managed_entries if host not in wanted})
+
+
+def sync_databases(
+    *,
+    config_manager: Optional[SSMConfigManager] = None,
+    hosts_manager: Optional[HostsManager] = None,
+) -> tuple[list[dict], list[dict], list[str]]:
+    """Make the hosts file match the databases: set up the forwarded ones
+    (setup_databases) and remove the stale entries (stale_hostnames).
+
+    Returns (succeeded, failed, removed): `failed` also holds the stale
+    entries that couldn't be removed, as {"name": None, "host", "error",
+    "needs_elevation", "locked"}.
+    """
+    cm = config_manager or SSMConfigManager()
+    hm = hosts_manager or HostsManager()
+    succeeded, failed = setup_databases(config_manager=cm, hosts_manager=hm)
+
+    removed: list[str] = []
+    for host in stale_hostnames(cm.load(), hm.get_managed_entries()):
+        try:
+            hm.remove_entry(host)
+            removed.append(host)
+        except Exception as e:
+            failed.append(
+                {
+                    "name": None,
+                    "host": host,
+                    "error": str(e),
+                    "needs_elevation": isinstance(e, PermissionError),
+                    "locked": isinstance(e, HostsFileLocked),
+                }
+            )
+    return succeeded, failed, removed

@@ -11,6 +11,7 @@ from cli_tool.commands.ssm.commands.hosts.list import hosts_list
 from cli_tool.commands.ssm.commands.hosts.remove import hosts_remove_single
 from cli_tool.commands.ssm.commands.hosts.remove_manual import hosts_remove_manual
 from cli_tool.commands.ssm.commands.hosts.setup import hosts_setup
+from cli_tool.commands.ssm.commands.hosts.sync import hosts_sync
 
 # The commands log their outcome for `--log-file`; without one, the console
 # output is enough (and the CLI configures no logging to print it twice).
@@ -35,6 +36,7 @@ def register_hosts_commands(ssm_group):
 
     # Register all hosts commands
     hosts.add_command(hosts_setup, "setup")
+    hosts.add_command(hosts_sync, "sync")
     hosts.add_command(hosts_list, "list")
     hosts.add_command(hosts_clear, "clear")
     hosts.add_command(hosts_add_single, "add")

@@ -387,3 +387,64 @@ class TestLoopbackIpsAreNotShared:
 
         assert result.exit_code == 0
         assert SSMConfigManager().get_database("new")["local_address"] == "127.0.0.3"
+
+
+@pytest.mark.unit
+class TestHostsSync:
+    """`devo ssm hosts sync`: the hosts file ends up matching the databases."""
+
+    def test_adds_what_is_missing_and_removes_what_no_database_forwards(self, hosts_file):
+        from cli_tool.commands.ssm.core.hosts_setup import sync_databases
+
+        save_config(
+            {
+                "ssm": {
+                    "databases": {
+                        "kept": _db("kept.rds", "127.0.0.2"),
+                        "missing": _db("missing.rds", "127.0.0.3"),
+                        "paused": _db("paused.rds", "127.0.0.4", hostname_forwarding=False),
+                    }
+                }
+            }
+        )
+        hosts_file.write_text(
+            "127.0.0.1 localhost\n" + _hosts(("127.0.0.2", "kept.rds"), ("127.0.0.4", "paused.rds"), ("127.0.0.9", "deleted-db.rds"))
+        )
+
+        succeeded, failed, removed = sync_databases()
+
+        assert failed == []
+        assert removed == ["deleted-db.rds", "paused.rds"]
+        assert sorted(HostsManager().get_managed_entries()) == [("127.0.0.2", "kept.rds"), ("127.0.0.3", "missing.rds")]
+        assert "127.0.0.1 localhost" in hosts_file.read_text()  # outside Devo's block: untouched
+        assert {s["name"] for s in succeeded} == {"kept", "missing"}
+
+    def test_a_database_whose_host_changed_leaves_no_old_entry(self, hosts_file):
+        from cli_tool.commands.ssm.core.hosts_setup import sync_databases
+
+        save_config({"ssm": {"databases": {"a": _db("new-host.rds", "127.0.0.2")}}})
+        hosts_file.write_text(_hosts(("127.0.0.2", "old-host.rds")))
+
+        sync_databases()
+
+        assert HostsManager().get_managed_entries() == [("127.0.0.2", "new-host.rds")]
+
+    def test_command_exit_codes(self, hosts_file, mocker):
+        from click.testing import CliRunner
+
+        from cli_tool.commands.ssm.commands.hosts.sync import hosts_sync
+
+        save_config({"ssm": {"databases": {"a": _db("a.rds", "127.0.0.2")}}})
+        hosts_file.write_text(_hosts(("127.0.0.9", "stale.rds")))
+
+        ok = CliRunner().invoke(hosts_sync)
+        assert ok.exit_code == 0 and "removed stale stale.rds" in ok.output
+
+        hosts_file.write_text(_hosts(("127.0.0.9", "stale.rds")))
+        mocker.patch.object(HostsManager, "remove_entry", side_effect=HostsFileLocked("Kaspersky is blocking it"))
+        locked = CliRunner().invoke(hosts_sync)
+        assert locked.exit_code == 3 and "Kaspersky is blocking it" in locked.output
+
+        mocker.patch.object(HostsManager, "remove_entry", side_effect=PermissionError("denied"))
+        denied = CliRunner().invoke(hosts_sync)
+        assert denied.exit_code == 1
