@@ -35,7 +35,8 @@ def _ensure_single_connection_sso_login(hub: EventHub, profile: Optional[str], n
     """When a live connection's tokens expire, ask the shared login handler to
     get the SSO session back, so the user doesn't have to reconnect manually.
     The handler renews silently when it can, opens the browser only when it
-    must, and never opens two logins for one SSO session (several tunnels and
+    must (or, if the user turned that off, offers the "Log in" banner instead),
+    and never opens two logins for one SSO session (several tunnels and
     other parts of the app may ask at the same time). The connection loop keeps
     polling and resumes on its own once _wait_for_valid_tokens sees valid
     tokens.

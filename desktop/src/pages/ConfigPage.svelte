@@ -77,6 +77,20 @@
     }
   }
 
+  /**
+   * A toggle saved a setting: show it in the JSON editor too, unless the
+   * editor has unsaved edits. Otherwise a later Save would quietly write the
+   * old value back.
+   */
+  function applySaved(next: Record<string, unknown>) {
+    const unedited = view !== null && view.state.doc.toString() === JSON.stringify(config, null, 2);
+    config = next;
+    configCache.set(next);
+    if (view && unedited) {
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: JSON.stringify(next, null, 2) } });
+    }
+  }
+
   let notificationsEnabled = $state(true);
   let notificationsBusy = $state(false);
   let notificationsError: string | null = $state(null);
@@ -86,8 +100,7 @@
     notificationsBusy = true;
     notificationsError = null;
     try {
-      config = await configApi.patch({ notifications_enabled: next });
-      configCache.set(config);
+      applySaved(await configApi.patch({ notifications_enabled: next }));
       notificationsEnabled = config.notifications_enabled !== false;
     } catch (e) {
       notificationsError = e instanceof Error ? e.message : String(e);
@@ -96,12 +109,37 @@
     }
   }
 
+  // Off: an expired tunnel's AWS session is offered on the "Log in" banner
+  // (with a notification) instead of opening the browser by itself.
+  // Clicking Connect, Refresh or Log in always opens it when needed.
+  function autoOpenBrowserIn(c: Record<string, unknown>): boolean {
+    return (c.aws_login as Record<string, unknown> | undefined)?.auto_open_browser !== false;
+  }
+
+  let autoOpenBrowser = $state(autoOpenBrowserIn(initialCache ?? {}));
+  let autoOpenBrowserBusy = $state(false);
+  let autoOpenBrowserError: string | null = $state(null);
+
+  async function toggleAutoOpenBrowser() {
+    const next = !autoOpenBrowser;
+    autoOpenBrowserBusy = true;
+    autoOpenBrowserError = null;
+    try {
+      applySaved(await configApi.patch({ aws_login: { auto_open_browser: next } }));
+      autoOpenBrowser = autoOpenBrowserIn(config);
+    } catch (e) {
+      autoOpenBrowserError = e instanceof Error ? e.message : String(e);
+    } finally {
+      autoOpenBrowserBusy = false;
+    }
+  }
+
   let debugMode = $state(false);
 
   async function toggleDebugMode() {
     const nextVal = !debugMode;
     try {
-      await configApi.patch({ debug_mode: nextVal });
+      applySaved(await configApi.patch({ debug_mode: nextVal }));
       debugMode = nextVal;
     } catch {
       parseError = "Failed to update debug mode";
@@ -156,6 +194,7 @@
       config = await configApi.get();
       configCache.set(config);
       notificationsEnabled = config.notifications_enabled !== false;
+      autoOpenBrowser = autoOpenBrowserIn(config);
       debugMode = !!config.debug_mode;
       const text = JSON.stringify(config, null, 2);
       if (view) {
@@ -274,6 +313,22 @@
     </label>
     {#if notificationsError}
       <span class="autostart-error">{notificationsError}</span>
+    {/if}
+
+    <label
+      class="autostart-toggle"
+      title="When a connected tunnel's AWS session expires, Devo opens the browser so you can sign in again. Turn it off to get a notification and a Log in button instead. Clicking Connect, Refresh or Log in opens it either way."
+    >
+      <input
+        type="checkbox"
+        checked={autoOpenBrowser}
+        disabled={autoOpenBrowserBusy}
+        onchange={toggleAutoOpenBrowser}
+      />
+      Open the browser to sign in to AWS automatically
+    </label>
+    {#if autoOpenBrowserError}
+      <span class="autostart-error">{autoOpenBrowserError}</span>
     {/if}
 
     <label class="autostart-toggle" title="Enable Uvicorn debug logs. Requires app restart to take effect.">

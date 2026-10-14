@@ -19,6 +19,10 @@ it only tells the UI to offer the "Log in" banner. That gives:
   out) the next automatic one for that session waits 15 min, then 30, up to
   2 h — so nobody comes back to a pile of login tabs. Explicit requests
   (the user clicked something) are never held back.
+- automatic requests may not open the browser at all: with
+  `aws_login.auto_open_browser = false` (a Config page setting) a session
+  that needs one is offered on the "Log in" banner instead
+  (`profile.needs_login`, like the background renewal does)
 - `sso.session.login_started` / `sso.session.login_finished` events that the
   UI uses for a single banner and a single notification per session
 - after a successful login, the other profiles of that session are renewed
@@ -199,6 +203,7 @@ def _run_attempt(
     key = attempt.key
     fanout = _FanoutHub(hub, attempt)
     success = False
+    offered = False
     renewed: list[str] = []
     try:
         if not known_expired and _renewable_without_browser(profile, sso_session):
@@ -210,6 +215,11 @@ def _run_attempt(
                 "sso.login.completed",
                 {"profile": profile or sso_session, "source": source, "success": True, "browser": False},
             )
+        elif automatic and _only_automatic(attempt) and not _auto_open_browser():
+            # Nobody clicked anything and the user doesn't want the browser
+            # opening by itself: let them start the login from the banner.
+            _offer_login(hub, attempt)
+            offered = True
         else:
             hub.publish(
                 "sso.session.login_started",
@@ -230,14 +240,44 @@ def _run_attempt(
             sources = {s for _w, s in attempt.requesters}
             # An explicit requester joining an automatic attempt makes it count
             # as explicit: a failure must not hold back the user's next click.
-            _record_result(key, success, automatic and all(s == "connection" for s in sources))
+            # An offered login was never tried: nothing to hold back.
+            if not offered:
+                _record_result(key, success, automatic and all(s == "connection" for s in sources))
             attempt.success = success
             _running.pop(key, None)
         attempt.done.set()
-        hub.publish(
-            "sso.session.login_finished",
-            {"session": key, "success": success, "renewed": renewed},
-        )
+        if not offered:
+            hub.publish(
+                "sso.session.login_finished",
+                {"session": key, "success": success, "renewed": renewed},
+            )
+
+
+def _only_automatic(attempt: _Attempt) -> bool:
+    """True while nobody explicitly asked for this attempt (only tunnels did)."""
+    with _lock:
+        return all(source == "connection" for _who, source in attempt.requesters)
+
+
+def _auto_open_browser() -> bool:
+    """`aws_login.auto_open_browser`: may an automatic request open the
+    browser by itself? Default yes."""
+    from cli_tool.core.utils.config_manager import get_config_value
+
+    return get_config_value("aws_login.auto_open_browser", True) is not False
+
+
+def _offer_login(hub: EventHub, attempt: _Attempt) -> None:
+    """Put the session on the "Log in" banner (with a notification) instead
+    of opening the browser. The tunnels keep waiting for valid credentials and
+    resume once the user logs in."""
+    with _lock:
+        names = sorted({who for who, _source in attempt.requesters})
+    logger.info("Session '%s' needs a browser login; it may not open by itself, offering the Log in button", attempt.key)
+    hub.publish(
+        "profile.needs_login",
+        {"sessions": [attempt.key], "names": names, "by_session": {attempt.key: names}},
+    )
 
 
 def _renewable_without_browser(profile: Optional[str], sso_session: Optional[str]) -> bool:

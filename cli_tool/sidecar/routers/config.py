@@ -63,6 +63,7 @@ def get_config_schema() -> dict[str, Any]:
                 "properties": {
                     "set_env_profile": {"type": "boolean"},
                     "auto_renew": {"type": "boolean"},
+                    "auto_open_browser": {"type": "boolean"},
                 },
             },
             "bedrock": {

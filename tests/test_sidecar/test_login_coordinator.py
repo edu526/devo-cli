@@ -6,6 +6,7 @@ import time
 import pytest
 
 from cli_tool.sidecar.services import login_coordinator as lc
+from cli_tool.sidecar.services.login_coordinator import _auto_open_browser as real_auto_open_browser
 from cli_tool.sidecar.state import EventHub
 
 RUN = "cli_tool.sidecar.services.sso_service.run_sso_login_sync"
@@ -287,6 +288,88 @@ class TestAutomaticBackoff:
         _wait_idle()
 
         assert "corp" not in lc._auto_backoff
+
+
+@pytest.mark.unit
+@pytest.mark.usefixtures("same_session", "needs_browser")
+class TestBrowserMayNotOpenByItself:
+    """`aws_login.auto_open_browser = false`: an expired tunnel puts its session
+    on the "Log in" banner instead of opening the browser."""
+
+    @pytest.fixture(autouse=True)
+    def turned_off(self, mocker):
+        mocker.patch.object(lc, "_auto_open_browser", return_value=False)
+
+    def test_an_expired_tunnel_offers_the_login_instead(self, mocker):
+        run = mocker.patch(RUN, return_value=True)
+        hub = EventHub()
+        q = hub.subscribe()
+
+        lc.request_login(hub, profile="db-dev", source="connection", automatic=True)
+        _wait_idle()
+
+        run.assert_not_called()
+        events = _events(q)
+        assert {
+            "event": "profile.needs_login",
+            "sessions": ["corp"],
+            "names": ["db-dev"],
+            "by_session": {"corp": ["db-dev"]},
+        } in events
+        # no login ran: nothing started or finished, and nothing to hold back
+        assert not [e for e in events if e["event"].startswith("sso.session.")]
+        assert "corp" not in lc._auto_backoff
+
+    def test_a_click_still_opens_the_browser(self, mocker):
+        run = mocker.patch(RUN, return_value=True)
+
+        assert lc.login_and_wait(EventHub(), profile="db-dev", source="profile") is True
+        run.assert_called_once()
+
+    def test_a_click_during_the_silent_check_opens_the_browser(self, mocker):
+        """Someone who asks while the tunnel's attempt is still checking gets
+        their login: the attempt is no longer only automatic."""
+        run = mocker.patch(RUN, return_value=True)
+        checking, go_on = threading.Event(), threading.Event()
+
+        def slow_check(profile, sso_session):
+            checking.set()
+            go_on.wait(timeout=2)
+            return False
+
+        mocker.patch.object(lc, "_renewable_without_browser", side_effect=slow_check)
+        hub = EventHub()
+        lc.request_login(hub, profile="db-dev", source="connection", automatic=True)
+        checking.wait(timeout=2)
+        lc.request_login(hub, profile="db-dev", source="profile", automatic=False)
+        go_on.set()
+        _wait_idle()
+
+        run.assert_called_once()
+
+    def test_a_session_renewed_silently_needs_no_offer(self, mocker):
+        mocker.patch.object(lc, "_renewable_without_browser", return_value=True)
+        hub = EventHub()
+        q = hub.subscribe()
+
+        lc.request_login(hub, profile="db-dev", source="connection", automatic=True)
+        _wait_idle()
+
+        assert not [e for e in _events(q) if e["event"] == "profile.needs_login"]
+
+
+@pytest.mark.unit
+class TestAutoOpenBrowserSetting:
+    GET = "cli_tool.core.utils.config_manager.get_config_value"
+
+    def test_defaults_to_on(self, mocker):
+        get = mocker.patch(self.GET, side_effect=lambda key, default=None: default)
+        assert real_auto_open_browser() is True
+        get.assert_called_once_with("aws_login.auto_open_browser", True)
+
+    def test_off_only_when_set_to_false(self, mocker):
+        mocker.patch(self.GET, return_value=False)
+        assert real_auto_open_browser() is False
 
 
 @pytest.mark.unit

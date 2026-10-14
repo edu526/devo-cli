@@ -81,6 +81,12 @@ describe("login-flow", () => {
       expect(notifyLoginRequired).toHaveBeenCalledWith(["a", "b"]);
     });
 
+    it("adds the profiles of a session reported again instead of replacing them", () => {
+      emit("profile.needs_login", { names: ["a"], by_session: { corp: ["a"] } });
+      emit("profile.needs_login", { names: ["b", "a"], by_session: { corp: ["b", "a"] } });
+      expect(get(loginNeeded)).toEqual({ corp: ["a", "b"] });
+    });
+
     it("is forgotten when the sidecar reports the session works again", () => {
       loginNeeded.set({ corp: ["a"], personal: ["z"] });
       emit("profile.login_resolved", { sessions: ["corp"] });

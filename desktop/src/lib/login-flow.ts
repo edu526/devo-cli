@@ -12,7 +12,8 @@ import { ws, type WsMessage } from "./ws";
  *
  * - `loginActive`: SSO sessions whose browser login is open right now
  *   (`sso.session.login_started` / `login_finished`)
- * - `loginNeeded`: sessions the background renewal couldn't renew
+ * - `loginNeeded`: sessions the background renewal couldn't renew, or
+ *   that an expired tunnel needs while the browser may not open by itself
  *   (`profile.needs_login`), or whose login failed. The banner offers a
  *   "Log in" button for them.
  */
@@ -146,7 +147,14 @@ export function startLoginWatcher(): () => void {
 
   const offNeeded = ws.on("profile.needs_login", (msg: WsMessage) => {
     const bySession = (msg.by_session as Record<string, string[]> | undefined) ?? {};
-    loginNeeded.update((current) => ({ ...current, ...bySession }));
+    // Added to what's there: tunnels of one session can expire one by one.
+    loginNeeded.update((current) => {
+      const next = { ...current };
+      for (const [session, names] of Object.entries(bySession)) {
+        next[session] = [...new Set([...(current[session] ?? []), ...names])];
+      }
+      return next;
+    });
     notifyLoginRequired((msg.names as string[] | undefined) ?? []);
   });
 
