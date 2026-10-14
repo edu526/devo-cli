@@ -904,3 +904,30 @@ class TestWatchProfiles:
         asyncio.run(scenario())
 
         assert len(calls) >= 2
+
+
+@pytest.mark.unit
+class TestDiscoverSaysWhenItIsListing:
+    """After the login the wizard lists accounts and roles, which takes a few
+    seconds with many accounts: the UI must not keep asking to approve the
+    login in the browser meanwhile."""
+
+    def test_events_in_order(self, mocker):
+        mocker.patch.object(
+            profile_service,
+            "get_existing_sso_sessions",
+            return_value={"corp": {"sso_start_url": "https://x/start", "sso_region": "us-east-1"}},
+        )
+        mocker.patch("cli_tool.commands.aws_login.core.credentials.get_sso_cache_token", return_value="token")
+        mocker.patch.object(profile_service, "_list_accounts", return_value=[{"accountId": "1", "accountName": "dev"}])
+        mocker.patch.object(profile_service, "_list_roles", return_value=[{"roleName": "Dev"}])
+        hub = EventHub()
+        q = hub.subscribe()
+
+        profile_service._do_discover(hub, "corp")
+
+        assert [e["event"] for e in _events(q)] == [
+            "sso.discover.starting",
+            "sso.discover.listing",
+            "sso.discover.completed",
+        ]

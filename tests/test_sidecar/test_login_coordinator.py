@@ -168,6 +168,26 @@ class TestOneLoginPerSession:
         assert {"event": "sso.session.login_finished", "session": "corp", "success": True} in events
         assert {"event": "sso.session.profiles_renewed", "session": "corp", "renewed": ["db-dev", "db-prod"]} in events
 
+    def test_a_login_for_the_account_wizard_alone_renews_no_profiles(self, mocker):
+        """The wizard lists accounts right after the login; renewing every
+        profile of the session at the same time slowed that down ~10x."""
+        mocker.patch(RUN, return_value=True)
+        renew = mocker.patch.object(lc, "_renew_session_profiles", return_value=[])
+
+        assert lc.login_and_wait(EventHub(), sso_session="corp", source="discover", known_expired=True) is True
+        time.sleep(0.05)
+
+        renew.assert_not_called()
+
+    def test_any_other_login_renews_the_session_profiles(self, mocker):
+        mocker.patch(RUN, return_value=True)
+        renew = mocker.patch.object(lc, "_renew_session_profiles", return_value=[])
+
+        assert lc.login_and_wait(EventHub(), profile="db-dev", source="refresh_all", known_expired=True) is True
+        time.sleep(0.1)  # the renewal runs after the attempt is done
+
+        renew.assert_called_once_with("corp")
+
     def test_the_login_is_finished_before_its_other_profiles_are_renewed(self, mocker):
         """Renewing a session's profiles takes seconds: the "Signing in"
         banner must go as soon as the user is done, not after it."""

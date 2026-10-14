@@ -248,7 +248,11 @@ def _run_attempt(
         attempt.done.set()
         if not offered:
             hub.publish("sso.session.login_finished", {"session": key, "success": success})
-    if success:
+    # Not for the account-discovery wizard alone: it lists accounts right
+    # after the login, and renewing every profile of the session at the same
+    # time (one `aws` process each) made that take ~12 s instead of ~1 s. The
+    # background renewal brings those profiles up to date anyway.
+    if success and any(source != "discover" for _who, source in attempt.requesters):
         renewed = _renew_session_profiles(key)
         if renewed:
             hub.publish("sso.session.profiles_renewed", {"session": key, "renewed": renewed})

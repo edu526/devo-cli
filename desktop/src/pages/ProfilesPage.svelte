@@ -76,6 +76,8 @@
   let newSessionErrors: FieldErrors<SsoSessionForm> = $state({});
   let creatingSession = $state(false);
   let discoverInProgress = $state(false);
+  // Signed in, now listing accounts and roles (sso.discover.listing)
+  let discoverListing = $state(false);
   let discoverError: string | null = $state(null);
   let discoverAttempt = $state(0); // 0 = no retry, 1..3 = current attempt
   let discoveredAccounts: DiscoveredAccount[] = $state([]);
@@ -150,6 +152,7 @@
   async function startDiscover() {
     if (!selectedSession) return;
     discoverInProgress = true;
+    discoverListing = false;
     discoverError = null;
     discoverErrorRaw = null;
     discoverAttempt = 1;
@@ -498,6 +501,7 @@
   let offExpiring: (() => void) | null = null;
   let offRenewed: (() => void) | null = null;
   let offDiscoverStarting: (() => void) | null = null;
+  let offDiscoverListing: (() => void) | null = null;
   let offDiscoverCompleted: (() => void) | null = null;
 
   // seconds_remaining is a server-side snapshot taken at fetch time — without
@@ -548,7 +552,11 @@
         );
       }
     });
+    offDiscoverListing = ws.on("sso.discover.listing", () => {
+      if (showCreateModal) discoverListing = true;
+    });
     offDiscoverStarting = ws.on("sso.discover.starting", () => {
+      discoverListing = false;
       if (showCreateModal) discoverInProgress = true;
     });
     offDiscoverCompleted = ws.on("sso.discover.completed", (msg: WsMessage) => {
@@ -569,6 +577,7 @@
     offExpiring?.();
     offRenewed?.();
     offDiscoverStarting?.();
+    offDiscoverListing?.();
     offDiscoverCompleted?.();
     if (autoRefreshInterval !== null) clearInterval(autoRefreshInterval);
   });
@@ -935,7 +944,9 @@
           {#if discoverInProgress}
             <p class="muted-sm">
               <span class="spinner-sm"></span>
-              {#if discoverAttempt > 1}
+              {#if discoverListing}
+                Signed in. Loading your AWS accounts and roles…
+              {:else if discoverAttempt > 1}
                 Retrying… (attempt {discoverAttempt} of 3)
               {:else}
                 Approve the request in the browser window that just opened. This may take up to 2

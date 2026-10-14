@@ -348,9 +348,11 @@ def _list_roles(access_token: str, account_id: str, sso_region: str) -> list[dic
 def _do_discover(hub: EventHub, session_name: str) -> None:
     """Background pipeline: sso login → list accounts → list roles per account.
 
-    Publishes one of two WS events:
+    Publishes these WS events:
       * sso.discover.starting   — fires immediately, signals the browser
                                    SSO flow has begun
+      * sso.discover.listing    — signed in, now listing accounts and roles
+                                   (seconds with many accounts)
       * sso.discover.completed  — fires with {session, success, ...payload}
     """
     from cli_tool.commands.aws_login.core.credentials import get_sso_cache_token
@@ -376,6 +378,8 @@ def _do_discover(hub: EventHub, session_name: str) -> None:
         access_token = get_sso_cache_token(sso_start_url)
         if not access_token:
             raise RuntimeError("SSO login did not produce a cached access token")
+
+        hub.publish("sso.discover.listing", {"session": session_name})
 
         accounts = _list_accounts(access_token, sso_region)
         # Fetch roles in parallel — each call is sub-second but the user
