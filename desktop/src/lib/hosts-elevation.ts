@@ -3,10 +3,12 @@ import { ApiError, hostsApi, type ElevationHint } from "./api";
 
 /**
  * Hosts-file changes the sidecar can't make without admin rights come back as
- * a 403 whose detail names the `devo` command to run elevated. That command
- * runs through Tauri's `run_elevated` (UAC / osascript / pkexec), and the
- * request is then repeated: it finds the hosts file already done and records
- * the change.
+ * a 403 naming the action to run elevated. The Tauri shell runs it
+ * (`run_hosts_command`: UAC / osascript / pkexec), and the request is then
+ * repeated: it finds the hosts file already done and records the change.
+ *
+ * Only the action and its values go to the shell, which builds the command
+ * line itself: this page can't make it run anything else as administrator.
  */
 export async function withHostsElevation<T>(request: () => Promise<T>): Promise<T> {
   try {
@@ -17,7 +19,7 @@ export async function withHostsElevation<T>(request: () => Promise<T>): Promise<
     // Windows reports the command's exit code; macOS/Linux reject on failure.
     let code: number;
     try {
-      code = await invoke<number>("run_elevated", { args: elevatedArgs(hint) });
+      code = await invoke<number>("run_hosts_command", { command: hostsCommand(hint) });
     } catch (elevationError) {
       if (exitCodeIn(elevationError) === HOSTS_LOCKED_EXIT_CODE) throw await hostsLockedError();
       throw elevationError;
@@ -40,6 +42,29 @@ export async function withHostsElevation<T>(request: () => Promise<T>): Promise<
   }
 }
 
+/** What `run_hosts_command` runs: an action and its values (hosts_command.rs). */
+export type HostsCommand =
+  | { action: "setup"; db_names: string[] }
+  | { action: "sync" }
+  | { action: "clear" }
+  | { action: "remove"; hostname: string };
+
+export function hostsCommand(hint: ElevationHint): HostsCommand {
+  const params = hint.params as { db_names?: string[]; hostname?: string };
+  switch (hint.action) {
+    case "hosts-setup":
+      return { action: "setup", db_names: params.db_names ?? [] };
+    case "hosts-sync":
+      return { action: "sync" };
+    case "hosts-clear":
+      return { action: "clear" };
+    case "hosts-remove":
+      if (params.hostname) return { action: "remove", hostname: params.hostname };
+      break;
+  }
+  throw new Error(`Devo can't run "${hint.action}" as administrator`);
+}
+
 /**
  * Exit code of `devo ssm hosts …` when the hosts file was denied even as
  * administrator (HostsFileLocked: an antivirus protecting it, the read-only
@@ -58,7 +83,7 @@ async function hostsLockedError(): Promise<Error> {
   }
 }
 
-/** The exit code in run_elevated's macOS/Linux failure ("…failed with status: exit status: 3"). */
+/** The exit code in the macOS/Linux failure ("…failed with status: exit status: 3"). */
 function exitCodeIn(error: unknown): number | null {
   const match = /exit (?:status|code):? ?(\d+)/i.exec(String(error));
   return match ? Number(match[1]) : null;
@@ -76,21 +101,4 @@ export function elevationHint(e: unknown): ElevationHint | null {
   }
   const hint = detail as Partial<ElevationHint> | null;
   return hint && typeof hint === "object" && hint.params ? (hint as ElevationHint) : null;
-}
-
-/** argv for `run_elevated`: `[env DEVO_CONFIG_DIR=…] <python_bin> -m cli_tool.cli <cli_args>`. */
-export function elevatedArgs(hint: ElevationHint): string[] {
-  const p = hint.params as {
-    cli_args?: string[];
-    db_names?: string[];
-    python_bin?: string;
-    config_dir?: string;
-    use_env?: boolean;
-  };
-  // Sidecars before cli_args only ever asked for `hosts setup`.
-  const cliArgs = p.cli_args ?? ["ssm", "hosts", "setup", ...(p.db_names ?? [])];
-  const args: string[] = [];
-  if (p.config_dir && p.use_env) args.push("/usr/bin/env", `DEVO_CONFIG_DIR=${p.config_dir}`);
-  args.push(p.python_bin || "python", "-m", "cli_tool.cli", ...cliArgs);
-  return args;
 }

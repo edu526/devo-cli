@@ -8,6 +8,25 @@ use tokio::time::timeout;
 pub struct SidecarInfo {
     pub port: u16,
     pub token: String,
+    /// How to run `devo ssm hosts …` elevated. Kept on the Rust side: the
+    /// webview never gets to choose what runs as administrator.
+    #[serde(skip)]
+    pub hosts_cli: Option<HostsCli>,
+}
+
+/// Announced by the sidecar before READY: its own executable (python in dev,
+/// devo-sidecar in release, both run `-m cli_tool.cli`) and its config dir.
+#[derive(Clone, serde::Deserialize, Debug, PartialEq)]
+pub struct HostsCli {
+    pub exe: String,
+    pub config_dir: String,
+}
+
+const HOSTS_CLI_PREFIX: &str = "DEVO_SIDECAR_HOSTS_CLI ";
+
+fn parse_hosts_cli_line(line: &str) -> Option<HostsCli> {
+    // Expected: DEVO_SIDECAR_HOSTS_CLI {"exe": "...", "config_dir": "..."} (JSON: paths may have spaces)
+    serde_json::from_str(line.strip_prefix(HOSTS_CLI_PREFIX)?).ok()
 }
 
 fn parse_ready_line(line: &str) -> Option<SidecarInfo> {
@@ -25,7 +44,7 @@ fn parse_ready_line(line: &str) -> Option<SidecarInfo> {
         }
     }
     match (port, token) {
-        (Some(port), Some(token)) => Some(SidecarInfo { port, token }),
+        (Some(port), Some(token)) => Some(SidecarInfo { port, token, hosts_cli: None }),
         _ => None,
     }
 }
@@ -213,12 +232,16 @@ pub async fn spawn_and_wait(app: &AppHandle) -> Result<SidecarInfo, String> {
 
     let deadline = Duration::from_secs(30);
     let result = timeout(deadline, async {
+        let mut hosts_cli = None;
         while let Some(event) = rx.recv().await {
             match event {
                 CommandEvent::Stdout(bytes) => {
                     let line = String::from_utf8_lossy(&bytes);
                     let line = line.trim();
-                    if let Some(info) = parse_ready_line(line) {
+                    if let Some(cli) = parse_hosts_cli_line(line) {
+                        hosts_cli = Some(cli);
+                    } else if let Some(mut info) = parse_ready_line(line) {
+                        info.hosts_cli = hosts_cli.take();
                         return Ok(info);
                     }
                 }
@@ -360,6 +383,32 @@ mod tests {
     #[test]
     fn parse_missing_port_returns_none() {
         assert!(parse_ready_line("DEVO_SIDECAR_READY token=abc").is_none());
+    }
+
+    #[test]
+    fn parse_hosts_cli_keeps_paths_with_spaces() {
+        let cli = parse_hosts_cli_line(
+            r#"DEVO_SIDECAR_HOSTS_CLI {"exe": "C:\\Program Files\\Devo\\devo-sidecar.exe", "config_dir": "C:\\Users\\First Last\\.devo"}"#,
+        )
+        .unwrap();
+        assert_eq!(cli.exe, r"C:\Program Files\Devo\devo-sidecar.exe");
+        assert_eq!(cli.config_dir, r"C:\Users\First Last\.devo");
+    }
+
+    #[test]
+    fn parse_hosts_cli_ignores_other_lines() {
+        assert!(parse_hosts_cli_line("DEVO_SIDECAR_READY port=1 token=x").is_none());
+        assert!(parse_hosts_cli_line("DEVO_SIDECAR_HOSTS_CLI not json").is_none());
+    }
+
+    #[test]
+    fn hosts_cli_is_never_sent_to_the_webview() {
+        let info = SidecarInfo {
+            port: 1,
+            token: "t".into(),
+            hosts_cli: Some(HostsCli { exe: "x".into(), config_dir: "y".into() }),
+        };
+        assert_eq!(serde_json::to_string(&info).unwrap(), r#"{"port":1,"token":"t"}"#);
     }
 
     #[cfg(target_os = "macos")]

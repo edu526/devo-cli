@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+mod hosts_command;
 mod sidecar;
 mod sidecar_proc;
 mod tray;
@@ -62,7 +63,31 @@ fn get_boot_status(state: State<'_, BootState>) -> BootStatus {
     state.0.lock().unwrap().clone()
 }
 
+/// Runs `devo ssm hosts <action>` as administrator (UAC / osascript / pkexec)
+/// and returns its exit code. It takes an action, not a command line: see
+/// hosts_command for why.
 #[tauri::command]
+async fn run_hosts_command(
+    command: hosts_command::HostsCommand,
+    app: AppHandle,
+    sidecar: State<'_, SidecarState>,
+) -> Result<u32, String> {
+    let cli = sidecar
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .as_ref()
+        .and_then(|info| info.hosts_cli.clone())
+        .ok_or_else(|| "Devo's background service isn't ready yet".to_string())?;
+    let log_file = app.path().home_dir().map_err(|e| e.to_string())?.join(".devo").join("sidecar.log");
+    let args = hosts_command::build_args(&command, &cli, &log_file, !cfg!(windows))?;
+    // Waits for the admin prompt and the command: off the async runtime's threads.
+    tauri::async_runtime::spawn_blocking(move || run_elevated(args))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Not a command: only run_hosts_command builds what runs as administrator.
 fn run_elevated(args: Vec<String>) -> Result<u32, String> {
     #[cfg(windows)]
     {
@@ -70,10 +95,12 @@ fn run_elevated(args: Vec<String>) -> Result<u32, String> {
     }
     #[cfg(target_os = "macos")]
     {
-        let cmd = args.join(" ");
+        // `do shell script` runs a shell command line: quote each argument
+        // (paths with spaces) and escape the line for the AppleScript string.
+        let cmd = args.iter().map(|a| hosts_command::shell_quote(a)).collect::<Vec<_>>().join(" ");
         let script = format!(
             "do shell script \"{}\" with administrator privileges",
-            cmd.replace("\"", "\\\"")
+            hosts_command::applescript_escape(&cmd)
         );
         let status = std::process::Command::new("osascript")
             .arg("-e")
@@ -208,7 +235,7 @@ pub fn run() {
             updater::fetch_update,
             updater::install_update,
             tray::hide_to_tray,
-            run_elevated
+            run_hosts_command
         ])
         .build(tauri::generate_context!())
         .expect("error while building Devo")

@@ -1,5 +1,6 @@
 """Sidecar entry point: bind, print READY handshake, serve."""
 
+import json
 import logging
 import logging.handlers
 import os
@@ -12,6 +13,7 @@ from pathlib import Path
 import uvicorn
 
 from cli_tool.commands.ssm.core.connection_runner import ForwarderRegistry
+from cli_tool.core.utils.config_manager import get_config_dir
 from cli_tool.sidecar.app import create_app
 from cli_tool.sidecar.state import AppState, EventHub
 
@@ -157,6 +159,12 @@ def run(port: int = 0, host: str = "127.0.0.1", log_level: str = "warning") -> N
     log.info("[TIMING] FastAPI app created at +%.3fs", _elapsed())
 
     log.info("Sidecar starting on %s:%s — log file: %s", host, actual_port, LOG_FILE)
+
+    # How the shell runs `devo ssm hosts …` elevated (see hosts_command.rs): this
+    # executable runs `-m cli_tool.cli` in dev (python) and release (frozen,
+    # see hosts_cli). Told here, on stdout, so the webview never chooses it.
+    hosts_cli = {"exe": sys.executable, "config_dir": str(get_config_dir())}
+    print(f"DEVO_SIDECAR_HOSTS_CLI {json.dumps(hosts_cli)}", flush=True)
 
     # Handshake line read by the Tauri shell / parent process. Safe to print
     # now — `sock` above is already bound and listening, so any connection

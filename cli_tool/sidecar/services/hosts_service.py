@@ -2,7 +2,6 @@
 
 import platform
 import sys
-from pathlib import Path
 from typing import Any, Optional
 
 from cli_tool.commands.ssm.core import hostname_forwarding
@@ -113,26 +112,18 @@ def remove_host(hostname: str) -> None:
 
 
 def _hosts_command_elevation(hosts_args: list[str], action: str, **params: Any) -> NeedsElevation:
-    """NeedsElevation for running `devo ssm hosts <hosts_args>` elevated. The
-    desktop runs exactly `cli_args` (after `<python_bin> -m cli_tool.cli`).
+    """NeedsElevation for running `devo ssm hosts <hosts_args>` elevated.
 
-    The elevated command runs in a hidden window, so it logs its outcome to
-    sidecar.log (the same file as bootstrap.LOG_FILE): a failure's reason then
-    shows up in Logs.
+    The desktop sends Tauri only `action` and its values (`params`): the shell
+    builds the command line itself (hosts_command.rs), from the executable
+    this sidecar announced at boot. `cli_args` and `command` are what it runs,
+    for the log and for the terminal.
     """
-    cli_args = ["ssm", "hosts", "--log-file", str(Path.home() / ".devo" / "sidecar.log"), *hosts_args]
-    python_bin = sys.executable
-    config_dir = get_config_dir()
+    cli_args = ["ssm", "hosts", *hosts_args]
     return NeedsElevation(
-        _elevation_command(f"env DEVO_CONFIG_DIR={config_dir} {python_bin} -m cli_tool.cli {' '.join(cli_args)}"),
+        _elevation_command(f"env DEVO_CONFIG_DIR={get_config_dir()} {sys.executable} -m cli_tool.cli {' '.join(cli_args)}"),
         action=action,
-        params={
-            **params,
-            "cli_args": cli_args,
-            "python_bin": python_bin,
-            "config_dir": str(config_dir),
-            "use_env": platform.system() != "Windows",
-        },
+        params={**params, "cli_args": cli_args},
     )
 
 

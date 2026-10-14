@@ -128,10 +128,9 @@ class TestPauseAll:
             hosts_service.set_forwarding(False)
 
         assert exc.value.action == "hosts-clear"
-        cli_args = exc.value.params["cli_args"]
-        assert cli_args[:2] == ["ssm", "hosts"] and cli_args[-2:] == ["clear", "--yes"]
-        # it runs in a hidden window: its outcome goes to sidecar.log
-        assert cli_args[2] == "--log-file" and cli_args[3].endswith("sidecar.log")
+        assert exc.value.params["cli_args"] == ["ssm", "hosts", "clear", "--yes"]
+        # the shell builds the command itself (hosts_command.rs): nothing to run it with
+        assert "python_bin" not in exc.value.params
         assert "hostname_forwarding" not in load_config()["ssm"]  # still on
 
     def test_after_the_elevated_command_the_retry_just_records_it(self, hosts, two_dbs):

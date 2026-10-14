@@ -33,12 +33,13 @@ def test_run_dispatches_setup_with_db_names():
 
 
 def test_run_accepts_the_log_file_the_desktop_passes(tmp_path):
-    """What the installed app runs elevated: `devo-sidecar -m cli_tool.cli ssm hosts --log-file … setup …`."""
+    """What the installed app runs elevated (hosts_command.rs):
+    `devo-sidecar -m cli_tool.cli ssm hosts --log-file … setup -- <db names>`."""
     import logging
 
     log_file = tmp_path / "sidecar.log"
     try:
-        code, setup = _run_setup(["-m", "cli_tool.cli", "ssm", "hosts", "--log-file", str(log_file), "setup", "db1"])
+        code, setup = _run_setup(["-m", "cli_tool.cli", "ssm", "hosts", "--log-file", str(log_file), "setup", "--", "db1"])
     finally:
         hosts_logger = logging.getLogger("cli_tool.commands.ssm.commands.hosts")
         for handler in [h for h in hosts_logger.handlers if isinstance(h, logging.FileHandler)]:

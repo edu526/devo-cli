@@ -124,6 +124,23 @@ class TestRun:
         assert "token=" in out
         self._bound_sockets(mock_server_instance)[0].close()
 
+    def test_announces_how_to_run_hosts_commands_before_ready(self, mocker, capsys):
+        """The shell builds the elevated `devo ssm hosts` command from this line
+        (hosts_command.rs), never from what the webview sends."""
+        import json
+        import sys
+
+        _, _, mock_server_instance, _ = self._run_with_mocks(mocker)
+
+        run(port=0)
+
+        out = capsys.readouterr().out
+        line = next(line for line in out.splitlines() if line.startswith("DEVO_SIDECAR_HOSTS_CLI "))
+        assert out.index("DEVO_SIDECAR_HOSTS_CLI") < out.index("DEVO_SIDECAR_READY")
+        info = json.loads(line.split(" ", 1)[1])
+        assert info["exe"] == sys.executable and info["config_dir"]
+        self._bound_sockets(mock_server_instance)[0].close()
+
     def test_ready_line_printed_before_server_run(self, mocker, capsys):
         """The whole point of binding early: READY must be observable before
         the (potentially slow) uvicorn server loop starts, and the socket it

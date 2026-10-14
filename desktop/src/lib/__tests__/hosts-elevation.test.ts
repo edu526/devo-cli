@@ -1,46 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { ApiError, hostsApi, type ElevationHint } from "../api";
-import { elevatedArgs, elevationHint, withHostsElevation } from "../hosts-elevation";
+import { elevationHint, hostsCommand, withHostsElevation } from "../hosts-elevation";
 
 const mockInvoke = vi.mocked(invoke);
 
-function hint(params: Record<string, unknown>): ElevationHint {
-  return { message: "Elevated privileges required", command: "cmd", action: "hosts-clear", params };
+function hint(params: Record<string, unknown>, action = "hosts-clear"): ElevationHint {
+  return { message: "Elevated privileges required", command: "cmd", action, params };
 }
 
-const unix = { python_bin: "/opt/devo/devo-sidecar", config_dir: "/home/u/.devo", use_env: true };
-
-describe("elevatedArgs", () => {
-  it("runs the command the sidecar names, with the config dir on Linux/macOS", () => {
-    expect(elevatedArgs(hint({ ...unix, cli_args: ["ssm", "hosts", "clear", "--yes"] }))).toEqual([
-      "/usr/bin/env",
-      "DEVO_CONFIG_DIR=/home/u/.devo",
-      "/opt/devo/devo-sidecar",
-      "-m",
-      "cli_tool.cli",
-      "ssm",
-      "hosts",
-      "clear",
-      "--yes",
-    ]);
+describe("hostsCommand", () => {
+  it("turns the sidecar's request into an action for the shell, never a command line", () => {
+    expect(hostsCommand(hint({ cli_args: ["ssm", "hosts", "clear", "--yes"] }))).toEqual({ action: "clear" });
+    expect(hostsCommand(hint({}, "hosts-sync"))).toEqual({ action: "sync" });
+    expect(hostsCommand(hint({ db_names: ["a", "b"] }, "hosts-setup"))).toEqual({ action: "setup", db_names: ["a", "b"] });
+    expect(hostsCommand(hint({}, "hosts-setup"))).toEqual({ action: "setup", db_names: [] });
+    expect(hostsCommand(hint({ hostname: "db.rds" }, "hosts-remove"))).toEqual({ action: "remove", hostname: "db.rds" });
   });
 
-  it("has no env prefix on Windows", () => {
-    const args = elevatedArgs(
-      hint({ python_bin: "C:\\Devo\\devo-sidecar.exe", config_dir: "C:\\u\\.devo", use_env: false, cli_args: ["ssm"] }),
-    );
-    expect(args).toEqual(["C:\\Devo\\devo-sidecar.exe", "-m", "cli_tool.cli", "ssm"]);
-  });
-
-  it("falls back to `hosts setup <db_names>` for sidecars that don't send cli_args", () => {
-    expect(elevatedArgs(hint({ ...unix, use_env: false, db_names: ["a", "b"] })).slice(3)).toEqual([
-      "ssm",
-      "hosts",
-      "setup",
-      "a",
-      "b",
-    ]);
+  it("refuses anything else", () => {
+    expect(() => hostsCommand(hint({ python_bin: "/bin/sh" }, "run-anything"))).toThrow("can't run");
+    expect(() => hostsCommand(hint({}, "hosts-remove"))).toThrow("can't run"); // no hostname
   });
 });
 
@@ -79,20 +59,18 @@ describe("withHostsElevation", () => {
     mockInvoke.mockResolvedValue(0);
     const request = vi
       .fn()
-      .mockRejectedValueOnce(new ApiError(403, hint({ ...unix, cli_args: ["ssm", "hosts", "clear", "--yes"] })))
+      .mockRejectedValueOnce(new ApiError(403, hint({ cli_args: ["ssm", "hosts", "clear", "--yes"] })))
       .mockResolvedValueOnce("recorded");
 
     await expect(withHostsElevation(request)).resolves.toBe("recorded");
 
-    expect(mockInvoke).toHaveBeenCalledWith("run_elevated", {
-      args: expect.arrayContaining(["clear", "--yes"]),
-    });
+    expect(mockInvoke).toHaveBeenCalledWith("run_hosts_command", { command: { action: "clear" } });
     expect(request).toHaveBeenCalledTimes(2);
   });
 
   it("reports a failed elevated command (Windows returns its exit code) without repeating", async () => {
     mockInvoke.mockResolvedValue(1);
-    const request = vi.fn().mockRejectedValue(new ApiError(403, hint({ ...unix, cli_args: ["ssm"] })));
+    const request = vi.fn().mockRejectedValue(new ApiError(403, hint({ cli_args: ["ssm"] })));
 
     await expect(withHostsElevation(request)).rejects.toThrow("exit code 1");
     expect(request).toHaveBeenCalledTimes(1);
@@ -100,7 +78,7 @@ describe("withHostsElevation", () => {
 
   describe("a hosts file locked even for administrators (exit code 3)", () => {
     const locked = () =>
-      vi.fn().mockRejectedValue(new ApiError(403, hint({ ...unix, cli_args: ["ssm", "hosts", "clear"] })));
+      vi.fn().mockRejectedValue(new ApiError(403, hint({ cli_args: ["ssm", "hosts", "clear"] })));
 
     it("shows why, as the sidecar explains it (Windows reports the code)", async () => {
       mockInvoke.mockResolvedValue(3);
@@ -131,7 +109,7 @@ describe("withHostsElevation", () => {
 
   it("says so in plain words when the hosts file still needs elevation afterwards", async () => {
     mockInvoke.mockResolvedValue(0);
-    const request = vi.fn().mockRejectedValue(new ApiError(403, hint({ ...unix, cli_args: ["ssm"] })));
+    const request = vi.fn().mockRejectedValue(new ApiError(403, hint({ cli_args: ["ssm"] })));
 
     const error = await withHostsElevation(request).catch((e: Error) => e);
 
@@ -142,7 +120,7 @@ describe("withHostsElevation", () => {
 
   it("does not repeat the request when the admin prompt is cancelled", async () => {
     mockInvoke.mockRejectedValue(new Error("UAC prompt was cancelled or access denied"));
-    const request = vi.fn().mockRejectedValue(new ApiError(403, hint({ ...unix, cli_args: ["ssm"] })));
+    const request = vi.fn().mockRejectedValue(new ApiError(403, hint({ cli_args: ["ssm"] })));
 
     await expect(withHostsElevation(request)).rejects.toThrow("cancelled");
     expect(request).toHaveBeenCalledTimes(1);
