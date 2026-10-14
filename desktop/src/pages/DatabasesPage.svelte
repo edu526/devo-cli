@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount } from "svelte";
   import { get } from "svelte/store";
   import {
     databasesApi,
@@ -28,10 +28,10 @@
   import { viewModes } from "../lib/stores";
   import { ws, type WsMessage } from "../lib/ws";
   import { notifyUser } from "../lib/notifications";
+  import { ensureLogin } from "../lib/login-flow";
   import { explainError, stateLabel } from "../lib/connection-status";
   import { copyToClipboard } from "../lib/clipboard";
-  import { X, Link2, Link2Off, Copy, Check } from "@lucide/svelte";
-  import { open as openUrl } from "@tauri-apps/plugin-shell";
+  import { Link2, Link2Off, Copy, Check } from "@lucide/svelte";
 
   const viewMode = viewModes.databases;
 
@@ -58,48 +58,19 @@
   let query = $state("");
   let refreshing = $state(false);
 
-  let ssoLoginInProgress = $state<{ profile: string; name: string } | null>(null);
-  let ssoLoginError = $state<string | null>(null);
-  let ssoLoginUnsubscribe: (() => void) | null = null;
-  let ssoManualUrl = $state<{ url: string; code: string } | null>(null);
-
-  function handleSsoRequired(profile: string, name: string) {
-    ssoLoginInProgress = { profile, name };
-    ssoLoginError = null;
-    ssoManualUrl = null;
-    // Subscribe once; the listener stays alive until cleared.
-    // Filter by both profile and source so we don't react to SSO events
-    // triggered by other features (codeartifact, etc.) — same pattern as RegistryPage.
-    if (ssoLoginUnsubscribe) ssoLoginUnsubscribe();
-    ssoLoginUnsubscribe = ws.on("sso.login.completed", (msg) => {
-      const m = msg as { profile?: string; source?: string; success?: boolean; error?: string };
-      if (m.source !== "profile" || m.profile !== profile) return;
-      ssoLoginInProgress = null;
-      ssoManualUrl = null;
-      if (ssoLoginUnsubscribe) {
-        ssoLoginUnsubscribe();
-        ssoLoginUnsubscribe = null;
-      }
-      if (m.success) {
-        // Auto-retry the original connection
-        startOne(name);
-      } else {
-        ssoLoginError = m.error ?? "Browser SSO login failed";
-      }
-    });
-    // Fire-and-forget: the backend runs aws sso login in a thread and emits
-    // sso.login.completed when done. We only show an immediate error if the
-    // API call itself fails (network error, etc.), not if SSO fails — that
-    // arrives via the WS event above.
-    profilesApi.refresh(profile).catch((e: unknown) => {
-      // Only clear the banner if we get a hard API error (not a 202 Accepted).
-      // A 202 means the login is running in the background — the WS event will arrive.
-      if (e instanceof ApiError && e.status !== 202) {
-        ssoLoginInProgress = null;
-        ssoManualUrl = null;
-        ssoLoginError = String(e);
-      }
-    });
+  /**
+   * Tunnels that can't start without credentials: get them through the shared
+   * login (the banner shows it), then start the ones whose profile got them.
+   * Start, Restart and Start All all come here. `afterLogin` stops a tunnel
+   * that still finds no credentials from asking again in a loop.
+   */
+  async function loginThenStart(tunnels: [name: string, profile: string][]) {
+    try {
+      const renewed = await ensureLogin(tunnels.map(([, profile]) => profile));
+      for (const [name, profile] of tunnels) if (renewed.has(profile)) void startOne(name, { afterLogin: true });
+    } catch (e) {
+      actionError = e instanceof ApiError ? e.message : String(e);
+    }
   }
 
   // --- Hostname forwarding (hosts file) ---
@@ -512,7 +483,7 @@
   }
 
   // --- Connection Logic ---
-  async function startOne(name: string) {
+  async function startOne(name: string, { afterLogin = false } = {}) {
     actionError = null;
     busyConns = new Set([...busyConns, name]);
     try {
@@ -520,7 +491,8 @@
       if (result.state === "expired_credentials") {
         connections = [...connections.filter((c) => c.name !== name), result];
         if (result.sso_required && result.profile) {
-          handleSsoRequired(result.profile, name);
+          if (afterLogin) actionError = `${name} still has no AWS credentials after logging in.`;
+          else void loginThenStart([[name, result.profile]]);
         }
       }
     } catch (e) {
@@ -539,9 +511,7 @@
       const result = await connectionsApi.start(name);
       if (result.state === "expired_credentials") {
         connections = [...connections.filter((c) => c.name !== name), result];
-        if (result.sso_required && result.profile) {
-          handleSsoRequired(result.profile, name);
-        }
+        if (result.sso_required && result.profile) void loginThenStart([[name, result.profile]]);
       }
     } catch (e) {
       actionError = e instanceof ApiError ? e.message : String(e);
@@ -576,31 +546,6 @@
     } finally {
       busyAll = false;
     }
-  }
-
-  let offStartAllLogin: (() => void) | null = null;
-
-  /**
-   * Start All found tunnels whose credentials expired: one login for their
-   * profiles (each SSO session logs in once, however many tunnels share it),
-   * then start the ones whose profile got new credentials. Before, they were
-   * left on "Login needed" although the user had asked to start them.
-   */
-  function loginThenStart(tunnels: [name: string, profile: string][]) {
-    offStartAllLogin?.();
-    offStartAllLogin = ws.on("profile.refreshed", (msg: WsMessage) => {
-      offStartAllLogin?.();
-      offStartAllLogin = null;
-      if (!msg.success) return;
-      const renewed = new Set((msg.names as string[] | undefined) ?? []);
-      for (const [name, profile] of tunnels) if (renewed.has(profile)) void startOne(name);
-    });
-    const profiles = [...new Set(tunnels.map(([, profile]) => profile))];
-    profilesApi.refreshAll(false, { allowBrowser: true, targets: { profiles, sessions: [] } }).catch((e: unknown) => {
-      offStartAllLogin?.();
-      offStartAllLogin = null;
-      actionError = e instanceof ApiError ? e.message : String(e);
-    });
   }
 
   async function stopAll() {
@@ -672,50 +617,12 @@
       );
     });
 
-    const offUrlReady = ws.on("sso.login.url_ready", (msg: WsMessage) => {
-      const m = msg as { profile?: string; source?: string; url?: string; code?: string };
-      if (
-        m.source === "profile" &&
-        ssoLoginInProgress &&
-        m.profile === ssoLoginInProgress.profile
-      ) {
-        ssoManualUrl = { url: m.url!, code: m.code! };
-      }
-    });
-
-    // Backend-triggered auto-refresh for a connection whose tokens expired
-    // mid-session (see connection_service._ensure_single_connection_sso_login).
-    // Unlike handleSsoRequired's one-shot listener, this must stay subscribed
-    // for the page's whole lifetime since the backend can fire it at any time
-    // without the user having clicked anything.
-    const offConnSsoCompleted = ws.on("sso.login.completed", (msg: WsMessage) => {
-      const m = msg as { profile?: string; source?: string; success?: boolean; error?: string };
-      if (m.source !== "connection" || !m.profile) return;
-      if (!m.success) {
-        notifyUser(
-          "AWS SSO Refresh Failed",
-          m.error || `Automatic SSO refresh for '${m.profile}' failed. Reconnect manually once you've logged in.`,
-        );
-      }
-    });
-
     return () => {
       offDb();
       offConns();
       offState();
       offMetrics();
-      offUrlReady();
-      offConnSsoCompleted();
     };
-  });
-
-  // Without this, navigating away while an SSO login is in flight would
-  // leave the listener registered in ws.handlers — a late sso.login.completed
-  // event would then call startOne(name) on a component that's no longer
-  // mounted (or one the user already left).
-  onDestroy(() => {
-    ssoLoginUnsubscribe?.();
-    offStartAllLogin?.();
   });
 
   // --- Display Helpers ---
@@ -863,48 +770,6 @@
   </div>
   {#if actionError && !actionError.startsWith("Delete database")}
     <div class="alert-error">{actionError}</div>
-  {/if}
-
-  {#if ssoLoginInProgress}
-    <div class="alert-sso">
-      <span class="spinner-sm spinner-sso"></span>
-      <div>
-        <strong>Browser SSO login in progress</strong> for <code>{ssoLoginInProgress.profile}</code>
-        {#if ssoManualUrl}
-          <p>
-            Your browser could not be opened automatically. Please open
-            <a
-              href={ssoManualUrl.url}
-              onclick={(e) => {
-                e.preventDefault();
-                if (ssoManualUrl) {
-                  openUrl(ssoManualUrl.url);
-                }
-              }}
-              class="sso-link">{ssoManualUrl.url}</a
-            >
-            {#if ssoManualUrl.code}
-              and enter the code <strong>{ssoManualUrl.code}</strong>.
-            {:else}
-              to approve the request.
-            {/if}
-          </p>
-        {:else}
-          <p>
-            Approve the request in the browser window that just opened. The connection to <strong
-              >{ssoLoginInProgress.name}</strong
-            > will retry automatically.
-          </p>
-        {/if}
-      </div>
-    </div>
-  {/if}
-
-  {#if ssoLoginError}
-    <div class="alert-error">
-      {ssoLoginError}
-      <button class="dismiss" onclick={() => (ssoLoginError = null)}><X size={14} /></button>
-    </div>
   {/if}
 
   {#if missingHosts.length > 0 || staleHosts.length > 0 || sharedAddresses.length > 0}
@@ -1413,39 +1278,4 @@
     gap: 0.5rem;
   }
 
-  /* SSO in-progress banner */
-  .alert-sso {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
-    background: color-mix(in srgb, var(--warning) 10%, transparent);
-    border: 1px solid var(--warning);
-    border-radius: 6px;
-    padding: 0.75rem 1rem;
-    color: var(--warning);
-    font-size: 0.85rem;
-    margin-bottom: 1rem;
-  }
-  .alert-sso strong {
-    display: block;
-    margin-bottom: 0.2rem;
-  }
-  .alert-sso p {
-    margin: 0;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-  }
-  .alert-sso code {
-    color: var(--warning);
-  }
-  .alert-sso a {
-    word-break: break-all;
-    overflow-wrap: anywhere;
-    color: var(--warning);
-    text-decoration: underline;
-  }
-  .spinner-sso {
-    margin-top: 3px;
-    flex-shrink: 0;
-  }
 </style>

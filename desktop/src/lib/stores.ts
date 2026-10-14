@@ -21,8 +21,11 @@ export const authLost = writable<boolean>(false);
 export const loginNeeded = writable<Record<string, string[]>>({});
 /** AWS SSO sessions whose browser login is open right now. */
 export const loginActive = writable<Set<string>>(new Set());
-/** The sign-in page of each session whose login is open, to open it again from Devo. */
-export const loginUrls = writable<Record<string, string>>({});
+/**
+ * The sign-in page of each session whose login is open, to open it again from
+ * Devo, with the code to enter there (device-code logins only; else "").
+ */
+export const loginUrls = writable<Record<string, { url: string; code: string }>>({});
 /** The "Log in" button's request is in flight. */
 export const loginInProgress = writable<boolean>(false);
 export const loginError = writable<string | null>(null);

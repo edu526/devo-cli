@@ -445,74 +445,8 @@ class TestSSOLoginChain:
         assert body["profile"] == "p"
         assert body["domain"] == "d"
         assert body["tool"] == "npm"
-        request.assert_called_once()
-
-
-@pytest.mark.unit
-class TestEnsureSingleSsoLogin:
-    def test_goes_through_the_shared_handler_as_an_explicit_request(self, mocker):
-        request = mocker.patch(
-            "cli_tool.sidecar.services.login_coordinator.request_login",
-            return_value=("started", None),
-        )
-        hub = EventHub()
-        codeartifact._ensure_single_sso_login(hub, "p", "dom-a", "npm")
-        request.assert_called_once_with(hub, profile="p", source="codeartifact", automatic=False)
-
-    def test_domains_sharing_a_profile_get_one_login(self, mocker):
-        release = threading.Event()
-        calls = []
-
-        def fake_run_sso_login_sync(hub, profile, source, **kwargs):
-            calls.append(profile)
-            release.wait(timeout=2.0)
-            return True
-
-        mocker.patch("cli_tool.sidecar.services.sso_service.run_sso_login_sync", side_effect=fake_run_sso_login_sync)
-        hub = EventHub()
-        q = hub.subscribe()
-        codeartifact._ensure_single_sso_login(hub, "p", "dom-a", "npm")
-        time.sleep(0.05)
-        codeartifact._ensure_single_sso_login(hub, "p", "dom-b", "npm")
-        codeartifact._ensure_single_sso_login(hub, "p", "dom-c", "pip")
-        release.set()
-        time.sleep(0.15)
-
-        assert calls == ["p"]
-        events = []
-        while not q.empty():
-            events.append(q.get_nowait())
-        assert any(e["event"] == "sso.session.login_finished" and e["success"] for e in events)
-
-    def test_different_sso_sessions_log_in_independently(self, mocker):
-        calls = []
-
-        def fake_run_sso_login_sync(hub, profile, source, **kwargs):
-            calls.append(profile)
-            return True
-
-        mocker.patch("cli_tool.sidecar.services.sso_service.run_sso_login_sync", side_effect=fake_run_sso_login_sync)
-        hub = EventHub()
-        codeartifact._ensure_single_sso_login(hub, "p1", "dom-a", "npm")
-        codeartifact._ensure_single_sso_login(hub, "p2", "dom-b", "npm")
-        time.sleep(0.15)
-        assert sorted(calls) == ["p1", "p2"]
-
-    def test_a_new_login_is_possible_after_the_previous_one_finished(self, mocker):
-        calls = []
-
-        def fake_run_sso_login_sync(hub, profile, source, **kwargs):
-            calls.append(profile)
-            return False
-
-        mocker.patch("cli_tool.sidecar.services.sso_service.run_sso_login_sync", side_effect=fake_run_sso_login_sync)
-        hub = EventHub()
-        codeartifact._ensure_single_sso_login(hub, "p", "dom-a", "npm")
-        time.sleep(0.1)
-        # explicit requests are never held back, even after a failed login
-        codeartifact._ensure_single_sso_login(hub, "p", "dom-a", "npm")
-        time.sleep(0.1)
-        assert calls == ["p", "p"]
+        # the window asks for the login (ensureLogin); the endpoint only reports it
+        request.assert_not_called()
 
 
 @pytest.mark.unit

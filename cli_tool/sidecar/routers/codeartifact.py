@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from cli_tool.sidecar.deps import get_app_state, require_bearer
+from cli_tool.sidecar.deps import require_bearer
 from cli_tool.sidecar.services.codeartifact_service import (
     SSOLoginRequired,
     _resolve_profile,
@@ -77,21 +77,6 @@ def list_tokens() -> list[dict[str, Any]]:
     return list_active_tokens()
 
 
-def _ensure_single_sso_login(hub, profile: str, domain: str, tool: str) -> None:
-    """Get the SSO session of `profile` back through the shared login handler.
-
-    The handler renews silently when possible, opens the browser only when
-    needed, and never runs two logins for one SSO session: when several
-    domains share the profile (the common case) the later requests join the
-    login in progress. Either way the frontend gets `sso.login.completed`
-    (with source "codeartifact") and retries every domain it queued.
-    """
-    from cli_tool.sidecar.services import login_coordinator
-
-    status, _attempt = login_coordinator.request_login(hub, profile=profile, source="codeartifact", automatic=False)
-    logger.info("Login for CodeArtifact domain '%s' (tool=%s, profile '%s'): %s", domain, tool, profile, status)
-
-
 @router.post("/login")
 def login_endpoint(body: dict[str, Any], request: Request) -> dict[str, Any]:
     """Authenticate with a CodeArtifact domain and configure the local tool.
@@ -120,14 +105,11 @@ def login_endpoint(body: dict[str, Any], request: Request) -> dict[str, Any]:
     try:
         return login(domain_cfg, tool, profile_override=profile)
     except SSOLoginRequired as exc:
-        # Chain: spawn browser flow in background, tell the frontend via WS.
-        # The frontend stays in Registry and auto-retries when SSO completes.
-        # Multiple domains for the same profile share the single in-flight
-        # SSO login — _ensure_single_sso_login dedupes the subprocess.
+        # The window gets the credentials through its shared login (which
+        # opens the browser only if the session can't be renewed silently,
+        # once per session) and retries.
         from fastapi.responses import JSONResponse
 
-        hub = get_app_state(request).event_hub
-        _ensure_single_sso_login(hub, exc.profile, domain_name, tool)
         return JSONResponse(
             status_code=status.HTTP_202_ACCEPTED,
             content={
@@ -143,15 +125,13 @@ def login_endpoint(body: dict[str, Any], request: Request) -> dict[str, Any]:
     except Exception as exc:
         # Defense in depth: if a boto3 SSO error slips past _ensure_sso_fresh
         # (e.g. boto3 STS call works but CodeArtifact triggers a different
-        # SSO check), chain it to a browser flow.
+        # SSO check), report it the same way so the window logs in.
         msg = str(exc)
         if any(s in msg for s in ("Token has expired", "refresh failed", "SSO", "sso")):
             profile = body.get("profile") or _resolve_profile(domain_cfg)
             if profile:
                 from fastapi.responses import JSONResponse
 
-                hub = get_app_state(request).event_hub
-                _ensure_single_sso_login(hub, profile, domain_name, tool)
                 return JSONResponse(
                     status_code=status.HTTP_202_ACCEPTED,
                     content={

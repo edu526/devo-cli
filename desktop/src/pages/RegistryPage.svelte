@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount } from "svelte";
   import {
     codeartifactApi,
     ApiError,
@@ -8,7 +8,6 @@
     type CodeArtifactLoginResult,
   } from "../lib/api";
   import { askConfirm } from "../lib/confirm";
-  import { ws } from "../lib/ws";
   import FormField from "../lib/FormField.svelte";
   import ViewToggle from "../lib/ViewToggle.svelte";
   import SearchInput from "../lib/SearchInput.svelte";
@@ -20,12 +19,12 @@
     type CodeArtifactDomainForm,
     type FieldErrors,
   } from "../lib/forms";
-  import { X, CircleDot, Circle } from "@lucide/svelte";
+  import { CircleDot, Circle } from "@lucide/svelte";
   import { get } from "svelte/store";
   import { registryCache } from "../lib/page-stores";
   import { defaultTool } from "../lib/codeartifact";
+  import { ensureLogin } from "../lib/login-flow";
 
-  import { open as openUrl } from "@tauri-apps/plugin-shell";
 
   const viewMode = viewModes.registry;
 
@@ -57,13 +56,6 @@
     Object.fromEntries((initialCache?.domains ?? []).map((d) => [d.domain, defaultTool(d, initialCache?.tokens ?? [])])),
   );
   let deleting: Record<string, boolean> = $state({});
-
-  // SSO chain state — when CodeArtifact login hits a dead SSO, the backend
-  // returns 202 and we show a banner until the browser flow completes.
-  let ssoLoginInProgress: { profile: string; domain: string; tool: string } | null = $state(null);
-  let ssoLoginError: string | null = $state(null);
-  let ssoLoginUnsubscribe: (() => void) | null = null;
-  let ssoManualUrl = $state<{ url: string; code: string } | null>(null);
 
   // Modal state
   let showModal = $state(false);
@@ -130,15 +122,20 @@
     }
   }
 
-  async function doLogin(domain: CodeArtifactDomain) {
+  async function doLogin(domain: CodeArtifactDomain, { afterLogin = false } = {}) {
     actionError = null;
     busyDomains = { ...busyDomains, [domain.domain]: true };
     const tool = toolFor(domain);
     try {
       const result = await codeartifactApi.login(domain.domain, tool);
-      // Backend returns 202 + sso_required when the SSO session is dead
+      // No AWS credentials for its profile: get them through the shared login
+      // (the banner shows it; domains of one profile share it), then retry once.
       if ("status" in result && result.status === "sso_required") {
-        queueSsoRetry(result.profile, domain.domain, tool);
+        if (afterLogin) {
+          actionError = `${domain.domain} still has no AWS credentials after logging in.`;
+        } else if ((await ensureLogin([result.profile])).has(result.profile)) {
+          await doLogin(domain, { afterLogin: true });
+        }
         return;
       }
       tokens = await codeartifactApi.tokens();
@@ -158,48 +155,6 @@
     } finally {
       busyAll = false;
     }
-  }
-
-  // Per-profile SSO retry queue. Bulk and single-domain refreshes funnel
-  // through here so that when `aws sso login --profile X` completes (once,
-  // because the backend dedupes the subprocess per profile), every domain
-  // that was waiting on it retries its CodeArtifact login.
-  type PendingSsoRetry = { domain: string; tool: string };
-  const ssoPendingByProfile = new Map<string, PendingSsoRetry[]>();
-
-  // Profiles whose SSO just completed in this page session. A late 202
-  // (one that arrives after the listener already drained the queue for
-  // that profile) is retried inline instead of being orphaned in a queue
-  // that nothing will ever drain — the SSO session in the backend is
-  // still fresh for ~8h so the retry should mint a token directly.
-  const ssoFreshlyRefreshed = new Set<string>();
-
-  function queueSsoRetry(profile: string, domain: string, tool: string) {
-    if (ssoFreshlyRefreshed.has(profile)) {
-      // The SSO listener already fired for this profile. Bypass the queue
-      // and re-issue login() directly — the backend's SSO check will
-      // either succeed (token minted) or re-raise SSOLoginRequired (then
-      // we fall back to queueing, which happens implicitly because
-      // ssoFreshlyRefreshed was never cleared on the previous success
-      // path; if SSO actually expired mid-page we'd handle the next 202
-      // normally via the listener re-queueing on its own drain).
-      (async () => {
-        try {
-          await codeartifactApi.login(domain, tool);
-          tokens = await codeartifactApi.tokens();
-        } catch (e) {
-          console.error(`Late login retry for ${domain} failed:`, e);
-        }
-      })();
-      return;
-    }
-    if (!ssoPendingByProfile.has(profile)) ssoPendingByProfile.set(profile, []);
-    ssoPendingByProfile.get(profile)!.push({ domain, tool });
-    // Mirror the first queued entry into the banner so the existing UX
-    // (one banner per profile) keeps working.
-    ssoLoginInProgress = { profile, domain, tool };
-    ssoLoginError = null;
-    ssoManualUrl = null;
   }
 
   // In-memory cache of last login result (not the JWT, just metadata)
@@ -315,59 +270,8 @@
     e.stopPropagation();
   }
 
-  let offUrlReady: (() => void) | null = null;
   onMount(() => {
     load();
-    offUrlReady = ws.on("sso.login.url_ready", (msg) => {
-      const m = msg as { profile?: string; source?: string; url?: string; code?: string };
-      if (
-        m.source === "codeartifact" &&
-        ssoLoginInProgress &&
-        m.profile === ssoLoginInProgress.profile
-      ) {
-        ssoManualUrl = { url: m.url!, code: m.code! };
-      }
-    });
-    // Single global listener for SSO completion across every queued
-    // profile. Backend dedupes the underlying `aws sso login` per profile
-    // (one tab per SSO session, not per domain) so this fires exactly
-    // once per profile; we then retry CodeArtifact login for every
-    // domain that was waiting on it.
-    ssoLoginUnsubscribe = ws.on("sso.login.completed", async (msg) => {
-      const m = msg as { profile?: string; source?: string; success?: boolean; error?: string };
-      if (m.source !== "codeartifact" || !m.profile) return;
-      const queue = ssoPendingByProfile.get(m.profile);
-      if (!queue) return;
-      ssoPendingByProfile.delete(m.profile);
-      // Mark the profile as freshly-refreshed BEFORE we start draining so
-      // any 202 that arrives mid-drain takes the fast inline-retry path
-      // instead of being queued behind us.
-      if (m.success) ssoFreshlyRefreshed.add(m.profile);
-      if (m.success) {
-        // Retry login for every queued domain — SSO is now fresh for the
-        // shared session, so each re-login should mint a token directly.
-        for (const p of queue) {
-          try {
-            await codeartifactApi.login(p.domain, p.tool);
-          } catch (e) {
-            console.error(`Retry login for ${p.domain} failed:`, e);
-          }
-        }
-        try {
-          tokens = await codeartifactApi.tokens();
-        } catch {
-          /* tokens refresh is best-effort */
-        }
-      } else {
-        ssoLoginError = m.error ?? "Browser SSO login failed";
-      }
-      ssoLoginInProgress = null;
-      ssoManualUrl = null;
-    });
-  });
-  onDestroy(() => {
-    ssoLoginUnsubscribe?.();
-    offUrlReady?.();
   });
 </script>
 
@@ -394,50 +298,6 @@
 
   {#if actionError}
     <div class="alert-error">{actionError}</div>
-  {/if}
-
-  {#if ssoLoginInProgress}
-    <div class="sso-banner">
-      <div class="sso-banner-main">
-        <span class="spinner-sm sso-spinner"></span>
-        <div>
-          <strong>Browser SSO login in progress</strong> for
-          <code>{ssoLoginInProgress.profile}</code>
-          {#if ssoManualUrl}
-            <p>
-              Your browser could not be opened automatically. Please open
-              <a
-                href={ssoManualUrl.url}
-                onclick={(e) => {
-                  e.preventDefault();
-                  if (ssoManualUrl) {
-                    openUrl(ssoManualUrl.url);
-                  }
-                }}
-                class="sso-link">{ssoManualUrl.url}</a
-              >
-              {#if ssoManualUrl.code}
-                and enter the code <strong>{ssoManualUrl.code}</strong>.
-              {:else}
-                to approve the request.
-              {/if}
-            </p>
-          {:else}
-            <p>
-              Approve the request in the browser window that just opened. The CodeArtifact login
-              will retry automatically.
-            </p>
-          {/if}
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  {#if ssoLoginError}
-    <div class="alert-error">
-      {ssoLoginError}
-      <button class="dismiss" onclick={() => (ssoLoginError = null)}><X size={14} /></button>
-    </div>
   {/if}
 
   {#if loading}
@@ -794,33 +654,6 @@
     to {
       transform: rotate(360deg);
     }
-  }
-  .sso-banner {
-    background: color-mix(in srgb, var(--warning) 10%, transparent);
-    border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
-    border-radius: 6px;
-    padding: 0.75rem 1rem;
-    margin-bottom: 1rem;
-  }
-  .sso-banner-main {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
-  }
-  .sso-banner p {
-    margin: 0.25rem 0 0 0;
-    color: var(--text-muted);
-    font-size: 0.85rem;
-  }
-  .sso-banner a {
-    word-break: break-all;
-    overflow-wrap: anywhere;
-    color: var(--warning);
-    text-decoration: underline;
-  }
-  .sso-spinner {
-    margin-top: 0.2rem;
-    color: var(--warning);
   }
   .select-tool {
     background: var(--bg-surface-2);

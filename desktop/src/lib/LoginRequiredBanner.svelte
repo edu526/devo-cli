@@ -9,7 +9,7 @@
   const active = $derived([...$loginActive]);
   // The sign-in page of a login in progress, to open it again from here: a
   // login Devo started by itself often opens behind the window in use.
-  const signInUrl = $derived(active.map((s) => $loginUrls[s]).find(Boolean));
+  const signIn = $derived(active.map((s) => $loginUrls[s]).find(Boolean));
   // Sessions waiting for the user, minus the ones whose login is already open.
   const pendingSessions = $derived(Object.keys($loginNeeded).filter((s) => !$loginActive.has(s)));
   const pendingLabel = $derived(
@@ -24,9 +24,10 @@
     <div class="msg">
       <strong>Signing in to AWS.</strong>
       Finish the login for {listed(active)} in your browser. It may have opened behind other windows.
+      {#if signIn?.code}Enter the code <strong>{signIn.code}</strong> there.{/if}
     </div>
-    {#if signInUrl}
-      <button class="btn" onclick={() => openUrl(signInUrl)}>Open sign-in page</button>
+    {#if signIn}
+      <button class="btn" onclick={() => openUrl(signIn.url)}>Open sign-in page</button>
     {/if}
   </div>
 {:else if pendingSessions.length > 0}

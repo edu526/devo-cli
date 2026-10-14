@@ -48,8 +48,9 @@ describe("login-flow", () => {
       emit("sso.session.login_finished", { session: "corp", success: false });
       emit("sso.session.login_started", { session: "corp", source: "auto_renew", automatic: true });
 
-      expect(notifyUser).toHaveBeenCalledOnce();
-      expect(vi.mocked(notifyUser).mock.calls[0]![1]).toContain("corp");
+      const started = vi.mocked(notifyUser).mock.calls.filter(([title]) => title === "AWS sign-in needed");
+      expect(started).toHaveLength(1);
+      expect(started[0]![1]).toContain("corp");
     });
 
     it("a user-initiated one does not notify (they just clicked)", () => {
@@ -145,11 +146,26 @@ describe("login-flow", () => {
 
   describe("the sign-in page of a login in progress", () => {
     it("is kept per session until the login ends", () => {
-      emit("sso.login.url_ready", { session: "corp", profile: "a", url: "https://sign-in" });
-      expect(get(loginUrls)).toEqual({ corp: "https://sign-in" });
+      emit("sso.login.url_ready", { session: "corp", profile: "a", url: "https://sign-in", code: "" });
+      expect(get(loginUrls)).toEqual({ corp: { url: "https://sign-in", code: "" } });
 
       emit("sso.session.login_finished", { session: "corp", success: true, renewed: [] });
       expect(get(loginUrls)).toEqual({});
+    });
+  });
+
+  describe("a login Devo opened by itself that isn't completed", () => {
+    it("is notified, so it isn't missed while Devo is hidden", () => {
+      emit("sso.session.login_started", { session: "corp", source: "connection", automatic: true });
+      vi.mocked(notifyUser).mockReset();
+      emit("sso.session.login_finished", { session: "corp", success: false, renewed: [] });
+      expect(notifyUser).toHaveBeenCalledWith("AWS sign-in not completed", expect.stringContaining("corp"));
+    });
+
+    it("but one the user started isn't", () => {
+      emit("sso.session.login_started", { session: "corp", source: "profile", automatic: false });
+      emit("sso.session.login_finished", { session: "corp", success: false, renewed: [] });
+      expect(notifyUser).not.toHaveBeenCalled();
     });
   });
 

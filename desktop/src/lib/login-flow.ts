@@ -30,6 +30,8 @@ const STARTED_NOTICE_WINDOW_MS = 5 * 60 * 1000;
 let loginTimeout: ReturnType<typeof setTimeout> | null = null;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 const lastStartedNotice = new Map<string, number>();
+// Sessions whose open login Devo started by itself (not a click).
+const automaticLogins = new Set<string>();
 
 function finishLogin(): void {
   if (loginTimeout !== null) clearTimeout(loginTimeout);
@@ -209,7 +211,10 @@ export function startLoginWatcher(): () => void {
     setActive(session, true);
     // The user didn't click anything for automatic logins: tell them why a
     // browser tab just appeared.
-    if (msg.automatic) noticeLoginStarted(session);
+    if (msg.automatic) {
+      automaticLogins.add(session);
+      noticeLoginStarted(session);
+    }
   });
 
   // The sign-in page of a login that is open, by session: the browser may
@@ -217,7 +222,8 @@ export function startLoginWatcher(): () => void {
   const offUrl = ws.on("sso.login.url_ready", (msg: WsMessage) => {
     const session = msg.session as string | undefined;
     const url = msg.url as string | undefined;
-    if (session && url) loginUrls.update((current) => ({ ...current, [session]: url }));
+    const code = (msg.code as string | undefined) ?? "";
+    if (session && url) loginUrls.update((current) => ({ ...current, [session]: { url, code } }));
   });
 
   const offFinished = ws.on("sso.session.login_finished", (msg: WsMessage) => {
@@ -234,7 +240,16 @@ export function startLoginWatcher(): () => void {
     } else {
       // Still needs a login; offer the button.
       loginNeeded.update((current) => ({ ...current, [session]: current[session] ?? [] }));
+      // A login Devo opened by itself may have gone unnoticed (Devo hidden,
+      // the tab behind other windows): say so. One the user started, they saw.
+      if (automaticLogins.has(session)) {
+        void notifyUser(
+          "AWS sign-in not completed",
+          `Signing in to "${session}" didn't finish. Open Devo and click Log in to reconnect.`,
+        );
+      }
     }
+    automaticLogins.delete(session);
   });
 
   const offNeeded = ws.on("profile.needs_login", (msg: WsMessage) => {
@@ -274,6 +289,7 @@ export function _resetLoginFlow(): void {
   if (retryTimer !== null) clearTimeout(retryTimer);
   retryTimer = null;
   lastStartedNotice.clear();
+  automaticLogins.clear();
   finishLogin();
   loginNeeded.set({});
   loginActive.set(new Set());

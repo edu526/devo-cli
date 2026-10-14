@@ -25,7 +25,6 @@
   import { retryNetworkErrors } from "../lib/retry";
   import { X, Star, RefreshCw } from "@lucide/svelte";
 
-  import { open as openUrl } from "@tauri-apps/plugin-shell";
 
   const viewMode = viewModes.profiles;
   import {
@@ -60,7 +59,6 @@
   let busySet: Set<string> = $state(new Set());
   let busyRefresh: Set<string> = $state(new Set());
   let ssoInProgress: string | null = $state(null);
-  let ssoManualUrl: { url: string; code: string } | null = $state(null);
   let query = $state("");
 
   // ── Add Profile wizard state ───────────────────────────────────────────
@@ -498,7 +496,6 @@
   let offRefreshing: (() => void) | null = null;
   let offRefreshed: (() => void) | null = null;
   let offExpiring: (() => void) | null = null;
-  let offUrlReady: (() => void) | null = null;
   let offDiscoverStarting: (() => void) | null = null;
   let offDiscoverCompleted: (() => void) | null = null;
 
@@ -519,7 +516,6 @@
     });
     offRefreshed = ws.on("profile.refreshed", (msg: WsMessage) => {
       ssoInProgress = null;
-      ssoManualUrl = null;
       refreshing = false;
       sessionLogin = null;
       busyRefresh = new Set();
@@ -547,12 +543,6 @@
         );
       }
     });
-    offUrlReady = ws.on("sso.login.url_ready", (msg: WsMessage) => {
-      const m = msg as { profile?: string; source?: string; url?: string; code?: string };
-      if (m.source === "profile" && m.profile === ssoInProgress) {
-        ssoManualUrl = { url: m.url!, code: m.code! };
-      }
-    });
     offDiscoverStarting = ws.on("sso.discover.starting", () => {
       if (showCreateModal) discoverInProgress = true;
     });
@@ -572,7 +562,6 @@
     offRefreshing?.();
     offRefreshed?.();
     offExpiring?.();
-    offUrlReady?.();
     offDiscoverStarting?.();
     offDiscoverCompleted?.();
     if (autoRefreshInterval !== null) clearInterval(autoRefreshInterval);
@@ -613,40 +602,6 @@
       </div>
     </div>
   </div>
-
-  {#if ssoInProgress}
-    <div class="alert-sso">
-      <span class="spinner-sm spinner-sso"></span>
-      <div>
-        <strong>Browser SSO login in progress</strong> for <code>{ssoInProgress}</code>
-        {#if ssoManualUrl}
-          <p>
-            Your browser could not be opened automatically. Please open
-            <a
-              href={ssoManualUrl.url}
-              onclick={(e) => {
-                e.preventDefault();
-                if (ssoManualUrl) {
-                  openUrl(ssoManualUrl.url);
-                }
-              }}
-              class="sso-link">{ssoManualUrl.url}</a
-            >
-            {#if ssoManualUrl.code}
-              and enter the code <strong>{ssoManualUrl.code}</strong>.
-            {:else}
-              to approve the request.
-            {/if}
-          </p>
-        {:else}
-          <p>
-            Approve the request in the browser window that just opened. This may take up to 2
-            minutes.
-          </p>
-        {/if}
-      </div>
-    </div>
-  {/if}
 
   {#if actionError}
     <div class="alert-error">
@@ -1535,41 +1490,6 @@
     color: var(--warning) !important;
     font-style: italic;
     padding: 0 1rem !important;
-  }
-
-  /* SSO in-progress banner */
-  .alert-sso {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
-    background: color-mix(in srgb, var(--warning) 14%, transparent);
-    border: 1px solid var(--warning);
-    border-radius: 6px;
-    padding: 0.75rem 1rem;
-    color: var(--warning);
-    font-size: 0.85rem;
-  }
-  .alert-sso strong {
-    display: block;
-    margin-bottom: 0.2rem;
-  }
-  .alert-sso p {
-    margin: 0;
-    color: color-mix(in srgb, var(--warning) 65%, black);
-    font-size: 0.8rem;
-  }
-  .alert-sso code {
-    color: color-mix(in srgb, var(--warning) 75%, white);
-  }
-  .alert-sso a {
-    word-break: break-all;
-    overflow-wrap: anywhere;
-    color: var(--warning);
-    text-decoration: underline;
-  }
-  .spinner-sso {
-    margin-top: 3px;
-    flex-shrink: 0;
   }
 
   /* Dismissible error */
