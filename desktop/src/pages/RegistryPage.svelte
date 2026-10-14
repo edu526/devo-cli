@@ -22,6 +22,7 @@
   import { X, CircleDot, Circle } from "@lucide/svelte";
   import { get } from "svelte/store";
   import { registryCache } from "../lib/page-stores";
+  import { defaultTool } from "../lib/codeartifact";
 
   import { open as openUrl } from "@tauri-apps/plugin-shell";
 
@@ -49,7 +50,11 @@
   let packagesOpen: Record<string, boolean> = $state({});
   let packagesData: Record<string, [string, string | null][]> = $state({});
   let loadingPackages: string | null = $state(null);
-  let toolSelections: Record<string, string> = $state({});
+  // Set before the first render: a <select> bound to a missing key writes its
+  // first option (npm) back, which `load()` would then keep.
+  let toolSelections: Record<string, string> = $state(
+    Object.fromEntries((initialCache?.domains ?? []).map((d) => [d.domain, defaultTool(d, initialCache?.tokens ?? [])])),
+  );
   let deleting: Record<string, boolean> = $state({});
 
   // SSO chain state — when CodeArtifact login hits a dead SSO, the backend
@@ -78,7 +83,7 @@
   }
 
   function toolFor(domain: CodeArtifactDomain): string {
-    return toolSelections[domain.domain] ?? "npm";
+    return toolSelections[domain.domain] ?? defaultTool(domain, tokens);
   }
 
   function formatExpiry(iso: string | null): string | null {
@@ -102,7 +107,7 @@
       registryCache.set({ domains: d, tokens: t });
       for (const dom of domains) {
         if (!(dom.domain in toolSelections)) {
-          toolSelections[dom.domain] = "npm";
+          toolSelections[dom.domain] = defaultTool(dom, t);
         }
       }
     } catch (e) {
