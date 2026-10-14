@@ -5,7 +5,14 @@
   import { errorLog, clearErrorLog } from "../lib/error-log";
   import SearchInput from "../lib/SearchInput.svelte";
   import { Play, Pause, RefreshCw, Copy, Check } from "@lucide/svelte";
-  import { parseLogLine, groupLogLines, type LogLevel, type LogEntry } from "../lib/log-parser";
+  import {
+    parseLogLine,
+    groupLogLines,
+    displayMessage,
+    isRoutineHttp,
+    type LogLevel,
+    type LogEntry,
+  } from "../lib/log-parser";
   import { copyToClipboard } from "../lib/clipboard";
 
   let nextId = 1;
@@ -20,9 +27,10 @@
     expandedLogs = next;
   }
 
+  // DEBUG starts hidden: with Backend Debug Mode on, it is nearly every line.
   let levels: Record<LogLevel, boolean> = $state({
     ALL: true,
-    DEBUG: true,
+    DEBUG: false,
     INFO: true,
     WARN: true,
     ERROR: true,
@@ -116,8 +124,14 @@
     return d.toLocaleTimeString();
   }
 
+  // Requests from this window to the background service: most of the log,
+  // rarely useful. Failed ones (4xx/5xx) are always shown.
+  let showHttp = $state(false);
+
   const filtered = $derived(
     logEntries.filter((entry) => {
+      if (!showHttp && isRoutineHttp(entry)) return false;
+
       // Level filter
       const cls = getLevelClass(entry.level || entry.raw);
       let matchesLevel = false;
@@ -342,9 +356,16 @@
         </label>
       {/each}
     </div>
+    <label
+      class="level-toggle"
+      title="Requests from the Devo window to its background service. Failed ones are always shown."
+    >
+      <input type="checkbox" checked={showHttp} onchange={() => (showHttp = !showHttp)} />
+      Show API requests
+    </label>
   </div>
 
-  <p class="muted log-path">~/.devo/sidecar.log · streaming via WS</p>
+  <p class="muted log-path">~/.devo/sidecar.log · updates live</p>
 
   {#if error}
     <div class="alert-error">{error}</div>
@@ -373,10 +394,12 @@
             aria-expanded={expandedLogs.has(entry.id)}
           >
             <span class="chev">{expandedLogs.has(entry.id) ? "▾" : "▸"}</span>
-            {#if entry.ts}
-              <span class="log-ts">{entry.ts}</span>
+            {#if entry.level}
+              {#if entry.ts}<span class="log-ts">{entry.ts}</span>{/if}
               <span class="log-level {getLevelClass(entry.level || '')}">{entry.level}</span>
-              <span class="log-msg">{entry.msg}</span>
+              <span class="log-msg"
+                >{expandedLogs.has(entry.id) ? entry.msg : displayMessage(entry.msg ?? "")}</span
+              >
             {:else}
               <span class="log-msg {getLevelClass(entry.raw)}">{entry.raw}</span>
             {/if}
