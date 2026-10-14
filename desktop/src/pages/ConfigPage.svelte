@@ -3,7 +3,7 @@
   import { EditorView, basicSetup } from "codemirror";
   import { json } from "@codemirror/lang-json";
   import { oneDark } from "@codemirror/theme-one-dark";
-  import { EditorState } from "@codemirror/state";
+  import { Compartment, EditorState } from "@codemirror/state";
   import { keymap } from "@codemirror/view";
   import { configApi, ApiError } from "../lib/api";
   import { get } from "svelte/store";
@@ -11,6 +11,7 @@
   import { isAutostartEnabled, setAutostartEnabled } from "../lib/autostart";
   import { theme, type Theme } from "../lib/theme";
   import { fetchUpdate, getAppVersion, installUpdate, updateAvailable, type ProgressState } from "../lib/update";
+  import Switch from "../lib/Switch.svelte";
 
   const initialCache = get(configCache);
   let config: Record<string, unknown> = $state(initialCache ?? {});
@@ -135,14 +136,20 @@
   }
 
   let debugMode = $state(false);
+  let debugBusy = $state(false);
+  let debugError: string | null = $state(null);
 
   async function toggleDebugMode() {
     const nextVal = !debugMode;
+    debugBusy = true;
+    debugError = null;
     try {
       applySaved(await configApi.patch({ debug_mode: nextVal }));
-      debugMode = nextVal;
-    } catch {
-      parseError = "Failed to update debug mode";
+      debugMode = !!config.debug_mode;
+    } catch (e) {
+      debugError = e instanceof Error ? e.message : String(e);
+    } finally {
+      debugBusy = false;
     }
   }
 
@@ -152,6 +159,15 @@
 
   let editorEl: HTMLDivElement;
   let view: EditorView | null = null;
+
+  // The editor follows the app theme (`data-theme` on <html>, already
+  // resolved for "system"): One Dark when dark, CodeMirror's own light colors
+  // when light, where One Dark's pale text is hard to read.
+  const editorTheme = new Compartment();
+  const editorThemeFor = () => (document.documentElement.getAttribute("data-theme") === "light" ? [] : oneDark);
+  const themeObserver = new MutationObserver(() => {
+    view?.dispatch({ effects: editorTheme.reconfigure(editorThemeFor()) });
+  });
 
   function createEditor(initialContent: string) {
     if (view) view.destroy();
@@ -171,7 +187,7 @@
       extensions: [
         basicSetup,
         json(),
-        oneDark,
+        editorTheme.of(editorThemeFor()),
         saveKeymap,
         EditorView.theme({
           "&": { height: "100%", fontSize: "0.82rem" },
@@ -189,13 +205,18 @@
     view = new EditorView({ state, parent: editorEl });
   }
 
+  /** The switches show what `config` says (after loading it or saving the JSON). */
+  function syncSwitches() {
+    notificationsEnabled = config.notifications_enabled !== false;
+    autoOpenBrowser = autoOpenBrowserIn(config);
+    debugMode = !!config.debug_mode;
+  }
+
   async function load() {
     try {
       config = await configApi.get();
       configCache.set(config);
-      notificationsEnabled = config.notifications_enabled !== false;
-      autoOpenBrowser = autoOpenBrowserIn(config);
-      debugMode = !!config.debug_mode;
+      syncSwitches();
       const text = JSON.stringify(config, null, 2);
       if (view) {
         view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
@@ -224,6 +245,8 @@
     saving = true;
     try {
       config = await configApi.put(parsed);
+      configCache.set(config);
+      syncSwitches();
       const updated = JSON.stringify(config, null, 2);
       view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: updated } });
       saveOk = true;
@@ -245,6 +268,7 @@
   }
 
   onMount(() => {
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     createEditor("");
     load();
     isAutostartEnabled().then((v) => {
@@ -255,188 +279,299 @@
     });
   });
 
-  onDestroy(() => view?.destroy());
+  onDestroy(() => {
+    themeObserver.disconnect();
+    view?.destroy();
+  });
 </script>
 
-<div class="page" style="height: calc(100vh - 36px - 4rem);">
+<div class="page settings-page">
   <div class="page-header">
-    <h1>Config</h1>
-    <div class="actions">
-      <button class="btn-secondary" onclick={reset}>Reset</button>
-      <button class="btn-primary" onclick={save} disabled={saving}>
-        {#if saving}
-          <span class="spinner-sm"></span> Saving…
-        {:else if saveOk}
-          Saved ✓
-        {:else}
-          Save
-        {/if}
-      </button>
-    </div>
+    <h1>Settings</h1>
   </div>
 
-  {#if parseError}
-    <div class="alert-error">{parseError}</div>
-  {/if}
+  <section class="card" aria-labelledby="settings-general">
+    <h2 id="settings-general">General</h2>
 
-  <div class="app-settings">
-    <label class="autostart-toggle" title="Registers Devo to start automatically when you log in.">
-      <input
-        type="checkbox"
+    <div class="setting">
+      <div class="setting-text">
+        <label for="opt-autostart">Launch Devo at system startup</label>
+        <p id="opt-autostart-desc">Start Devo in the background when you sign in to your computer.</p>
+        {#if autostartError}
+          <p class="setting-error">{autostartError}</p>
+        {/if}
+      </div>
+      <Switch
+        id="opt-autostart"
+        describedby="opt-autostart-desc"
         checked={autostart}
         disabled={autostartBusy}
         onchange={toggleAutostart}
       />
-      Launch Devo at system startup
-    </label>
-    {#if autostartError}
-      <span class="autostart-error">{autostartError}</span>
-    {/if}
+    </div>
 
-    <label class="theme-select">
-      Theme
-      <select value={$theme} onchange={(e) => theme.set(e.currentTarget.value as Theme)}>
+    <div class="setting">
+      <div class="setting-text">
+        <label for="opt-theme">Theme</label>
+        <p id="opt-theme-desc">System follows your computer's light or dark mode.</p>
+      </div>
+      <select
+        id="opt-theme"
+        class="select"
+        aria-describedby="opt-theme-desc"
+        value={$theme}
+        onchange={(e) => theme.set(e.currentTarget.value as Theme)}
+      >
         <option value="dark">Dark</option>
         <option value="light">Light</option>
         <option value="system">System</option>
       </select>
-    </label>
+    </div>
 
-    <label class="notifications-toggle" title="Show OS desktop notifications for background events.">
-      <input
-        type="checkbox"
+    <div class="setting">
+      <div class="setting-text">
+        <label for="opt-notifications">Desktop notifications</label>
+        <p id="opt-notifications-desc">
+          Tell you about what happens while Devo is in the background, such as an AWS session that needs a login.
+        </p>
+        {#if notificationsError}
+          <p class="setting-error">{notificationsError}</p>
+        {/if}
+      </div>
+      <Switch
+        id="opt-notifications"
+        describedby="opt-notifications-desc"
         checked={notificationsEnabled}
         disabled={notificationsBusy}
         onchange={toggleNotifications}
       />
-      Desktop notifications
-    </label>
-    {#if notificationsError}
-      <span class="autostart-error">{notificationsError}</span>
-    {/if}
+    </div>
+  </section>
 
-    <label
-      class="autostart-toggle"
-      title="When a connected tunnel's AWS session expires, Devo opens the browser so you can sign in again. Turn it off to get a notification and a Log in button instead. Clicking Connect, Refresh or Log in opens it either way."
-    >
-      <input
-        type="checkbox"
+  <section class="card" aria-labelledby="settings-aws">
+    <h2 id="settings-aws">AWS sign-in</h2>
+
+    <div class="setting">
+      <div class="setting-text">
+        <label for="opt-auto-browser">Open the browser to sign in automatically</label>
+        <p id="opt-auto-browser-desc">
+          When a connected tunnel's AWS session expires, Devo opens your browser so you can sign in again. Turn
+          it off to get a notification and a Log in button instead. Clicking Connect, Refresh or Log in opens it
+          either way.
+        </p>
+        {#if autoOpenBrowserError}
+          <p class="setting-error">{autoOpenBrowserError}</p>
+        {/if}
+      </div>
+      <Switch
+        id="opt-auto-browser"
+        describedby="opt-auto-browser-desc"
         checked={autoOpenBrowser}
         disabled={autoOpenBrowserBusy}
         onchange={toggleAutoOpenBrowser}
       />
-      Open the browser to sign in to AWS automatically
-    </label>
-    {#if autoOpenBrowserError}
-      <span class="autostart-error">{autoOpenBrowserError}</span>
-    {/if}
+    </div>
+  </section>
 
-    <label class="autostart-toggle" title="Enable Uvicorn debug logs. Requires app restart to take effect.">
-      <input type="checkbox" checked={debugMode} onchange={toggleDebugMode} />
-      Backend Debug Mode
-    </label>
-  </div>
+  <section class="card" aria-labelledby="settings-updates">
+    <h2 id="settings-updates">Updates</h2>
 
-  <div class="app-settings">
-    <button class="btn-secondary" onclick={handleUpdateClick} disabled={updateBusy}>
-      {#if updateBusy}
-        {$updateAvailable ? "Installing…" : "Checking…"}
-      {:else}
-        {$updateAvailable ? "Install update" : "Check for updates"}
+    <div class="setting">
+      <div class="setting-text">
+        <span class="setting-title">Devo {currentVersion ? `v${currentVersion}` : ""}</span>
+        {#if installError}
+          <p class="setting-error">{installError}</p>
+        {:else if $updateAvailable}
+          <p class="update-available">Version {$updateAvailable.version} is available.</p>
+        {:else if updateCheckResult}
+          <p>{updateCheckResult}</p>
+        {:else}
+          <p>Check whether a newer version is available.</p>
+        {/if}
+      </div>
+      <button
+        class={$updateAvailable ? "btn-primary" : "btn-secondary"}
+        onclick={handleUpdateClick}
+        disabled={updateBusy}
+      >
+        {#if updateBusy}
+          <span class="spinner-sm"></span>
+          {$updateAvailable ? "Installing…" : "Checking…"}
+        {:else}
+          {$updateAvailable ? "Install update" : "Check for updates"}
+        {/if}
+      </button>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="settings-advanced">
+    <h2 id="settings-advanced">Advanced</h2>
+
+    <div class="setting">
+      <div class="setting-text">
+        <label for="opt-debug">Backend debug logs</label>
+        <p id="opt-debug-desc">
+          Write detailed logs from Devo's background service. Takes effect after restarting Devo.
+        </p>
+        {#if debugError}
+          <p class="setting-error">{debugError}</p>
+        {/if}
+      </div>
+      <Switch
+        id="opt-debug"
+        describedby="opt-debug-desc"
+        checked={debugMode}
+        disabled={debugBusy}
+        onchange={toggleDebugMode}
+      />
+    </div>
+
+    <div class="setting editor-setting">
+      <div class="editor-header">
+        <div class="setting-text">
+          <span class="setting-title">config.json</span>
+          <p>
+            Every setting, including the ones above. Saved to <code>{configPath}</code>.
+            <span class="shortcuts">Ctrl+S save · Ctrl+Z undo · Ctrl+Y redo</span>
+          </p>
+        </div>
+        <div class="actions">
+          <button class="btn-secondary" onclick={reset} disabled={loading}>Reset</button>
+          <button class="btn-primary" onclick={save} disabled={saving || loading}>
+            {#if saving}
+              <span class="spinner-sm"></span> Saving…
+            {:else if saveOk}
+              Saved ✓
+            {:else}
+              Save
+            {/if}
+          </button>
+        </div>
+      </div>
+
+      {#if parseError}
+        <div class="alert-error">{parseError}</div>
       {/if}
-    </button>
-    {#if updateCheckResult}
-      <span class="update-status">{updateCheckResult}</span>
-    {/if}
-    {#if installError}
-      <span class="autostart-error">{installError}</span>
-    {/if}
-  </div>
-
-  {#if loading}
-    <p class="muted">Loading…</p>
-  {:else}
-    <p class="muted hint">
-      Edit the JSON below. Changes are written to <code>{configPath}</code>.
-      <span class="shortcuts">Ctrl+Z undo · Ctrl+Y redo · Ctrl+S save</span>
-    </p>
-  {/if}
-
-  <div class="editor-wrap" class:hidden={loading} bind:this={editorEl}></div>
+      {#if loading}
+        <p class="muted">Loading…</p>
+      {/if}
+      <div class="editor-wrap" class:hidden={loading} bind:this={editorEl}></div>
+    </div>
+  </section>
 </div>
 
 <style>
-  .app-settings {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.75rem 1.25rem;
-    margin-bottom: 0.75rem;
+  .settings-page {
+    max-width: 880px;
   }
 
-  .autostart-toggle,
-  .notifications-toggle {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .autostart-toggle input,
-  .notifications-toggle input {
-    cursor: pointer;
-  }
-
-  .autostart-error {
-    color: var(--danger);
-    font-size: 0.8rem;
-  }
-
-  .theme-select {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    user-select: none;
-  }
-
-  .theme-select select {
+  .card {
     background: var(--bg-surface);
-    color: var(--text-primary);
     border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 0.2rem 0.4rem;
+    border-radius: 8px;
+    padding: 0.25rem 1.25rem;
+  }
+
+  .card h2 {
+    margin: 0;
+    padding: 0.9rem 0 0.4rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+
+  .setting {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 0.9rem 0;
+  }
+
+  .setting + .setting {
+    border-top: 1px solid var(--border);
+  }
+
+  .setting-text {
+    min-width: 0;
+  }
+
+  .setting-text label,
+  .setting-title {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .setting-text label {
+    cursor: pointer;
+  }
+
+  .setting-text p {
+    margin: 0.25rem 0 0;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--text-muted);
+  }
+
+  .setting-text p.setting-error {
+    color: var(--danger);
+  }
+
+  .setting-text p.update-available {
+    color: var(--accent);
+  }
+
+  .select {
+    flex-shrink: 0;
+    background: var(--bg-surface-2);
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 0.35rem 0.5rem;
     font-size: 0.85rem;
     cursor: pointer;
   }
 
-  .theme-select select:focus-visible {
+  .select:focus-visible {
     outline: none;
     border-color: var(--accent);
   }
 
-  .update-status {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
+  .setting button {
+    flex-shrink: 0;
   }
 
-  .hint {
-    margin-bottom: 0.5rem;
+  .editor-setting {
+    display: block;
+  }
+
+  .editor-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .editor-setting .alert-error,
+  .editor-setting .muted {
+    margin: 0 0 0.75rem;
   }
 
   .shortcuts {
-    margin-left: 0.75rem;
+    display: block;
+    margin-top: 0.15rem;
     color: var(--text-faint);
     font-size: 0.75rem;
   }
 
   .editor-wrap {
-    flex: 1;
-    min-height: 0;
+    height: min(60vh, 32rem);
+    min-height: 16rem;
     border: 1px solid var(--border);
     border-radius: 6px;
     overflow: hidden;
@@ -461,5 +596,13 @@
   .editor-wrap :global(.cm-gutters) {
     background: var(--bg-sidebar);
     border-right: 1px solid var(--border);
+  }
+
+  @media (max-width: 560px) {
+    .setting,
+    .editor-header {
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
   }
 </style>
