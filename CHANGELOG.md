@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v3.16.0 (2026-10-14)
+
+### Bug Fixes
+
+- **ssm**: Don't give a new database the loopback IP of a paused one
+  ([`51617fd`](https://github.com/edu526/devo-cli/commit/51617fd26fe6883ec328e8c038b8c54bb423def6))
+
+- **ssm**: Give databases sharing a loopback IP and port their own
+  ([`9a3d18d`](https://github.com/edu526/devo-cli/commit/9a3d18d0d2005725b0e1a05b191cb637d38e1297))
+
+### Chores
+
+- Explain why some desktop commits stay in the CLI changelog
+  ([`ed22af2`](https://github.com/edu526/devo-cli/commit/ed22af2744d639f5e0ec2753703272bfb1b2d3d5))
+
+### Features
+
+- **ssm**: `devo ssm hosts sync` removes stale hosts entries too
+  ([`f588106`](https://github.com/edu526/devo-cli/commit/f588106816f5319a8a581cfc32cc13a7aa9d6e3d))
+
+- **ssm**: Pause hostname forwarding, and say why the hosts file can't change
+  ([`9a022b9`](https://github.com/edu526/devo-cli/commit/9a022b976bc5b70b65936f2163538d14fa6c71a0))
+
+
 ## v3.15.1 (2026-10-13)
 
 ### Bug Fixes
