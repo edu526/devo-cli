@@ -38,6 +38,8 @@ def setup_databases(
     hm = hosts_manager or HostsManager()
     ssm_config = cm.load()
     databases = cm.list_databases()
+    # IPs other databases keep in the config, also the paused ones (no hosts entry)
+    taken_ips = {c.get("local_address") for c in databases.values()} - {None, "127.0.0.1"}
 
     if db_names is not None:
         databases = {n: c for n, c in databases.items() if n in db_names}
@@ -53,7 +55,8 @@ def setup_databases(
 
         # Compute (do not persist yet) the loopback IP
         needs_address = "local_address" not in db_config or db_config["local_address"] == "127.0.0.1"
-        local_address = hm.get_next_loopback_ip() if needs_address else db_config["local_address"]
+        local_address = hm.get_next_loopback_ip(taken_ips) if needs_address else db_config["local_address"]
+        taken_ips.add(local_address)
 
         # Compute (do not persist yet) the local port
         original_local_port = db_config.get("local_port", db_config["port"])

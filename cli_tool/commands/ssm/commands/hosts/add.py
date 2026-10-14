@@ -24,7 +24,8 @@ def hosts_add_single(name):
 
     # Get or assign loopback IP
     if "local_address" not in db_config or db_config["local_address"] == "127.0.0.1":
-        local_address = hosts_manager.get_next_loopback_ip()
+        taken = {c.get("local_address") for c in config_manager.list_databases().values()} - {None, "127.0.0.1"}
+        local_address = hosts_manager.get_next_loopback_ip(taken)
 
         # Update config
         config = config_manager.load()

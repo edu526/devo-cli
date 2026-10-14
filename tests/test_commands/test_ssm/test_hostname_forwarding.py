@@ -346,3 +346,44 @@ class TestActiveAntivirus:
 
         assert active_antivirus() == []
         run.assert_not_called()
+
+
+@pytest.mark.unit
+class TestLoopbackIpsAreNotShared:
+    """Each database gets its own 127.0.0.X. A paused database has no hosts
+    entry, but its IP comes back with it: it must not look free."""
+
+    def test_setup_skips_the_ip_of_a_paused_database(self, hosts_file):
+        save_config(
+            {
+                "ssm": {
+                    "databases": {
+                        "paused": _db("paused.rds", "127.0.0.2", hostname_forwarding=False),
+                        "new": _db("new.rds", "127.0.0.1"),  # never set up
+                    }
+                }
+            }
+        )
+
+        succeeded, _failed = setup_databases()
+
+        assert [(s["name"], s["ip"]) for s in succeeded] == [("new", "127.0.0.3")]
+
+    def test_two_new_databases_in_one_setup_get_different_ips(self, hosts_file):
+        save_config({"ssm": {"databases": {"a": _db("a.rds", "127.0.0.1"), "b": _db("b.rds", "127.0.0.1")}}})
+
+        succeeded, _failed = setup_databases()
+
+        assert sorted(s["ip"] for s in succeeded) == ["127.0.0.2", "127.0.0.3"]
+
+    def test_hosts_add_skips_the_ip_of_a_paused_database(self, hosts_file):
+        from click.testing import CliRunner
+
+        from cli_tool.commands.ssm.commands.hosts.add import hosts_add_single
+
+        save_config({"ssm": {"databases": {"paused": _db("paused.rds", "127.0.0.2", hostname_forwarding=False), "new": _db("new.rds", "127.0.0.1")}}})
+
+        result = CliRunner().invoke(hosts_add_single, ["new"])
+
+        assert result.exit_code == 0
+        assert SSMConfigManager().get_database("new")["local_address"] == "127.0.0.3"

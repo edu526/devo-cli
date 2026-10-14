@@ -6,7 +6,7 @@ import platform
 import re
 import subprocess
 from pathlib import Path
-from typing import List, Tuple
+from typing import Iterable, List, Tuple
 
 # Valid hostname pattern: labels separated by dots, no path traversal or special chars
 _HOSTNAME_RE = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$")
@@ -302,10 +302,15 @@ class HostsManager:
             if process.returncode != 0:
                 raise OSError(f"Failed to write hosts file: {stderr.decode()}")
 
-    def get_next_loopback_ip(self) -> str:
-        """Get the next available loopback IP address"""
+    def get_next_loopback_ip(self, taken: Iterable[str] = ()) -> str:
+        """Get the next available loopback IP address.
+
+        `taken`: IPs already assigned to databases in the config. Those whose
+        hostname forwarding is paused have no entry in the hosts file, but
+        their IP comes back with them: it isn't free.
+        """
         entries = self.get_managed_entries()
-        used_ips = {ip for ip, _ in entries}
+        used_ips = {ip for ip, _ in entries} | set(taken)
 
         # Start from 127.0.0.2 (127.0.0.1 is standard localhost)
         for i in range(2, 255):
