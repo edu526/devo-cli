@@ -15,6 +15,7 @@
   import { sidecar, appStatus, appError, authLost, currentPage, type Page } from "./lib/stores";
   import SessionExpiredBanner from "./lib/SessionExpiredBanner.svelte";
   import { startLoginWatcher } from "./lib/login-flow";
+  import { databasesAlert, profilesAlert, startNavStatus, type NavAlert } from "./lib/nav-status";
   import LoginRequiredBanner from "./lib/LoginRequiredBanner.svelte";
   import ConfirmDialog from "./lib/ConfirmDialog.svelte";
   import { profilesCache, registryCache, configCache } from "./lib/page-stores";
@@ -212,6 +213,7 @@
     // the browser itself when a tunnel needs it. This keeps the banner and
     // the notifications in sync with that.
     stopNeedsLogin = startLoginWatcher();
+    stopNavStatus = startNavStatus();
     appStatus.set("ready");
 
     // Check if the user has been onboarded; if not, show the wizard.
@@ -254,11 +256,20 @@
   let stopTokenKeepAlive: (() => void) | null = null;
   let stopAuthLost: (() => void) | null = null;
   let stopNeedsLogin: (() => void) | null = null;
+  let stopNavStatus: (() => void) | null = null;
+
+  /** What the sidebar flags next to a page, if anything. */
+  function navAlert(page: Page): NavAlert | null {
+    if (page === "databases") return $databasesAlert;
+    if (page === "profiles") return $profilesAlert;
+    return null;
+  }
 
   onDestroy(() => {
     stopTokenKeepAlive?.();
     stopAuthLost?.();
     stopNeedsLogin?.();
+    stopNavStatus?.();
     window.removeEventListener("keydown", handleKeydown, true);
     window.removeEventListener("keydown", handleGlobalShortcut, true);
     window.removeEventListener("keydown", blockBrowserShortcuts, true);
@@ -301,14 +312,19 @@
         <ul>
           {#each MAIN_NAV as item}
             {@const Icon = item.icon}
+            {@const alert = navAlert(item.id)}
             <li>
               <button
                 class="nav-btn"
                 class:active={$currentPage === item.id}
                 onclick={() => currentPage.set(item.id)}
+                title={alert?.text}
               >
                 <span class="nav-icon"><Icon size={16} strokeWidth={2} /></span>
                 <span class="nav-label">{item.label}</span>
+                {#if alert}
+                  <span class="nav-alert nav-alert-{alert.level}" role="status" aria-label={alert.text}></span>
+                {/if}
               </button>
             </li>
           {/each}
@@ -575,6 +591,19 @@
   }
   .nav-btn.active .nav-label {
     color: var(--accent);
+  }
+  .nav-alert {
+    margin-left: auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .nav-alert-error {
+    background: var(--danger);
+  }
+  .nav-alert-warning {
+    background: var(--warning);
   }
   .nav-icon {
     display: flex;
