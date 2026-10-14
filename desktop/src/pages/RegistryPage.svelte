@@ -12,6 +12,7 @@
   import FormField from "../lib/FormField.svelte";
   import ViewToggle from "../lib/ViewToggle.svelte";
   import SearchInput from "../lib/SearchInput.svelte";
+  import RowMenu, { type RowMenuItem } from "../lib/RowMenu.svelte";
   import { viewModes } from "../lib/stores";
   import {
     codeartifactDomainSchema,
@@ -80,6 +81,18 @@
 
   function tokenFor(domain: string, tool: string): CodeArtifactToken | null {
     return tokens.find((t) => t.domain === domain && t.tool === tool) ?? null;
+  }
+
+  function domainMenu(domain: CodeArtifactDomain): RowMenuItem[] {
+    return [
+      { label: "Edit", onselect: () => openEdit(domain) },
+      {
+        label: "Delete registry…",
+        onselect: () => removeDomain(domain),
+        danger: true,
+        disabled: deleting[domain.domain],
+      },
+    ];
   }
 
   function toolFor(domain: CodeArtifactDomain): string {
@@ -493,15 +506,7 @@
                     {/if}
                     {isLoggedIn ? "Refresh Token" : "Login"}
                   </button>
-                  <button class="btn-sm btn-secondary" onclick={() => openEdit(domain)}>Edit</button
-                  >
-                  <button
-                    class="btn-sm btn-danger"
-                    onclick={() => removeDomain(domain)}
-                    disabled={deleting[domain.domain]}
-                  >
-                    {deleting[domain.domain] ? "…" : "Delete"}
-                  </button>
+                  <RowMenu label="More actions for {domain.domain}" items={domainMenu(domain)} />
                 </div>
               </td>
             </tr>
@@ -546,14 +551,7 @@
               {/if}
             </div>
             <div class="card-actions">
-              <button class="btn-sm btn-secondary" onclick={() => openEdit(domain)}>Edit</button>
-              <button
-                class="btn-sm btn-danger"
-                onclick={() => removeDomain(domain)}
-                disabled={deleting[domain.domain]}
-              >
-                {deleting[domain.domain] ? "…" : "Delete"}
-              </button>
+              <RowMenu label="More actions for {domain.domain}" items={domainMenu(domain)} />
             </div>
           </div>
 

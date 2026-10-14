@@ -21,6 +21,7 @@
   import { viewModes } from "../lib/stores";
   import FormField from "../lib/FormField.svelte";
   import SearchableSelect from "../lib/SearchableSelect.svelte";
+  import RowMenu, { type RowMenuItem } from "../lib/RowMenu.svelte";
   import { retryNetworkErrors } from "../lib/retry";
   import { X, Star, RefreshCw } from "@lucide/svelte";
 
@@ -418,6 +419,19 @@
     }
   }
 
+  /** The secondary actions of a profile: out of the way, but not hidden behind a right-click. */
+  function profileMenu(name: string): RowMenuItem[] {
+    return [
+      {
+        label: "Force re-login",
+        title: "Log in again and replace the cached credentials, e.g. after a permission change.",
+        onselect: () => refreshOne(name, true),
+        disabled: showAnyBusy,
+      },
+      { label: "Delete profile…", onselect: () => askDelete(name), danger: true, disabled: busyDelete.has(name) },
+    ];
+  }
+
   async function refreshOne(name: string, force = false) {
     if (busyRefresh.has(name) || refreshing) return;
     actionError = null;
@@ -757,15 +771,7 @@
                       <span class:shown={showBusy(p.name) && ssoInProgress === p.name}>Approving…</span>
                     </span>
                   </button>
-
-                  <button
-                    class="btn-sm btn-danger"
-                    disabled={busyDelete.has(p.name)}
-                    onclick={() => askDelete(p.name)}
-                    title="Delete profile from ~/.aws/config"
-                  >
-                    Delete
-                  </button>
+                  <RowMenu label="More actions for {p.name}" items={profileMenu(p.name)} />
                 </div>
               </td>
             </tr>
@@ -843,35 +849,7 @@
                 </span>
               </button>
 
-              <span class="footer-sep" aria-hidden="true"></span>
-              <button
-                class="action-icon action-danger"
-                aria-label="Delete profile"
-                disabled={busyDelete.has(p.name)}
-                onclick={() => askDelete(p.name)}
-              >
-                <svg
-                  class="action-glyph"
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M3 6h18" />
-                  <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                  <line x1="10" y1="11" x2="10" y2="17" />
-                  <line x1="14" y1="11" x2="14" y2="17" />
-                </svg>
-                <span class="action-label">
-                  {busyDelete.has(p.name) ? "Deleting…" : "Delete"}
-                </span>
-              </button>
+              <RowMenu label="More actions for {p.name}" items={profileMenu(p.name)} />
             </div>
           </div>
         </div>
@@ -1294,20 +1272,6 @@
     justify-content: center;
   }
 
-  .footer-sep {
-    width: 1px;
-    height: 18px;
-    background: var(--border);
-    margin: 0 0.15rem;
-  }
-  .action-danger {
-    color: var(--danger);
-  }
-  .action-danger:hover:not(:disabled) {
-    color: color-mix(in srgb, var(--danger) 85%, black);
-    background: color-mix(in srgb, var(--danger) 12%, transparent);
-    border-color: color-mix(in srgb, var(--danger) 40%, transparent);
-  }
   .modal-confirm {
     min-width: 380px;
   }
