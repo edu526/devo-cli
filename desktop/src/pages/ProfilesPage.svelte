@@ -15,6 +15,7 @@
   import { profilesCache } from "../lib/page-stores";
   import { anyNeedsRefresh } from "../lib/profile-staleness";
   import { formatTimeLeft, sessionActive, sessionsFromProfiles } from "../lib/sso-sessions";
+  import { profileStatusLabel, profileTarget, profileTimeText } from "../lib/profile-display";
   import SearchInput from "../lib/SearchInput.svelte";
   import ViewToggle from "../lib/ViewToggle.svelte";
   import { viewModes } from "../lib/stores";
@@ -563,15 +564,6 @@
     if (autoRefreshInterval !== null) clearInterval(autoRefreshInterval);
   });
 
-  function formatSeconds(s: number | null): string {
-    if (s === null) return "—";
-    if (s <= 0) return "0m";
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    if (h > 0) return `${h}h ${m}m`;
-    return `${m}m`;
-  }
-
   const anyBusyRefresh = $derived(busyRefresh.size > 0 || refreshing || sessionLogin !== null);
   const showRefreshing = $derived(refreshing && refreshingSlow);
   const showBusy = (name: string) => busyRefresh.has(name) && slowBusy.has(name);
@@ -720,8 +712,9 @@
         <thead>
           <tr>
             <th>Profile</th>
+            <th>Role · Account</th>
             <th>Status</th>
-            <th>Time Left</th>
+            <th>Time</th>
             <th class="actions-col">Actions</th>
           </tr>
         </thead>
@@ -734,11 +727,12 @@
                   <span class="badge badge-green" style="margin-left: 8px">Default</span>
                 {/if}
               </td>
+              <td class="target-cell">{profileTarget(p) || "—"}</td>
               <td>
                 <span class="status-dot status-{p.status}"></span>
-                <span class="status-text">{p.status}</span>
+                <span class="status-text">{profileStatusLabel(p.status)}</span>
               </td>
-              <td>{formatSeconds(p.seconds_remaining)}</td>
+              <td>{profileTimeText(p) || "—"}</td>
 
               <td class="actions-cell">
                 <div class="actions-wrap">
@@ -788,20 +782,20 @@
           class:is-expired={p.status === "expired"}
           class:is-expiring={p.status === "expiring"}
         >
-          {#if defaultProfile === p.name}
-            <div class="default-bar">
-              <Star size={12} fill="currentColor" /> default credentials
-            </div>
-          {/if}
           <div class="card-header">
             <span class="card-name">{p.name}</span>
           </div>
+          {#if profileTarget(p)}
+            <p class="card-target" title="Role · AWS account">{profileTarget(p)}</p>
+          {/if}
 
           <p class="card-meta">
             <span class="status-dot status-{p.status}"></span>
-            <span class="status-text">{p.status}</span>
-            <span class="meta-sep">·</span>
-            <span class="expiry">{formatSeconds(p.seconds_remaining)}</span>
+            <span class="status-text">{profileStatusLabel(p.status)}</span>
+            {#if profileTimeText(p)}
+              <span class="meta-sep">·</span>
+              <span class="expiry">{profileTimeText(p)}</span>
+            {/if}
           </p>
 
           {#if busyRefresh.has(p.name)}
@@ -813,10 +807,10 @@
 
           <div class="card-footer">
             {#if defaultProfile === p.name}
-              <span class="default-label"
+              <span class="default-label" title="Its credentials are also written as [default] in ~/.aws/credentials"
                 ><span class="default-star" style="display:inline-flex"
                   ><Star size={12} fill="currentColor" /></span
-                > Default</span
+                > Default credentials</span
               >
             {:else}
               <button
@@ -1367,17 +1361,19 @@
     border-color: var(--border-strong);
   }
 
-  .default-bar {
-    background: var(--accent-soft);
-    color: var(--accent);
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    padding: 0.25rem 1rem;
-    border-bottom: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
+  .card-target {
+    margin: 0;
+    padding: 0 1rem 0.3rem;
+    font-size: 0.75rem;
+    color: var(--text-faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .target-cell {
+    color: var(--text-muted);
+    font-size: 0.8rem;
   }
 
   .card-header {
@@ -1485,9 +1481,6 @@
   }
   .status-dot.status-unknown {
     background: var(--info);
-  }
-  .status-text {
-    text-transform: capitalize;
   }
   .meta-sep {
     color: var(--text-faint);

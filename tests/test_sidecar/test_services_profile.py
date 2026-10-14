@@ -435,6 +435,28 @@ class TestBuildProfileInfoUsesCache:
         assert info["status"] == "valid"
 
 
+@pytest.mark.unit
+class TestBuildProfileInfoAccountAndRole:
+    def test_reports_the_account_and_role_the_profile_signs_in_to(self, mocker):
+        mocker.patch.object(profile_service, "read_cached_credentials_expiration", return_value=None)
+        mocker.patch.object(profile_service, "get_profile_credentials_expiration", return_value=None)
+        mocker.patch.object(profile_service, "_get_sso_token_info", return_value=None)
+        mocker.patch.object(profile_service, "_get_sso_session_name", return_value=None)
+        mocker.patch(
+            "cli_tool.commands.aws_login.core.config.get_profile_config",
+            return_value={"sso_account_id": "111122223333", "sso_role_name": "Developer"},
+        )
+
+        info = profile_service._build_profile_info("dev", "sso", None, datetime.now(timezone.utc))
+
+        assert info["account_id"] == "111122223333"
+        assert info["role_name"] == "Developer"
+
+    def test_unknown_profile_has_neither(self, mocker):
+        mocker.patch("cli_tool.commands.aws_login.core.config.get_profile_config", return_value=None)
+        assert profile_service._get_account_and_role("gone") == (None, None)
+
+
 def _p(name, secs, session="corp", sso="expired", status=None):
     """A profile-info record as get_profiles_info() returns them."""
     if status is None:

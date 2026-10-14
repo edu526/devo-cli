@@ -72,6 +72,9 @@ export interface ProfileRecord {
   is_default: boolean;
   sso_token?: SsoTokenInfo | null;
   sso_session?: string | null;
+  /** The AWS account and SSO role it signs in to. */
+  account_id?: string | null;
+  role_name?: string | null;
 }
 
 export interface SsoTokenInfo {

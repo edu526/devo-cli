@@ -52,6 +52,7 @@ def _build_profile_info(name: str, src: str, default_name: str | None, now: date
 
     sso_token = _get_sso_token_info(name)
     sso_session = _get_sso_session_name(name)
+    account_id, role_name = _get_account_and_role(name)
     return {
         "name": name,
         "source": src,
@@ -61,7 +62,18 @@ def _build_profile_info(name: str, src: str, default_name: str | None, now: date
         "is_default": name == default_name,
         "sso_token": sso_token,
         "sso_session": sso_session,
+        "account_id": account_id,
+        "role_name": role_name,
     }
+
+
+def _get_account_and_role(profile_name: str) -> tuple[str | None, str | None]:
+    """The AWS account and SSO role the profile signs in to: profile names
+    alone often don't tell which account or permissions they mean."""
+    from cli_tool.commands.aws_login.core.config import get_profile_config
+
+    cfg = get_profile_config(profile_name) or {}
+    return cfg.get("sso_account_id"), cfg.get("sso_role_name")
 
 
 def _get_sso_session_name(profile_name: str) -> str | None:
@@ -185,6 +197,8 @@ def create_profile(
         "seconds_remaining": None,
         "status": "unknown",
         "is_default": False,
+        "account_id": sso_account_id,
+        "role_name": sso_role_name,
     }
 
 
