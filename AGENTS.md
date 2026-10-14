@@ -140,6 +140,8 @@ Releases trigger automatically on push to `main`. Tag format: `v1.2.3`.
 
 **Changes to the release tooling itself** (e.g. `pyproject.toml`'s `[tool.semantic_release]` section, `release.yml`, `desktop.yml`) are `chore:`, not `fix:` — even when they fix a real bug in how releases get triggered. `chore` never bumps the version regardless of which files it touches (only `feat`/`fix`/`perf` do), so typing it correctly is what keeps it out of the CLI's version history — not `path_filters`. `path_filters` only helps when the change is scoped to an already-excluded path (`desktop/`, `docs/`, etc.); it can't tell "this edit only touched the semantic-release config" from "this edit touched the `[project]` dependencies" within the *same* file (`pyproject.toml`), since matching is per-file, not per-section. A `v3.14.1` shipped for exactly this reason once — a `pyproject.toml`-only release-tooling fix mistyped as `fix:`.
 
+**A desktop change that also touches CLI code** (anything outside the excluded paths, e.g. `cli_tool/commands/`, `cli_tool/core/`) releases a new CLI version and shows up in the CLI's `CHANGELOG.md`, scope and all — `exclude_commit_patterns` can't hide it: python-semantic-release deliberately keeps every commit that causes a version bump in the changelog, so the reason for the release isn't missing. Put the CLI part in its own commit with a CLI scope (`fix(ssm): …`, `fix(aws-login): …`) and the rest in the `(desktop)` one; if the CLI part only exists for the desktop, keep it under `cli_tool/sidecar/` instead, so it doesn't release the CLI at all.
+
 ## Pre-commit Hooks
 
 Install with: `pre-commit install && pre-commit install --hook-type pre-push`

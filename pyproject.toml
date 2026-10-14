@@ -123,6 +123,9 @@ path_filters = [
 ]
 
 [tool.semantic_release.changelog]
+# Hides desktop/sidecar commits that don't bump the CLI (e.g. `chore(desktop)`
+# touching a CLI path). One that bumps it stays in the changelog by design,
+# whatever its scope: see AGENTS.md, "Version Management".
 exclude_commit_patterns = [
     ".*\\(desktop\\).*",
     ".*\\(sidecar\\).*",
