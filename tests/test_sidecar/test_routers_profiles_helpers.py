@@ -567,6 +567,17 @@ class TestDoRefreshAllTargets:
 
         assert no_silent_refresh.call_args[0][0] == [("prod", "Login required")]
 
+    def test_forced_session_login_renews_every_profile_of_it(self, setup, no_silent_refresh, no_cache_deletion):
+        """The Profiles page's session "Log in": a real login even while the
+        credentials still work, then new credentials for all its profiles."""
+        _, login = setup
+
+        profiles_router._do_refresh_all(EventHub(), force=True, targets={"profiles": [], "sessions": ["corp"]})
+
+        no_silent_refresh.assert_not_called()
+        login.assert_called_once()
+        assert no_cache_deletion.call_args[0][0] == ["dev", "prod"]
+
     def test_nothing_left_to_log_in_drops_the_notice(self, setup, no_silent_refresh):
         _, login = setup
         hub = EventHub()

@@ -14,6 +14,7 @@
   import { ws, type WsMessage } from "../lib/ws";
   import { profilesCache } from "../lib/page-stores";
   import { anyNeedsRefresh } from "../lib/profile-staleness";
+  import { formatTimeLeft, sessionActive, sessionsFromProfiles } from "../lib/sso-sessions";
   import SearchInput from "../lib/SearchInput.svelte";
   import ViewToggle from "../lib/ViewToggle.svelte";
   import { viewModes } from "../lib/stores";
@@ -393,6 +394,29 @@
     else refreshOne(target, true);
   }
 
+  const sessions = $derived(sessionsFromProfiles(profiles));
+  let sessionLogin: string | null = $state(null);
+
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+  /**
+   * A new SSO login for the session, then new credentials for every profile
+   * of it: each one gets its full lifetime from this login, so one login
+   * covers them all for as long as possible.
+   */
+  async function loginSession(name: string) {
+    if (sessionLogin !== null || anyBusyRefresh) return;
+    sessionLogin = name;
+    actionError = null;
+    try {
+      await profilesApi.refreshAll(true, { allowBrowser: true, targets: { profiles: [], sessions: [name] } });
+      // Result arrives via WS profile.refreshed
+    } catch (e) {
+      sessionLogin = null;
+      actionError = e instanceof ApiError ? e.message : String(e);
+    }
+  }
+
   async function refreshOne(name: string, force = false) {
     if (busyRefresh.has(name) || refreshing) return;
     actionError = null;
@@ -482,6 +506,7 @@
       ssoInProgress = null;
       ssoManualUrl = null;
       refreshing = false;
+      sessionLogin = null;
       busyRefresh = new Set();
 
       if (!msg.success) {
@@ -547,7 +572,7 @@
     return `${m}m`;
   }
 
-  const anyBusyRefresh = $derived(busyRefresh.size > 0 || refreshing);
+  const anyBusyRefresh = $derived(busyRefresh.size > 0 || refreshing || sessionLogin !== null);
   const showRefreshing = $derived(refreshing && refreshingSlow);
   const showBusy = (name: string) => busyRefresh.has(name) && slowBusy.has(name);
   const showAnyBusy = $derived(showRefreshing || [...busyRefresh].some((n) => slowBusy.has(n)));
@@ -621,6 +646,46 @@
     <div class="alert-error">
       {actionError}
       <button class="dismiss" onclick={() => (actionError = null)}><X size={14} /></button>
+    </div>
+  {/if}
+
+  {#if !loading && sessions.length > 0}
+    <div class="sessions">
+      {#each sessions as session (session.name)}
+        {@const active = sessionActive(session)}
+        <div class="session" class:expiring={session.status === "expiring"} class:expired={!active}>
+          <span class="session-dot" aria-hidden="true"></span>
+          <div class="session-text">
+            <span class="session-title">
+              SSO session <strong>{session.name}</strong>
+              <span class="session-state">
+                · {active ? `${formatTimeLeft(session.secondsRemaining)} left` : "expired"}
+              </span>
+            </span>
+            <span class="session-hint">
+              {#if active}
+                Until then Devo renews the credentials of its {plural(session.profiles.length, "profile")} on its own.
+              {:else if session.stale.length > 0}
+                {plural(session.stale.length, "profile")} need new credentials. Log in to renew them.
+              {:else}
+                Its profiles keep working until their own credentials expire, then they need a login.
+              {/if}
+            </span>
+          </div>
+          <button
+            class={!active && session.stale.length > 0 ? "btn-primary" : "btn-secondary"}
+            onclick={() => loginSession(session.name)}
+            disabled={anyBusyRefresh}
+            title="Sign in again, then get new credentials for every profile of this session."
+          >
+            {#if sessionLogin === session.name}
+              <span class="spinner-sm"></span> Logging in…
+            {:else}
+              {active ? "Log in again" : "Log in"}
+            {/if}
+          </button>
+        </div>
+      {/each}
     </div>
   {/if}
 
@@ -1071,6 +1136,65 @@
 {/if}
 
 <style>
+  .sessions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .session {
+    --session-color: var(--success);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.9rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--session-color);
+    border-radius: 8px;
+  }
+
+  .session.expiring {
+    --session-color: var(--warning);
+  }
+
+  .session.expired {
+    --session-color: var(--danger);
+  }
+
+  .session-dot {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--session-color);
+  }
+
+  .session-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+
+  .session-title {
+    font-size: 0.88rem;
+    color: var(--text-primary);
+  }
+
+  .session-state {
+    color: var(--session-color);
+  }
+
+  .session-hint {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+
+  .session button {
+    flex-shrink: 0;
+  }
   .btn-glyph {
     font-size: 1rem;
     line-height: 1;
