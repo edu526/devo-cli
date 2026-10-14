@@ -622,6 +622,8 @@ export interface HostnameForwardingStatus {
   missing: string[];
   /** Hostnames in Devo's block of the hosts file that no forwarded database uses. */
   stale: string[];
+  /** Databases set up on the same loopback IP and port: one hostname can reach the other's tunnel. */
+  shared: { ip: string; port: number; databases: string[] }[];
 }
 
 export interface HostSetupEntry {

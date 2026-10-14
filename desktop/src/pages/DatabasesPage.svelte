@@ -107,6 +107,8 @@
   const missingHosts = $derived(forwarding?.missing ?? []);
   // Hostnames Devo still maps but no forwarded database uses (deleted, host changed…)
   const staleHosts = $derived(forwarding?.stale ?? []);
+  // Databases on the same 127.0.0.X:port: one hostname can reach the other's tunnel
+  const sharedAddresses = $derived(forwarding?.shared ?? []);
 
   function errorText(e: unknown): string {
     return e instanceof Error ? e.message : String(e);
@@ -121,14 +123,20 @@
   }
 
   async function syncHosts() {
+    // Tunnels of databases sharing an IP and port are restarted: one of them
+    // moves to its own IP, and the forwarder rule they shared may point at
+    // either tunnel.
+    const running = sharedAddresses.flatMap((s) => s.databases).filter(isRunning);
     settingUpHosts = true;
     actionError = null;
     try {
+      await Promise.all(running.map((n) => connectionsApi.stop(n).catch(() => {})));
       await withHostsElevation(() => hostsApi.sync());
     } catch (e) {
       actionError = errorText(e);
     } finally {
       await refreshForwarding();
+      for (const name of running) await startOne(name);
       settingUpHosts = false;
     }
   }
@@ -794,13 +802,20 @@
     </div>
   {/if}
 
-  {#if missingHosts.length > 0 || staleHosts.length > 0}
+  {#if missingHosts.length > 0 || staleHosts.length > 0 || sharedAddresses.length > 0}
     <div
       class="alert-warning"
       style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
     >
       <div>
         <strong>Hosts file out of sync</strong>
+        {#each sharedAddresses as shared (shared.ip + ":" + shared.port)}
+          <br />
+          <span class="muted"
+            >{shared.databases.join(" and ")} share {shared.ip}:{shared.port}: one hostname can reach
+            the other's tunnel.</span
+          >
+        {/each}
         {#if missingHosts.length > 0}
           <br />
           <span class="muted"

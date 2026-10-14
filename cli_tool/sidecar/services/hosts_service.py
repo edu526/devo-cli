@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from cli_tool.commands.ssm.core import hostname_forwarding
 from cli_tool.commands.ssm.core.config import SSMConfigManager
-from cli_tool.commands.ssm.core.hosts_setup import setup_databases, stale_hostnames, sync_databases
+from cli_tool.commands.ssm.core.hosts_setup import setup_databases, shared_addresses, stale_hostnames, sync_databases
 from cli_tool.commands.ssm.utils import HostsManager
 from cli_tool.commands.ssm.utils.hosts_manager import describe_hosts_lock
 from cli_tool.core.utils.config_manager import get_config_dir
@@ -149,7 +149,8 @@ def hosts_status() -> dict[str, Any]:
     hostname is forwarded, by that setting or its own exception) and `mapped`
     (the hosts file points its hostname at its loopback IP). `missing` lists
     the enabled ones not mapped, `stale` the hostnames in Devo's block that no
-    forwarded database uses (sync_hosts fixes both).
+    forwarded database uses, `shared` the databases set up on the same IP and
+    port (sync_hosts fixes all three).
     """
     ssm_config = SSMConfigManager().load()
     entries = HostsManager().get_managed_entries()
@@ -166,6 +167,8 @@ def hosts_status() -> dict[str, Any]:
         "databases": databases,
         "missing": sorted(n for n, d in databases.items() if d["enabled"] and not d["mapped"]),
         "stale": stale_hostnames(ssm_config, entries),
+        # one hostname of each group can reach the other's tunnel; sync_hosts fixes it
+        "shared": shared_addresses(ssm_config.get("databases") or {}),
     }
 
 

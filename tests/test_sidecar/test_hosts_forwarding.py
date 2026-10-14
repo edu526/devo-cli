@@ -346,3 +346,19 @@ class TestStaleEntriesAndSync:
 
         assert response.status_code == 200
         sync.assert_called_once_with()
+
+
+@pytest.mark.unit
+class TestSharedAddresses:
+    def test_status_lists_databases_on_the_same_ip_and_port(self, hosts):
+        save_config({"ssm": {"databases": {"prod": _db("prod.rds", "127.0.0.7"), "prod-reader": _db("prod-reader.rds", "127.0.0.7")}}})
+
+        assert hosts_service.hosts_status()["shared"] == [{"ip": "127.0.0.7", "port": 5432, "databases": ["prod", "prod-reader"]}]
+
+    def test_sync_fixes_them(self, hosts):
+        save_config({"ssm": {"databases": {"prod": _db("prod.rds", "127.0.0.7"), "prod-reader": _db("prod-reader.rds", "127.0.0.7")}}})
+        hosts.path.write_text(_hosts(("127.0.0.7", "prod.rds"), ("127.0.0.7", "prod-reader.rds")))
+
+        status = hosts_service.sync_hosts()
+
+        assert status["shared"] == [] and status["missing"] == []
