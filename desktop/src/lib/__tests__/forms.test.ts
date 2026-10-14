@@ -5,6 +5,7 @@ import {
   instanceSchema,
   hostSchema,
   profileSchema,
+  regionFromHost,
   ssoSessionSchema,
 } from "../forms";
 
@@ -58,14 +59,10 @@ describe("instanceSchema", () => {
 });
 
 describe("databaseSchema", () => {
+  const db = { name: "db", bastion: "i-0942ab24eff8666c3", host: "h.local", port: 5432, region: "us-east-1" };
+
   it("coerces port string to number", () => {
-    const r = validate(databaseSchema, {
-      name: "db",
-      bastion: "b",
-      host: "h.local",
-      port: "5432",
-      region: "us-east-1",
-    });
+    const r = validate(databaseSchema, { ...db, port: "5432" });
     expect(r.success).toBe(true);
     if (r.success) {
       expect(r.data.port).toBe(5432);
@@ -73,24 +70,34 @@ describe("databaseSchema", () => {
     }
   });
   it("rejects out-of-range port", () => {
-    const r = validate(databaseSchema, {
-      name: "db",
-      bastion: "b",
-      host: "h.local",
-      port: 70000,
-      region: "us-east-1",
-    });
-    expect(r.success).toBe(false);
+    expect(validate(databaseSchema, { ...db, port: 70000 }).success).toBe(false);
   });
   it("rejects invalid name characters", () => {
-    const r = validate(databaseSchema, {
-      name: "bad name!",
-      bastion: "b",
-      host: "h.local",
-      port: 5432,
-      region: "us-east-1",
-    });
+    expect(validate(databaseSchema, { ...db, name: "bad name!" }).success).toBe(false);
+  });
+  it("needs an instance ID as bastion, not a name", () => {
+    const r = validate(databaseSchema, { ...db, bastion: "prod-bastion" });
     expect(r.success).toBe(false);
+    if (!r.success) expect(r.errors.bastion).toContain("instance ID");
+    expect(validate(databaseSchema, { ...db, bastion: "mi-0123456789abcdef0" }).success).toBe(true);
+  });
+  it("ignores the local address Devo assigned (editing used to fail on 127.0.0.2)", () => {
+    const r = validate(databaseSchema, { ...db, local_address: "127.0.0.2" });
+    expect(r.success).toBe(true);
+    if (r.success) expect("local_address" in r.data).toBe(false);
+  });
+});
+
+describe("regionFromHost", () => {
+  it("reads the region of an RDS endpoint", () => {
+    expect(regionFromHost("mydb.cluster-abc123.us-east-1.rds.amazonaws.com")).toBe("us-east-1");
+    expect(regionFromHost("db.xyz.eu-central-1.rds.amazonaws.com")).toBe("eu-central-1");
+    expect(regionFromHost("db.xyz.us-gov-west-1.rds.amazonaws.com")).toBe("us-gov-west-1");
+  });
+  it("has none for global databases or other hosts", () => {
+    expect(regionFromHost("epic-dev.global-gywzlzqizajw.global.rds.amazonaws.com")).toBeNull();
+    expect(regionFromHost("10.0.0.5")).toBeNull();
+    expect(regionFromHost("db.internal")).toBeNull();
   });
 });
 

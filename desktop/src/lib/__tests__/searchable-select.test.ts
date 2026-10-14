@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mount, unmount } from "svelte";
+import { flushSync, mount, unmount } from "svelte";
 import SearchableSelect from "../SearchableSelect.svelte";
 
 const sampleOptions = [
@@ -168,5 +168,131 @@ describe("SearchableSelect", () => {
     input.dispatchEvent(new FocusEvent("focus", { bubbles: true }));
     await Promise.resolve();
     expect(target.querySelectorAll('[role="option"]')).toHaveLength(0);
+  });
+});
+
+describe("SearchableSelect allowCustom", () => {
+  const saved = [{ value: "i-0aaa1111bbbb2222c", label: "dev-bastion (i-0aaa1111bbbb2222c)" }];
+  let target: HTMLDivElement;
+  let component: ReturnType<typeof mount> | undefined;
+
+  beforeEach(() => {
+    target = document.createElement("div");
+    document.body.appendChild(target);
+  });
+
+  afterEach(() => {
+    if (component) unmount(component);
+    target.remove();
+  });
+
+  function setup(value = "") {
+    const onchange = vi.fn();
+    component = mount(SearchableSelect, {
+      target,
+      props: { options: saved, value, allowCustom: true, onchange },
+    });
+    return { input: target.querySelector("input")!, onchange };
+  }
+
+  async function type(input: HTMLInputElement, text: string) {
+    input.dispatchEvent(new FocusEvent("focus", { bubbles: true }));
+    flushSync();
+    makeInputEvent(input, text);
+    flushSync();
+  }
+
+  it("shows a value that isn't one of the options as is", () => {
+    const { input } = setup("i-0new0000000000000");
+    expect(input.value).toBe("i-0new0000000000000");
+  });
+
+  it("offers what was typed and keeps it on Enter", async () => {
+    const { input, onchange } = setup();
+    await type(input, "i-0new0000000000000");
+
+    const first = target.querySelector('[role="option"]');
+    expect(first?.textContent?.trim()).toBe('Use "i-0new0000000000000"');
+
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(onchange).toHaveBeenCalledWith("i-0new0000000000000");
+  });
+
+  it("keeps what was typed when clicking away or tabbing out", async () => {
+    const { input, onchange } = setup();
+    await type(input, "i-0click00000000000");
+    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    expect(onchange).toHaveBeenLastCalledWith("i-0click00000000000");
+
+    await type(input, "i-0tab0000000000000");
+    input.dispatchEvent(new FocusEvent("blur"));
+    expect(onchange).toHaveBeenLastCalledWith("i-0tab0000000000000");
+  });
+
+  it("puts the typed value after the matches, so Enter picks a saved one", async () => {
+    const { input, onchange } = setup();
+    await type(input, "dev");
+
+    const labels = [...target.querySelectorAll('[role="option"]')].map((o) => o.textContent?.trim());
+    expect(labels).toEqual(["dev-bastion (i-0aaa1111bbbb2222c)", 'Use "dev"']);
+
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(onchange).toHaveBeenCalledWith("i-0aaa1111bbbb2222c");
+  });
+
+  it("focusing keeps the current text to edit it, and lists every suggestion", () => {
+    const { input } = setup("db.old.rds.amazonaws.com");
+    input.dispatchEvent(new FocusEvent("focus", { bubbles: true }));
+    flushSync();
+
+    expect(input.value).toBe("db.old.rds.amazonaws.com");
+    expect(target.querySelectorAll('[role="option"]')).toHaveLength(saved.length);
+  });
+
+  it("a saved option keeps its text when focused (the name doesn't disappear)", () => {
+    const { input } = setup("i-0aaa1111bbbb2222c");
+    expect(input.value).toBe("dev-bastion (i-0aaa1111bbbb2222c)");
+
+    input.dispatchEvent(new FocusEvent("focus", { bubbles: true }));
+    flushSync();
+
+    expect(input.value).toBe("dev-bastion (i-0aaa1111bbbb2222c)");
+  });
+
+  it("text edited back to an option's label means that option", async () => {
+    const { input, onchange } = setup("i-0other000000000000");
+    await type(input, "dev-bastion (i-0aaa1111bbbb2222c)");
+    input.dispatchEvent(new FocusEvent("blur"));
+
+    expect(onchange).toHaveBeenCalledWith("i-0aaa1111bbbb2222c");
+  });
+
+  it("leaving or pressing Enter without editing changes nothing", () => {
+    const { input, onchange } = setup("db.old.rds.amazonaws.com");
+    input.dispatchEvent(new FocusEvent("focus", { bubbles: true }));
+    flushSync();
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    input.dispatchEvent(new FocusEvent("focus", { bubbles: true }));
+    flushSync();
+    input.dispatchEvent(new FocusEvent("blur"));
+
+    expect(onchange).not.toHaveBeenCalled();
+  });
+
+  it("clearing it and leaving empties it", async () => {
+    const { input, onchange } = setup("db.old.rds.amazonaws.com");
+    await type(input, "");
+    input.dispatchEvent(new FocusEvent("blur"));
+
+    expect(onchange).toHaveBeenCalledWith("");
+  });
+
+  it("without allowCustom, typing alone changes nothing", async () => {
+    const onchange = vi.fn();
+    component = mount(SearchableSelect, { target, props: { options: saved, value: "", onchange } });
+    const input = target.querySelector("input")!;
+    await type(input, "i-0new0000000000000");
+    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    expect(onchange).not.toHaveBeenCalled();
   });
 });

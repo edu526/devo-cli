@@ -52,6 +52,7 @@ const SIDECAR_ENDPOINTS: SidecarEndpoint[] = [
   { method: "POST", path: "/api/v1/databases/{name}" },
   { method: "GET", path: "/api/v1/databases/{name}" },
   { method: "PATCH", path: "/api/v1/databases/{name}" },
+  { method: "GET", path: "/api/v1/databases:discover" },
   { method: "DELETE", path: "/api/v1/databases/{name}" },
   { method: "GET", path: "/api/v1/instances" },
   { method: "POST", path: "/api/v1/instances/{name}" },
@@ -144,6 +145,7 @@ describe("sidecar ↔ frontend contract", () => {
     await databasesApi.create("d", { bastion: "b", host: "h", port: 5432, region: "us-east-1" });
     await databasesApi.update("d", { port: 6543 });
     await databasesApi.delete("d");
+    await databasesApi.discover("us-east-1", "dev");
     await profilesApi.list();
     await profilesApi.get("dev");
     await profilesApi.refreshAll();

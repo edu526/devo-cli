@@ -2,14 +2,25 @@
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
 
 from cli_tool.commands.ssm.core import hostname_forwarding
 from cli_tool.commands.ssm.core.config import SSMConfigManager
-from cli_tool.sidecar.deps import require_bearer
+from cli_tool.sidecar.deps import get_app_state, require_bearer
+from cli_tool.sidecar.services.database_discovery import discover_databases
 
 router = APIRouter(prefix="/databases", tags=["databases"], dependencies=[Depends(require_bearer)])
+
+_NAME_PATTERN = r"^[a-zA-Z0-9_-]{1,64}$"
+_INACTIVE_STATES = ("stopped", "error", "expired_credentials")
+
+
+def _rename(mgr: SSMConfigManager, name: str, new_name: str) -> None:
+    """Rename a database, keeping all its settings and its place in the list."""
+    config = mgr.load()
+    config["databases"] = {(new_name if key == name else key): value for key, value in config["databases"].items()}
+    mgr.save(config)
 
 
 class DatabaseIn(BaseModel):
@@ -23,6 +34,8 @@ class DatabaseIn(BaseModel):
 
 
 class DatabasePatch(BaseModel):
+    # A different name renames it (its tunnel must be stopped).
+    name: Optional[str] = Field(None, pattern=_NAME_PATTERN)
     bastion: Optional[str] = None
     host: Optional[str] = None
     port: Optional[int] = None
@@ -35,6 +48,13 @@ class DatabasePatch(BaseModel):
 @router.get("")
 def list_databases() -> dict[str, Any]:
     return SSMConfigManager().list_databases()
+
+
+@router.get(":discover")
+def discover(region: str, profile: Optional[str] = None) -> dict[str, Any]:
+    """RDS databases `profile` can see in `region`, to pick one in the form.
+    Always 200: {"databases": [...], "error": str | None}."""
+    return discover_databases(profile, region)
 
 
 @router.post("/{name}", status_code=status.HTTP_201_CREATED)
@@ -64,12 +84,22 @@ def get_database(name: str) -> dict[str, Any]:
 
 
 @router.patch("/{name}")
-def patch_database(name: str, body: DatabasePatch) -> dict[str, Any]:
+def patch_database(name: str, body: DatabasePatch, request: Request) -> dict[str, Any]:
     mgr = SSMConfigManager()
     db = mgr.get_database(name)
     if db is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Database '{name}' not found")
     updates = body.model_dump(exclude_none=True)
+    new_name = updates.pop("name", name)
+    if new_name != name:
+        # Its tunnel is tracked by name: renaming under it would orphan it.
+        record = get_app_state(request).registry.get(name)
+        if record is not None and record.state not in _INACTIVE_STATES:
+            raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Stop the connection to '{name}' before renaming it")
+        if mgr.get_database(new_name) is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Database '{new_name}' already exists")
+        _rename(mgr, name, new_name)
+        name = new_name
     db.update(updates)
     # Write back via add_database (overwrites)
     mgr.add_database(

@@ -525,10 +525,25 @@ export const databasesApi = {
   list: () => req<Record<string, DatabaseRecord>>("GET", "/databases"),
   create: (name: string, body: DatabaseIn) =>
     req<DatabaseRecord>("POST", `/databases/${name}`, body),
-  update: (name: string, body: Partial<DatabaseIn>) =>
+  /** A different `name` renames it (its connection must be stopped). */
+  update: (name: string, body: Partial<DatabaseIn> & { name?: string }) =>
     req<DatabaseRecord>("PATCH", `/databases/${name}`, body),
   delete: (name: string) => req<void>("DELETE", `/databases/${name}`),
+  /** RDS databases `profile` can see in `region`; `error` says why none could be listed. */
+  discover: (region: string, profile?: string) => {
+    const query = new URLSearchParams({ region, ...(profile ? { profile } : {}) });
+    return req<{ databases: DiscoveredDatabase[]; error: string | null }>("GET", `/databases:discover?${query}`);
+  },
 };
+
+export interface DiscoveredDatabase {
+  id: string;
+  host: string;
+  port: number | null;
+  engine: string | null;
+  /** Cluster "writer" / "reader" endpoint, standalone "instance", or "global" database writer. */
+  kind: "writer" | "reader" | "instance" | "global";
+}
 
 export const profilesApi = {
   list: () => req<ProfileRecord[]>("GET", "/profiles"),

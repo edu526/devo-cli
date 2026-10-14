@@ -37,7 +37,11 @@ export const databaseSchema = z.object({
     .min(1, "Name is required")
     .max(64, "Name must be ≤ 64 chars")
     .regex(/^[a-zA-Z0-9_-]+$/, "Only letters, digits, _ and - are allowed"),
-  bastion: z.string().min(1, "Bastion instance is required"),
+  // The SSM target: an EC2 instance ID (or an SSM managed instance, mi-…).
+  bastion: z
+    .string()
+    .min(1, "Bastion instance is required")
+    .regex(/^m?i-[0-9a-f]{8,17}$/i, "Pick a saved instance, or type an instance ID like i-0abc123def456"),
   host: z
     .string()
     .min(1, "Host is required")
@@ -47,13 +51,16 @@ export const databaseSchema = z.object({
   region: z.string().min(1, "Region is required"),
   profile: z.string().optional(),
   local_port: z.coerce.number().int().min(1).max(65535).optional(),
-  local_address: z
-    .string()
-    .regex(/^127\.0\.0\.1$|^localhost$/, "Local address must be 127.0.0.1 or localhost")
-    .optional(),
+  // No local_address: Devo assigns it (127.0.0.X) when it maps the hostname.
 });
 
 export type DatabaseForm = z.infer<typeof databaseSchema>;
+
+/** The AWS region in an RDS endpoint (`….us-east-1.rds.amazonaws.com`), if any. */
+export function regionFromHost(host: string): string | null {
+  const match = /\.([a-z]{2}(?:-gov)?-[a-z]+-\d+)\.rds\.amazonaws\.com(?:\.cn)?$/i.exec(host.trim());
+  return match?.[1]?.toLowerCase() ?? null;
+}
 
 // ── Instance ──────────────────────────────────────────────────────────────
 

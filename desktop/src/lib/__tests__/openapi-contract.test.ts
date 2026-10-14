@@ -58,6 +58,9 @@ const SIDECAR_SPEC: OpenAPIV3.Document = {
       put: { responses: { "200": { description: "OK" } } },
     },
     "/api/v1/databases": { get: { responses: { "200": { description: "OK" } } } },
+    "/api/v1/databases:discover": {
+      get: { responses: { "200": { description: "OK" } } },
+    },
     "/api/v1/databases/{name}": {
       post: { responses: { "201": { description: "Created" } } },
       get: { responses: { "200": { description: "OK" } } },
@@ -181,6 +184,7 @@ describe("openapi contract: frontend ↔ sidecar", () => {
     });
     await databasesApi.update("d", { port: 6543 });
     await databasesApi.delete("d");
+    await databasesApi.discover("us-east-1", "dev");
     await profilesApi.list();
     await profilesApi.get("dev");
     await profilesApi.create({

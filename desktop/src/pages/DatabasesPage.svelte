@@ -11,16 +11,19 @@
     type ConnectionRecord,
     type ProfileRecord,
     type HostnameForwardingStatus,
+    type InstanceRecord,
+    type DiscoveredDatabase,
+    instancesApi,
     ApiError,
   } from "../lib/api";
   import { withHostsElevation } from "../lib/hosts-elevation";
   import { askConfirm } from "../lib/confirm";
-  import { databasesCache, connectionsCache, profilesCache } from "../lib/page-stores";
+  import { databasesCache, connectionsCache, profilesCache, instancesCache } from "../lib/page-stores";
   import SearchInput from "../lib/SearchInput.svelte";
   import ViewToggle from "../lib/ViewToggle.svelte";
   import FormField from "../lib/FormField.svelte";
   import SearchableSelect from "../lib/SearchableSelect.svelte";
-  import { databaseSchema, validate, type DatabaseForm, type FieldErrors } from "../lib/forms";
+  import { databaseSchema, regionFromHost, validate, type DatabaseForm, type FieldErrors } from "../lib/forms";
   import { viewModes } from "../lib/stores";
   import { ws, type WsMessage } from "../lib/ws";
   import { notifyUser } from "../lib/notifications";
@@ -219,9 +222,96 @@
     region: "us-east-1",
     profile: "",
     local_port: undefined,
-    local_address: "127.0.0.1",
   });
   let formErrors: FieldErrors<DatabaseForm> = $state({});
+  // Assigned by Devo when it maps the hostname: shown, never edited.
+  let editingLocalAddress = $state("127.0.0.1");
+
+  // --- Bastion: the instances saved in Instances, or a typed instance ID ---
+  let instances: Record<string, InstanceRecord> = $state(get(instancesCache) ?? {});
+  const bastionOptions = $derived(
+    Object.entries(instances).map(([name, i]) => ({ value: i.instance_id, label: `${name} (${i.instance_id})` })),
+  );
+
+  async function loadInstances() {
+    try {
+      instances = await instancesApi.list();
+      instancesCache.set(instances);
+    } catch {
+      // best effort: the instance ID can still be typed
+    }
+  }
+
+  function pickBastion(id: string) {
+    form.bastion = id;
+    // A saved bastion knows its account: use its profile and region.
+    const saved = Object.values(instances).find((i) => i.instance_id === id);
+    if (saved?.profile) form.profile = saved.profile;
+    if (saved?.region && !regionFromHost(form.host)) form.region = saved.region;
+  }
+
+  // --- Remote host: the RDS databases the profile can see, or a typed host ---
+  let discovered: DiscoveredDatabase[] = $state([]);
+  let discoveryLoading = $state(false);
+  let discoveryError: string | null = $state(null);
+  const discoveryCache = new Map<string, { databases: DiscoveredDatabase[]; error: string | null }>();
+  let discoverySeq = 0;
+  const hostOptions = $derived(discovered.map((d) => ({ value: d.host, label: d.host })));
+
+  async function discover(region: string, profile: string) {
+    const key = `${profile}|${region}`;
+    const seq = ++discoverySeq;
+    const cached = discoveryCache.get(key);
+    if (cached) {
+      discovered = cached.databases;
+      discoveryError = cached.error;
+      return;
+    }
+    discoveryLoading = true;
+    discoveryError = null;
+    try {
+      const result = await databasesApi.discover(region, profile);
+      if (!result.error) discoveryCache.set(key, result); // retry errors (e.g. after logging in)
+      if (seq !== discoverySeq) return;
+      discovered = result.databases;
+      discoveryError = result.error;
+    } catch (e) {
+      if (seq !== discoverySeq) return;
+      discovered = [];
+      discoveryError = errorText(e);
+    } finally {
+      if (seq === discoverySeq) discoveryLoading = false;
+    }
+  }
+
+  // List the databases once a profile and a region are known (typing debounced).
+  $effect(() => {
+    const region = form.region.trim();
+    const profile = form.profile ?? "";
+    if (!showModal || !region || !profile) {
+      discovered = [];
+      discoveryError = null;
+      return;
+    }
+    const timer = setTimeout(() => void discover(region, profile), 400);
+    return () => clearTimeout(timer);
+  });
+
+  function pickHost(host: string) {
+    form.host = host;
+    const found = discovered.find((d) => d.host === host);
+    if (found?.port) form.port = found.port;
+    const region = regionFromHost(host);
+    if (region) form.region = region;
+  }
+
+  const hostHint = $derived.by(() => {
+    if (!form.profile) return "Pick a profile (or a saved bastion) to list its databases";
+    if (discoveryLoading) return `Looking for databases (${form.profile} · ${form.region})…`;
+    if (discoveryError) return discoveryError;
+    const n = discovered.length;
+    return `${n} database${n === 1 ? "" : "s"} found (${form.profile} · ${form.region}), or type the host`;
+  });
 
   const allRows = $derived<Row[]>(
     Object.entries(databases).map(([name, db]) => ({
@@ -298,25 +388,30 @@
       region: "us-east-1",
       profile: "",
       local_port: undefined,
-      local_address: "127.0.0.1",
     };
+    editingLocalAddress = "127.0.0.1";
     formErrors = {};
     actionError = null;
     showModal = true;
+    void loadInstances();
   }
 
   function openEdit(name: string, rec: DatabaseRecord) {
     editingName = name;
     form = {
       name,
-      ...rec,
+      bastion: rec.bastion,
+      host: rec.host,
+      port: rec.port,
+      region: rec.region,
       profile: rec.profile ?? "",
       local_port: rec.local_port,
-      local_address: rec.local_address ?? "127.0.0.1",
     };
+    editingLocalAddress = rec.local_address ?? "127.0.0.1";
     formErrors = {};
     actionError = null;
     showModal = true;
+    void loadInstances();
   }
 
   async function save() {
@@ -328,6 +423,7 @@
     }
     actionError = null;
     saving = true;
+    // No local_address: Devo keeps the one it assigned (or assigns one).
     const body: DatabaseIn = {
       bastion: v.data.bastion,
       host: v.data.host,
@@ -335,18 +431,25 @@
       region: v.data.region,
       profile: v.data.profile || undefined,
       local_port: v.data.local_port,
-      local_address: v.data.local_address || "127.0.0.1",
     };
+    const oldName = editingName;
+    const renamed = oldName !== null && v.data.name !== oldName;
+    // Its tunnel is tracked by name: stop it to rename, start it again after.
+    const restart = renamed && isRunning(oldName);
     try {
-      if (editingName) {
-        await databasesApi.update(editingName, body);
+      if (restart) await connectionsApi.stop(oldName);
+      if (oldName) {
+        await databasesApi.update(oldName, renamed ? { ...body, name: v.data.name } : body);
       } else {
         await databasesApi.create(v.data.name, body);
       }
       showModal = false;
       await load();
+      if (restart) await startOne(v.data.name);
     } catch (e) {
-      actionError = e instanceof ApiError ? e.message : String(e);
+      const message = e instanceof ApiError ? e.message : String(e);
+      if (restart && oldName) await startOne(oldName); // the rename failed: leave it as it was
+      actionError = message; // after startOne, which clears it
     } finally {
       saving = false;
     }
@@ -909,19 +1012,21 @@
 
       <div class="form-grid">
         <FormField label="Name" required error={formErrors.name}>
-          <input bind:value={form.name} disabled={!!editingName} placeholder="my-db" />
+          <input bind:value={form.name} placeholder="my-db" />
         </FormField>
-        <FormField label="Bastion instance" required error={formErrors.bastion}>
-          <input bind:value={form.bastion} placeholder="prod-bastion" />
-        </FormField>
-        <FormField label="Remote host" required error={formErrors.host}>
-          <input bind:value={form.host} placeholder="mydb.cluster.us-east-1.rds.amazonaws.com" />
-        </FormField>
-        <FormField label="Remote port" required error={formErrors.port}>
-          <input type="number" bind:value={form.port} placeholder="5432" />
-        </FormField>
-        <FormField label="Region" required error={formErrors.region}>
-          <input bind:value={form.region} placeholder="us-east-1" />
+        <FormField
+          label="Bastion instance"
+          required
+          error={formErrors.bastion}
+          hint={bastionOptions.length ? "A saved instance, or type an instance ID" : "Type an instance ID (i-…)"}
+        >
+          <SearchableSelect
+            options={bastionOptions}
+            value={form.bastion}
+            placeholder="i-0abc123def456"
+            allowCustom
+            onchange={pickBastion}
+          />
         </FormField>
         <FormField label="Profile" hint="Optional" error={formErrors.profile}>
           <SearchableSelect
@@ -931,13 +1036,47 @@
             onchange={(v) => (form.profile = v)}
           />
         </FormField>
-        <FormField label="Local port" hint="Optional" error={formErrors.local_port}>
-          <input type="number" bind:value={form.local_port} placeholder="auto" />
+        <FormField
+          label="Region"
+          required
+          error={formErrors.region}
+          hint={regionFromHost(form.host) === form.region.trim() ? "From the host" : undefined}
+        >
+          <input bind:value={form.region} placeholder="us-east-1" />
         </FormField>
-        <FormField label="Local address" error={formErrors.local_address}>
-          <input bind:value={form.local_address} placeholder="127.0.0.1" />
+        <div class="span-2">
+          <FormField label="Remote host" required error={formErrors.host} hint={hostHint}>
+            <SearchableSelect
+              options={hostOptions}
+              value={form.host}
+              placeholder="mydb.cluster-abc123.us-east-1.rds.amazonaws.com"
+              allowCustom
+              onchange={pickHost}
+            />
+          </FormField>
+        </div>
+        <FormField label="Remote port" required error={formErrors.port}>
+          <input type="number" bind:value={form.port} placeholder="5432" />
         </FormField>
       </div>
+
+      <details class="advanced">
+        <summary>Advanced</summary>
+        <div class="form-grid">
+          <FormField
+            label="Local port"
+            hint="Optional: the remote port when it's free"
+            error={formErrors.local_port}
+          >
+            <input type="number" bind:value={form.local_port} placeholder="auto" />
+          </FormField>
+          {#if editingName && editingLocalAddress !== "127.0.0.1"}
+            <p class="muted local-address">
+              Local address <code>{editingLocalAddress}</code>, assigned by Devo for hostname forwarding.
+            </p>
+          {/if}
+        </div>
+      </details>
 
       <div class="modal-actions" style="justify-content: space-between;">
         {#if editingName}
@@ -978,6 +1117,20 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.75rem;
+  }
+  .span-2 {
+    grid-column: span 2;
+  }
+  .advanced summary {
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-bottom: 0.6rem;
+  }
+  .local-address {
+    align-self: center;
+    margin: 0;
+    font-size: 0.78rem;
   }
   .host-cell {
     max-width: 220px;

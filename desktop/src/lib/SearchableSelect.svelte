@@ -13,6 +13,9 @@
   //  - Click outside → close (keeps the current value)
   //  - When closed, the input shows the selected option's label
   //  - When no option is selected, the input shows the placeholder
+  //  - With `allowCustom` it's a text field with suggestions: focusing keeps
+  //    the current text to edit it, what is typed is offered as `Use "…"`
+  //    and kept on Enter or on leaving the field
 
   import { onMount, onDestroy } from "svelte";
 
@@ -28,6 +31,8 @@
     disabled?: boolean;
     /** Optional extra class(es) for the input element. */
     inputClass?: string;
+    /** Accept a typed value that isn't one of the options. */
+    allowCustom?: boolean;
     /** Fires when the user picks a different option. */
     onchange?: (value: string) => void;
   }
@@ -38,11 +43,15 @@
     placeholder = "Select…",
     disabled = false,
     inputClass = "",
+    allowCustom = false,
     onchange,
   }: Props = $props();
 
   let open = $state(false);
   let query = $state("");
+  // Typed since opening: until then the list isn't filtered, and leaving
+  // the field (or Enter) changes nothing.
+  let edited = $state(false);
   let highlight = $state(0);
   let rootEl: HTMLDivElement | undefined = $state();
   let inputEl: HTMLInputElement | undefined = $state();
@@ -53,12 +62,18 @@
   let dropdownPos = $state({ top: 0, left: 0, width: 0, openAbove: false });
 
   const filtered = $derived.by(() => {
-    const q = query.toLowerCase().trim();
+    const q = edited ? query.toLowerCase().trim() : "";
     if (!q) return options;
-    return options.filter((o) => o.label.toLowerCase().includes(q));
+    const matches = options.filter((o) => o.label.toLowerCase().includes(q));
+    const typed = query.trim();
+    if (!allowCustom || options.some((o) => o.value === typed || o.label === typed)) return matches;
+    // Last, so Enter still picks the first match ("dev" → "dev-bastion (i-…)")
+    return [...matches, { value: typed, label: `Use "${typed}"` }];
   });
 
   const selected = $derived(options.find((o) => o.value === value) ?? null);
+  // A typed value that isn't in the list is shown as is.
+  const shown = $derived(selected?.label ?? (allowCustom ? value : ""));
 
   // Approximate dropdown height — must match the `max-height` in CSS.
   const _DROPDOWN_MAX_HEIGHT = 220;
@@ -81,7 +96,9 @@
   function openDropdown() {
     if (disabled) return;
     open = true;
-    query = "";
+    // A text field keeps the text it shows, to edit it; a plain select starts a new search.
+    query = allowCustom ? shown : "";
+    edited = false;
     highlight = 0;
     updateDropdownPos();
   }
@@ -89,6 +106,7 @@
   function closeDropdown() {
     open = false;
     query = "";
+    edited = false;
     highlight = 0;
   }
 
@@ -113,6 +131,11 @@
       highlight = Math.max(highlight - 1, 0);
     } else if (e.key === "Enter") {
       e.preventDefault();
+      // Nothing typed in a text field: keep its text rather than the first suggestion.
+      if (allowCustom && !edited) {
+        closeDropdown();
+        return;
+      }
       const opt = filtered[highlight];
       if (opt) selectOption(opt);
     } else if (e.key === "Escape") {
@@ -121,9 +144,21 @@
     }
   }
 
+  /** Leaving the field keeps what was typed (allowCustom), like a plain input would. */
+  function keepTypedAndClose() {
+    const typed = query.trim();
+    // The text of an option (its label, e.g. "dev-bastion (i-…)") means that option.
+    const next = options.find((o) => o.label === typed || o.value === typed)?.value ?? typed;
+    if (allowCustom && edited && next !== value) {
+      value = next; // also "": the user cleared it
+      onchange?.(next);
+    }
+    closeDropdown();
+  }
+
   function onDocPointer(e: MouseEvent) {
     if (!open) return;
-    if (rootEl && !rootEl.contains(e.target as Node)) closeDropdown();
+    if (rootEl && !rootEl.contains(e.target as Node)) keepTypedAndClose();
   }
 
   onMount(() => {
@@ -156,11 +191,16 @@
     {placeholder}
     {disabled}
     class={inputClass}
-    value={open ? query : selected?.label ?? ""}
+    value={open ? query : shown}
     onfocus={openDropdown}
+    onblur={() => {
+      // Tab away (options keep the focus with preventDefault, so picking one never blurs)
+      if (allowCustom && open) keepTypedAndClose();
+    }}
     oninput={() => {
       if (!open) openDropdown();
       query = (inputEl?.value ?? "");
+      edited = true;
       highlight = 0;
     }}
     onkeydown={onKeydown}
