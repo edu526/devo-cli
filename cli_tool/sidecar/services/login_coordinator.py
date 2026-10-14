@@ -26,7 +26,10 @@ it only tells the UI to offer the "Log in" banner. That gives:
 - `sso.session.login_started` / `sso.session.login_finished` events that the
   UI uses for a single banner and a single notification per session
 - after a successful login, the other profiles of that session are renewed
-  silently right away, so tunnels reconnect and stale states clear at once.
+  silently right away, so tunnels reconnect and stale states clear at once
+  (`sso.session.profiles_renewed`). That comes after `login_finished`: with
+  many profiles it takes several seconds, and the UI's "Signing in" banner
+  must not stay up once the user is done.
 """
 
 import logging
@@ -204,7 +207,6 @@ def _run_attempt(
     fanout = _FanoutHub(hub, attempt)
     success = False
     offered = False
-    renewed: list[str] = []
     try:
         if not known_expired and _renewable_without_browser(profile, sso_session):
             # The session is still alive: no browser needed. Report success on
@@ -231,8 +233,6 @@ def _run_attempt(
                 source=source,
                 sso_session=None if profile else sso_session,
             )
-        if success:
-            renewed = _renew_session_profiles(key)
     except Exception:
         logger.exception("SSO login for session '%s' failed", key)
     finally:
@@ -247,10 +247,11 @@ def _run_attempt(
             _running.pop(key, None)
         attempt.done.set()
         if not offered:
-            hub.publish(
-                "sso.session.login_finished",
-                {"session": key, "success": success, "renewed": renewed},
-            )
+            hub.publish("sso.session.login_finished", {"session": key, "success": success})
+    if success:
+        renewed = _renew_session_profiles(key)
+        if renewed:
+            hub.publish("sso.session.profiles_renewed", {"session": key, "renewed": renewed})
 
 
 def _only_automatic(attempt: _Attempt) -> bool:

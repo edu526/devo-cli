@@ -50,6 +50,20 @@ class _Blocking:
         return self.result
 
 
+def _events_until(q, event, timeout=2.0):
+    """Events up to and including the first `event`, which is published by
+    the attempt's thread after the attempt itself is done."""
+    out = []
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        while not q.empty():
+            out.append(q.get_nowait())
+            if out[-1]["event"] == event:
+                return out
+        time.sleep(0.01)
+    return out
+
+
 def _wait_idle(key="corp", timeout=2.0):
     end = time.monotonic() + timeout
     while lc.is_running(key) and time.monotonic() < end:
@@ -149,14 +163,31 @@ class TestOneLoginPerSession:
 
         assert lc.login_and_wait(hub, profile="db-dev", source="profile") is True
 
-        events = _events(q)
+        events = _events_until(q, "sso.session.profiles_renewed")
         assert {"event": "sso.session.login_started", "session": "corp", "source": "profile", "automatic": False} in events
-        assert {
-            "event": "sso.session.login_finished",
-            "session": "corp",
-            "success": True,
-            "renewed": ["db-dev", "db-prod"],
-        } in events
+        assert {"event": "sso.session.login_finished", "session": "corp", "success": True} in events
+        assert {"event": "sso.session.profiles_renewed", "session": "corp", "renewed": ["db-dev", "db-prod"]} in events
+
+    def test_the_login_is_finished_before_its_other_profiles_are_renewed(self, mocker):
+        """Renewing a session's profiles takes seconds: the "Signing in"
+        banner must go as soon as the user is done, not after it."""
+        mocker.patch(RUN, return_value=True)
+        renewing, go_on = threading.Event(), threading.Event()
+
+        def slow_renewal(key):
+            renewing.set()
+            go_on.wait(timeout=2)
+            return ["db-dev"]
+
+        mocker.patch.object(lc, "_renew_session_profiles", side_effect=slow_renewal)
+        hub = EventHub()
+        q = hub.subscribe()
+
+        assert lc.login_and_wait(hub, profile="db-dev", source="profile") is True
+        renewing.wait(timeout=2)
+
+        assert any(e["event"] == "sso.session.login_finished" for e in _events(q))
+        go_on.set()
 
     def test_different_sessions_log_in_independently(self, mocker):
         mocker.patch(PROFILE_CONFIG, side_effect=lambda name: {"sso_session": f"s-{name}"})

@@ -236,7 +236,6 @@ export function startLoginWatcher(): () => void {
     });
     if (msg.success) {
       forgetSessions([session]);
-      forgetProfiles((msg.renewed as string[] | undefined) ?? []);
     } else {
       // Still needs a login; offer the button.
       loginNeeded.update((current) => ({ ...current, [session]: current[session] ?? [] }));
@@ -250,6 +249,12 @@ export function startLoginWatcher(): () => void {
       }
     }
     automaticLogins.delete(session);
+  });
+
+  // After a login the sidecar renews the session's other profiles too; they
+  // may be listed under another session key (a legacy start URL).
+  const offRenewed = ws.on("sso.session.profiles_renewed", (msg: WsMessage) => {
+    forgetProfiles((msg.renewed as string[] | undefined) ?? []);
   });
 
   const offNeeded = ws.on("profile.needs_login", (msg: WsMessage) => {
@@ -278,6 +283,7 @@ export function startLoginWatcher(): () => void {
     offStarted();
     offUrl();
     offFinished();
+    offRenewed();
     offNeeded();
     offResolved();
     offRefreshed();

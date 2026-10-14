@@ -496,6 +496,7 @@
   let offRefreshing: (() => void) | null = null;
   let offRefreshed: (() => void) | null = null;
   let offExpiring: (() => void) | null = null;
+  let offRenewed: (() => void) | null = null;
   let offDiscoverStarting: (() => void) | null = null;
   let offDiscoverCompleted: (() => void) | null = null;
 
@@ -533,6 +534,10 @@
       }
       updateProfiles(names);
     });
+    // A login renews every profile of its session: show it now, not at the next poll.
+    offRenewed = ws.on("sso.session.profiles_renewed", () => {
+      if (!anyBusyRefresh) load();
+    });
     offExpiring = ws.on("profile.expiring", (msg: WsMessage) => {
       load();
       const payload = msg as Record<string, unknown>;
@@ -562,6 +567,7 @@
     offRefreshing?.();
     offRefreshed?.();
     offExpiring?.();
+    offRenewed?.();
     offDiscoverStarting?.();
     offDiscoverCompleted?.();
     if (autoRefreshInterval !== null) clearInterval(autoRefreshInterval);

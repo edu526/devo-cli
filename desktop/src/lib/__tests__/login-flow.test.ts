@@ -39,7 +39,7 @@ describe("login-flow", () => {
       emit("sso.session.login_started", { session: "corp", source: "connection", automatic: true });
       expect(get(loginActive).has("corp")).toBe(true);
 
-      emit("sso.session.login_finished", { session: "corp", success: true, renewed: [] });
+      emit("sso.session.login_finished", { session: "corp", success: true });
       expect(get(loginActive).has("corp")).toBe(false);
     });
 
@@ -65,10 +65,18 @@ describe("login-flow", () => {
       expect(get(loginNeeded)).toEqual({ corp: [] });
     });
 
-    it("a successful one clears the session and its renewed profiles", () => {
+    it("a successful one clears the session at once", () => {
       loginNeeded.set({ corp: ["a"], personal: ["z", "y"] });
 
-      emit("sso.session.login_finished", { session: "corp", success: true, renewed: ["z"] });
+      emit("sso.session.login_finished", { session: "corp", success: true });
+
+      expect(get(loginNeeded)).toEqual({ personal: ["z", "y"] });
+    });
+
+    it("then the profiles the sidecar renews after it", () => {
+      loginNeeded.set({ personal: ["z", "y"] });
+
+      emit("sso.session.profiles_renewed", { session: "corp", renewed: ["z"] });
 
       expect(get(loginNeeded)).toEqual({ personal: ["y"] });
     });
@@ -149,7 +157,7 @@ describe("login-flow", () => {
       emit("sso.login.url_ready", { session: "corp", profile: "a", url: "https://sign-in", code: "" });
       expect(get(loginUrls)).toEqual({ corp: { url: "https://sign-in", code: "" } });
 
-      emit("sso.session.login_finished", { session: "corp", success: true, renewed: [] });
+      emit("sso.session.login_finished", { session: "corp", success: true });
       expect(get(loginUrls)).toEqual({});
     });
   });
