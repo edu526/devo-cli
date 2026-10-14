@@ -6,7 +6,7 @@ import time
 import pytest
 
 from cli_tool.sidecar.services import login_coordinator as lc
-from cli_tool.sidecar.services.login_coordinator import _auto_open_browser as real_auto_open_browser
+from cli_tool.sidecar.services.login_coordinator import auto_open_browser as real_auto_open_browser
 from cli_tool.sidecar.state import EventHub
 
 RUN = "cli_tool.sidecar.services.sso_service.run_sso_login_sync"
@@ -298,7 +298,7 @@ class TestBrowserMayNotOpenByItself:
 
     @pytest.fixture(autouse=True)
     def turned_off(self, mocker):
-        mocker.patch.object(lc, "_auto_open_browser", return_value=False)
+        mocker.patch.object(lc, "auto_open_browser", return_value=False)
 
     def test_an_expired_tunnel_offers_the_login_instead(self, mocker):
         run = mocker.patch(RUN, return_value=True)

@@ -476,6 +476,12 @@ def _auto_renew(hub: EventHub, profiles: list[dict[str, Any]], state: dict[str, 
     after `_RENEW_RETRY_COOLDOWN`. Sessions with a login in progress are
     skipped. Disable with `aws_login.auto_renew = false`.
 
+    The one exception is the first run after the sidecar starts, i.e. when
+    Devo opens: with `aws_login.auto_open_browser` on, the sessions found dead
+    then get a browser login right away (once each) instead of the banner.
+    Nothing else asks for a login at launch: tunnels don't reconnect on their
+    own.
+
     `state` is the caller's memory between calls. Returns True when at least
     one profile was renewed (the caller should re-read the profile info).
     """
@@ -483,6 +489,9 @@ def _auto_renew(hub: EventHub, profiles: list[dict[str, Any]], state: dict[str, 
 
     if get_config_value("aws_login.auto_renew", True) is False:
         return False
+
+    at_launch = not state.get("ran")
+    state["ran"] = True
 
     from cli_tool.commands.aws_login.commands.refresh import _silent_refresh_profiles
     from cli_tool.sidecar.services import login_coordinator
@@ -551,6 +560,14 @@ def _auto_renew(hub: EventHub, profiles: list[dict[str, Any]], state: dict[str, 
             newly_dead[key] = names
             logger.info("auto-renew: session '%s' needs a login (%s); offering the Log in button", key, ", ".join(names))
         dead[key] = (now + timedelta(seconds=delay), delay)
+
+    if at_launch and newly_dead and login_coordinator.auto_open_browser():
+        for key, names in newly_dead.items():
+            logger.info("auto-renew: session '%s' needs a login at launch; opening the browser", key)
+            login_coordinator.request_login(hub, profile=names[0], source="launch", automatic=True, known_expired=True)
+        # The login's own events drive the UI; if it isn't completed, the
+        # banner comes back with it (sso.session.login_finished).
+        newly_dead = {}
 
     if newly_dead:
         hub.publish(

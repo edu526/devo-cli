@@ -14,7 +14,7 @@
   import { ws } from "./lib/ws";
   import { sidecar, appStatus, appError, authLost, currentPage, type Page } from "./lib/stores";
   import SessionExpiredBanner from "./lib/SessionExpiredBanner.svelte";
-  import { autoOpenBrowser, loginAtLaunch, startLoginWatcher } from "./lib/login-flow";
+  import { startLoginWatcher } from "./lib/login-flow";
   import { databasesAlert, profilesAlert, startNavStatus, type NavAlert } from "./lib/nav-status";
   import LoginRequiredBanner from "./lib/LoginRequiredBanner.svelte";
   import ConfirmDialog from "./lib/ConfirmDialog.svelte";
@@ -224,10 +224,6 @@
         // Default new installs to launch-at-login; the user can opt out
         // from Settings at any point afterwards.
         setAutostartEnabled(true).catch(() => {});
-      } else if (autoOpenBrowser(cfg)) {
-        // Sign in now if the session expired, as the setting says; the
-        // background renewal alone only offers the Log in banner.
-        void loginAtLaunch();
       }
       onboardingChecked = true;
     } catch {

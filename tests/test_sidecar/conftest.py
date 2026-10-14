@@ -17,7 +17,7 @@ def _isolated_login_coordinator(request, monkeypatch):
     from cli_tool.sidecar.services import login_coordinator
 
     login_coordinator._reset_for_tests()
-    monkeypatch.setattr(login_coordinator, "_auto_open_browser", lambda: True)
+    monkeypatch.setattr(login_coordinator, "auto_open_browser", lambda: True)
     if "test_login_coordinator" not in str(request.node.fspath):
         monkeypatch.setattr(login_coordinator, "_renewable_without_browser", lambda profile, sso_session: False)
         monkeypatch.setattr(login_coordinator, "_renew_session_profiles", lambda key: [])

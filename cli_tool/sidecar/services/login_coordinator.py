@@ -215,7 +215,7 @@ def _run_attempt(
                 "sso.login.completed",
                 {"profile": profile or sso_session, "source": source, "success": True, "browser": False},
             )
-        elif automatic and _only_automatic(attempt) and not _auto_open_browser():
+        elif automatic and _only_automatic(attempt) and not auto_open_browser():
             # Nobody clicked anything and the user doesn't want the browser
             # opening by itself: let them start the login from the banner.
             _offer_login(hub, attempt)
@@ -259,9 +259,9 @@ def _only_automatic(attempt: _Attempt) -> bool:
         return all(source == "connection" for _who, source in attempt.requesters)
 
 
-def _auto_open_browser() -> bool:
-    """`aws_login.auto_open_browser`: may an automatic request open the
-    browser by itself? Default yes."""
+def auto_open_browser() -> bool:
+    """`aws_login.auto_open_browser`: may Devo open the browser by itself (for
+    an expired tunnel, or at launch)? Default yes."""
     from cli_tool.core.utils.config_manager import get_config_value
 
     return get_config_value("aws_login.auto_open_browser", True) is not False

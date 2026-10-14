@@ -10,7 +10,7 @@ import { profilesApi } from "../api";
 import { notifyLoginRequired, notifyUser } from "../notifications";
 import { loginActive, loginError, loginInProgress, loginNeeded } from "../stores";
 import { ws } from "../ws";
-import { _resetLoginFlow, autoOpenBrowser, loginAtLaunch, startLogin, startLoginWatcher } from "../login-flow";
+import { _resetLoginFlow, autoOpenBrowser, startLogin, startLoginWatcher } from "../login-flow";
 
 const refreshAll = vi.mocked(profilesApi.refreshAll);
 
@@ -91,18 +91,6 @@ describe("login-flow", () => {
       loginNeeded.set({ corp: ["a"], personal: ["z"] });
       emit("profile.login_resolved", { sessions: ["corp"] });
       expect(get(loginNeeded)).toEqual({ personal: ["z"] });
-    });
-  });
-
-  describe("at launch", () => {
-    it("renews what is stale, through the browser where a session can't be renewed silently", async () => {
-      await loginAtLaunch();
-      expect(refreshAll).toHaveBeenCalledWith(false, { allowBrowser: true });
-    });
-
-    it("never fails the launch when the sidecar can't be reached", async () => {
-      refreshAll.mockRejectedValue(new Error("down"));
-      await expect(loginAtLaunch()).resolves.toBeUndefined();
     });
   });
 
