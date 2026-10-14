@@ -17,15 +17,26 @@
 
   let nextId = 1;
   let logEntries: LogEntry[] = $state([]);
-  let expandedLogs = $state<Set<number>>(new Set());
+  // Keyed by the entry's own line, not its id: every reload numbers the
+  // entries again, which used to collapse (or reopen) what the user had open.
+  let expandedLogs = $state<Set<string>>(new Set());
+  const entryKey = (entry: LogEntry) => `${entry.ts ?? ""}|${entry.raw.split("\n", 1)[0]}`;
   let copiedId = $state<number | null>(null);
 
-  function toggleLog(id: number) {
+  function toggleLog(entry: LogEntry) {
+    const key = entryKey(entry);
     const next = new Set(expandedLogs);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
     expandedLogs = next;
   }
+
+  // A click that ends a text selection (the pointer moved) must not toggle the
+  // row. Checking for *any* selection on the page instead blocked every click
+  // while some text stayed selected, e.g. after copying from an open entry.
+  let pressAt: { x: number; y: number } | null = null;
+  const wasDrag = (e: MouseEvent) =>
+    pressAt !== null && Math.hypot(e.clientX - pressAt.x, e.clientY - pressAt.y) > 4;
 
   // DEBUG starts hidden: with Backend Debug Mode on, it is nearly every line.
   let levels: Record<LogLevel, boolean> = $state({
@@ -215,7 +226,7 @@
       let next = [...logEntries];
       const entry = parseLogLine(raw, nextId);
 
-      if (entry.ts) {
+      if (entry.ts || entry.level) {
         next.push(entry);
         nextId++;
       } else {
@@ -382,23 +393,24 @@
   {:else}
     <div class="log-viewer" bind:this={logViewer} onscroll={handleLogScroll}>
       {#each filtered as entry (entry.id)}
-        <div class="log-row" class:expanded={expandedLogs.has(entry.id)}>
+        {@const open = expandedLogs.has(entryKey(entry))}
+        <div class="log-row" class:expanded={open}>
           <button
             type="button"
             class="log-toggle"
-            onclick={() => {
-              // Prevent toggle if the user is selecting text
-              if (window.getSelection()?.toString().trim().length) return;
-              toggleLog(entry.id);
+            onmousedown={(e) => (pressAt = { x: e.clientX, y: e.clientY })}
+            onclick={(e) => {
+              if (!wasDrag(e)) toggleLog(entry);
+              pressAt = null;
             }}
-            aria-expanded={expandedLogs.has(entry.id)}
+            aria-expanded={open}
           >
-            <span class="chev">{expandedLogs.has(entry.id) ? "▾" : "▸"}</span>
+            <span class="chev">{open ? "▾" : "▸"}</span>
             {#if entry.level}
               {#if entry.ts}<span class="log-ts">{entry.ts}</span>{/if}
               <span class="log-level {getLevelClass(entry.level || '')}">{entry.level}</span>
               <span class="log-msg"
-                >{expandedLogs.has(entry.id) ? entry.msg : displayMessage(entry.msg ?? "")}</span
+                >{open ? entry.msg : displayMessage(entry.msg ?? "")}</span
               >
             {:else}
               <span class="log-msg {getLevelClass(entry.raw)}">{entry.raw}</span>
