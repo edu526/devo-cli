@@ -43,6 +43,23 @@ describe("explainError", () => {
     expect(explainError("Session ended")).toEqual({ summary: "The SSM session ended.", detail: null });
   });
 
+  it("tells a missing plugin from one that stopped", () => {
+    expect(
+      explainError(
+        "SessionManagerPlugin is not found. Please refer to SessionManager Documentation here: https://docs.aws.amazon.com",
+      )?.summary,
+    ).toBe("The AWS Session Manager plugin isn't installed.");
+
+    const stopped =
+      "aws: [ERROR]: Command '['session-manager-plugin', 'AWS_SSM_START_SESSION_RESPONSE', 'us-east-1', 'StartSession', " +
+      "'epicride-db-prod', '{\"Target\": \"i-02875c39a3a3b1921\"}', 'https://ssm.us-east-1.amazonaws.com']' " +
+      "returned non-zero exit status 15.";
+    expect(explainError(stopped)).toEqual({
+      summary: "The SSM session closed (the Session Manager plugin stopped with code 15).",
+      detail: stopped,
+    });
+  });
+
   it("explains a local port taken by another program", () => {
     expect(explainError("[WinError 10048] Only one usage of each socket address is normally permitted")?.summary).toBe(
       "Its local port is already used by another program.",

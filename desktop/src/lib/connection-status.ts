@@ -33,7 +33,13 @@ const KNOWN: [RegExp, (m: RegExpMatchArray) => string][] = [
   ],
   [/InvalidInstanceId|InvalidTarget/i, () => "The bastion instance wasn't found. Check its ID and region."],
   [/config profile \(([^)]+)\) could not be found/i, (m) => `The AWS profile "${m[1]}" isn't in your AWS config.`],
-  [/SessionManagerPlugin is not found|session-manager-plugin/i, () => "The AWS Session Manager plugin isn't installed."],
+  // The AWS CLI's own message: matching "session-manager-plugin" anywhere also
+  // caught every error naming the plugin's command, e.g. when it exits.
+  [/SessionManagerPlugin is not found/i, () => "The AWS Session Manager plugin isn't installed."],
+  [
+    /Command '?\['session-manager-plugin'.*returned non-zero exit status (-?\d+)/i,
+    (m) => `The SSM session closed (the Session Manager plugin stopped with code ${m[1]}).`,
+  ],
   [
     /Token has expired|refresh failed|ExpiredToken|UnrecognizedClient/i,
     () => "Your AWS session expired. Log in to reconnect.",
