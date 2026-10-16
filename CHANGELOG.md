@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.16.1 (2026-10-16)
+
+### Bug Fixes
+
+- **ssm**: Only show the plugin install guide when the plugin is missing
+  ([`c1b3e08`](https://github.com/edu526/devo-cli/commit/c1b3e084332dab0535e03b1e8a82782f1858700f))
+
+
 ## v3.16.0 (2026-10-14)
 
 ### Bug Fixes
