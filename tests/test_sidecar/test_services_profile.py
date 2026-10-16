@@ -502,9 +502,10 @@ def _probe_due(state):
 
 
 @pytest.mark.unit
-class TestLaunchLogin:
-    """When Devo opens with "Open the browser to sign in automatically" on,
-    the sessions found dead get a browser login instead of the banner."""
+class TestBrowserLoginForDeadSessions:
+    """With "Open the browser to sign in automatically" on, a session found
+    dead gets a browser login instead of the banner: at launch, and whenever
+    the background renewal finds it dead later."""
 
     @pytest.fixture(autouse=True)
     def setup(self, mocker):
@@ -512,7 +513,7 @@ class TestLaunchLogin:
         mocker.patch.object(profile_service, "read_cached_credentials_expiration", return_value=None)
         mocker.patch(CONFIG_VALUE, side_effect=lambda key, default=None: default)
         self.setting = mocker.patch("cli_tool.sidecar.services.login_coordinator.auto_open_browser", return_value=True)
-        self.request_login = mocker.patch("cli_tool.sidecar.services.login_coordinator.request_login")
+        self.request_login = mocker.patch("cli_tool.sidecar.services.login_coordinator.request_login", return_value=("started", None))
 
     def test_a_dead_session_at_launch_gets_one_browser_login(self, mocker):
         mocker.patch(SILENT, return_value=([], [("a", "stale"), ("b", "stale")]))
@@ -525,13 +526,36 @@ class TestLaunchLogin:
         # no "can't be renewed, click Log in" notice while the browser opens
         assert not [e for e in _events(q) if e["event"] == "profile.needs_login"]
 
-    def test_only_at_launch(self, mocker):
+    def test_a_session_found_dead_later_gets_one_too(self, mocker):
         mocker.patch(SILENT, return_value=([], [("a", "stale")]))
-        state = {"ran": True}
+        hub = EventHub()
+
+        profile_service._auto_renew(hub, [_p("a", -5)], {"ran": True})
+
+        self.request_login.assert_called_once_with(hub, profile="a", source="auto_renew", automatic=True, known_expired=True)
+
+    def test_only_once_while_the_session_stays_dead(self, mocker):
+        mocker.patch(SILENT, return_value=([], [("a", "stale")]))
+        state: dict = {"ran": True}
+        profile_service._auto_renew(EventHub(), [_p("a", -5)], state)
+        _probe_due(state)
 
         profile_service._auto_renew(EventHub(), [_p("a", -5)], state)
 
-        self.request_login.assert_not_called()
+        self.request_login.assert_called_once()
+
+    def test_a_held_back_login_is_offered_on_the_banner(self, mocker):
+        """After an ignored automatic login the handler holds the next one back."""
+        from cli_tool.sidecar.services import login_coordinator
+
+        self.request_login.return_value = (login_coordinator.SUPPRESSED, None)
+        mocker.patch(SILENT, return_value=([], [("a", "stale")]))
+        hub = EventHub()
+        q = hub.subscribe()
+
+        profile_service._auto_renew(hub, [_p("a", -5)], {"ran": True})
+
+        assert [e["event"] for e in _events(q)] == ["profile.needs_login"]
 
     def test_not_when_the_setting_is_off(self, mocker):
         self.setting.return_value = False
@@ -551,18 +575,6 @@ class TestLaunchLogin:
 
         self.request_login.assert_not_called()
 
-    def test_a_later_run_offers_the_banner_as_usual(self, mocker):
-        mocker.patch(SILENT, return_value=([], [("a", "stale")]))
-        hub = EventHub()
-        q = hub.subscribe()
-        state: dict = {}
-        profile_service._auto_renew(hub, [_p("fresh", 3 * 3600)], state)  # launch: nothing stale
-
-        profile_service._auto_renew(hub, [_p("a", -5)], state)
-
-        self.request_login.assert_not_called()
-        assert [e["event"] for e in _events(q)] == ["profile.needs_login"]
-
 
 @pytest.mark.unit
 class TestAutoRenew:
@@ -573,7 +585,7 @@ class TestAutoRenew:
         mocker.patch.object(profile_service, "read_cached_credentials_expiration", return_value=None)
         self.config = mocker.patch(CONFIG_VALUE, side_effect=lambda key, default=None: default)
         # The background renewal must never start a login (= open the browser),
-        # except at launch when the user asked for it: see TestLaunchLogin.
+        # unless the user turned that on: see TestBrowserLoginForDeadSessions.
         mocker.patch("cli_tool.sidecar.services.login_coordinator.auto_open_browser", return_value=False)
         self.request_login = mocker.patch("cli_tool.sidecar.services.login_coordinator.request_login")
         yield

@@ -14,11 +14,12 @@ it only tells the UI to offer the "Log in" banner. That gives:
 - the browser only opens when it is really needed: before running
   `aws sso login` (which always opens it) the attempt first tries to renew
   silently, unless the caller just found the session dead itself
-- a backoff for *automatic* requests (expired tunnels):
-  when an automatic login is not completed (tab ignored, cancelled, timed
-  out) the next automatic one for that session waits 15 min, then 30, up to
-  2 h — so nobody comes back to a pile of login tabs. Explicit requests
-  (the user clicked something) are never held back.
+- a backoff for *automatic* requests (Devo opening, an expired tunnel, the
+  background renewal; see AUTOMATIC_SOURCES): when an automatic login is
+  not completed (tab ignored, cancelled, timed out) the next automatic one
+  for that session waits 15 min, then 30, up to 2 h — so nobody comes back
+  to a pile of login tabs. Explicit requests (the user clicked something)
+  are never held back.
 - automatic requests may not open the browser at all: with
   `aws_login.auto_open_browser = false` (a Config page setting) a session
   that needs one is offered on the "Log in" banner instead
@@ -44,6 +45,10 @@ logger = logging.getLogger(__name__)
 
 _AUTO_FIRST_BACKOFF = 15 * 60
 _AUTO_MAX_BACKOFF = 2 * 60 * 60
+
+# Sources of logins nobody clicked for: Devo opening, a tunnel whose
+# credentials expired, the background renewal.
+AUTOMATIC_SOURCES = frozenset({"launch", "connection", "auto_renew"})
 
 # Possible results of request_login()
 STARTED = "started"
@@ -242,7 +247,7 @@ def _run_attempt(
             # as explicit: a failure must not hold back the user's next click.
             # An offered login was never tried: nothing to hold back.
             if not offered:
-                _record_result(key, success, automatic and all(s == "connection" for s in sources))
+                _record_result(key, success, automatic and sources <= AUTOMATIC_SOURCES)
             attempt.success = success
             _running.pop(key, None)
         attempt.done.set()
@@ -259,14 +264,14 @@ def _run_attempt(
 
 
 def _only_automatic(attempt: _Attempt) -> bool:
-    """True while nobody explicitly asked for this attempt (only tunnels did)."""
+    """True while nobody explicitly asked for this attempt."""
     with _lock:
-        return all(source == "connection" for _who, source in attempt.requesters)
+        return all(source in AUTOMATIC_SOURCES for _who, source in attempt.requesters)
 
 
 def auto_open_browser() -> bool:
-    """`aws_login.auto_open_browser`: may Devo open the browser by itself (for
-    an expired tunnel, or at launch)? Default yes."""
+    """`aws_login.auto_open_browser`: may Devo open the browser by itself
+    (at launch, for an expired tunnel, for the background renewal)? Default yes."""
     from cli_tool.core.utils.config_manager import get_config_value
 
     return get_config_value("aws_login.auto_open_browser", True) is not False

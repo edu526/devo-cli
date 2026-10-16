@@ -306,6 +306,18 @@ class TestAutomaticBackoff:
         assert status == lc.SUPPRESSED
         assert run.call_count == 1
 
+    @pytest.mark.parametrize("source", ["launch", "auto_renew"])
+    def test_logins_nobody_clicked_for_hold_back_the_next_one_too(self, mocker, source):
+        run = mocker.patch(RUN, return_value=False)
+        hub = EventHub()
+
+        lc.request_login(hub, profile="db-dev", source=source, automatic=True, known_expired=True)
+        _wait_idle()
+        status, _ = lc.request_login(hub, profile="db-prod", source="auto_renew", automatic=True, known_expired=True)
+
+        assert status == lc.SUPPRESSED
+        assert run.call_count == 1
+
     def test_an_explicit_request_is_never_held_back(self, mocker):
         run = mocker.patch(RUN, return_value=False)
         hub = EventHub()

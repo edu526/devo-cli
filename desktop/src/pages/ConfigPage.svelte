@@ -111,9 +111,10 @@
     }
   }
 
-  // Off: a login Devo would start by itself (at launch, or for an expired
-  // tunnel) is offered on the "Log in" banner instead. Clicking Connect,
-  // Start All, Refresh or Log in always opens the browser when needed.
+  // Off: a login Devo would start by itself (at launch, for an expired
+  // tunnel, for the background renewal) is offered on the "Log in" banner.
+  // Clicking Connect, Start All, Refresh or Log in always opens the browser
+  // when needed.
   let autoOpenBrowser = $state(autoOpenBrowserIn(initialCache ?? {}));
   let autoOpenBrowserBusy = $state(false);
   let autoOpenBrowserError: string | null = $state(null);
@@ -352,9 +353,10 @@
       <div class="setting-text">
         <label for="opt-auto-browser">Open the browser to sign in automatically</label>
         <p id="opt-auto-browser-desc">
-          When Devo starts, or a connected tunnel's credentials expire, and your AWS session can't be renewed
-          on its own, Devo opens your browser so you can sign in. Turn it off to get a notification and a Log in
-          button instead. Clicking Connect, Start All, Refresh or Log in opens it either way.
+          Whenever your AWS credentials need a login (when Devo starts, a tunnel's credentials expire, or a
+          profile's do in the background), Devo opens your browser so you can sign in. If you leave a login
+          unfinished, the next one waits up to 2 hours. Turn it off to get a notification and a Log in button
+          instead. Clicking Connect, Start All, Refresh or Log in opens it either way.
         </p>
         {#if autoOpenBrowserError}
           <p class="setting-error">{autoOpenBrowserError}</p>

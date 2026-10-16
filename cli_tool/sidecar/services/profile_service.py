@@ -464,12 +464,21 @@ def _auto_renew(hub: EventHub, profiles: list[dict[str, Any]], state: dict[str, 
     background for as long as Devo is open. Listing no longer renews them as a
     side effect (it reads the AWS CLI cache), so it is done here explicitly.
 
-    It never opens the browser itself: it watches every profile, including
-    ones nobody is using, so a short-lived role (1 h) would pop a login tab
-    every 45 min whenever the SSO session can't be renewed silently. When a
-    whole session can't be renewed, a single `profile.needs_login` event is
-    published instead and the UI offers a "Log in" button; tunnels that need
-    credentials still ask the login handler on their own.
+    When a whole session can't be renewed, what happens follows the
+    "Open the browser to sign in automatically" setting
+    (`aws_login.auto_open_browser`):
+
+    - on: the session gets a browser login right away, once each time it is
+      found dead (source "launch" on the first run after Devo opens, else
+      "auto_renew"). With a short-lived role (1 h) and an organization whose
+      SSO sessions end minutes after a login, that is a tab every ~45 min:
+      the user chose it. If a login isn't completed, the login handler holds
+      the next automatic one back (15 min, doubling, up to 2 h), and a held
+      back one is offered on the banner instead.
+    - off: a single `profile.needs_login` event is published and the UI
+      offers a "Log in" button.
+
+    Tunnels that need credentials ask the login handler on their own.
 
     Only a login brings a dead session back, so it is not retried with every
     profile that comes due: one probe after 5 min, then 10, 20, 40 and every
@@ -479,12 +488,6 @@ def _auto_renew(hub: EventHub, profiles: list[dict[str, Any]], state: dict[str, 
     a problem of its own, never reported as needing a login, and retried
     after `_RENEW_RETRY_COOLDOWN`. Sessions with a login in progress are
     skipped. Disable with `aws_login.auto_renew = false`.
-
-    The one exception is the first run after the sidecar starts, i.e. when
-    Devo opens: with `aws_login.auto_open_browser` on, the sessions found dead
-    then get a browser login right away (once each) instead of the banner.
-    Nothing else asks for a login at launch: tunnels don't reconnect on their
-    own.
 
     `state` is the caller's memory between calls. Returns True when at least
     one profile was renewed (the caller should re-read the profile info).
@@ -565,13 +568,18 @@ def _auto_renew(hub: EventHub, profiles: list[dict[str, Any]], state: dict[str, 
             logger.info("auto-renew: session '%s' needs a login (%s); offering the Log in button", key, ", ".join(names))
         dead[key] = (now + timedelta(seconds=delay), delay)
 
-    if at_launch and newly_dead and login_coordinator.auto_open_browser():
+    if newly_dead and login_coordinator.auto_open_browser():
+        source = "launch" if at_launch else "auto_renew"
+        held_back: dict[str, list[str]] = {}
         for key, names in newly_dead.items():
-            logger.info("auto-renew: session '%s' needs a login at launch; opening the browser", key)
-            login_coordinator.request_login(hub, profile=names[0], source="launch", automatic=True, known_expired=True)
-        # The login's own events drive the UI; if it isn't completed, the
-        # banner comes back with it (sso.session.login_finished).
-        newly_dead = {}
+            status, _attempt = login_coordinator.request_login(hub, profile=names[0], source=source, automatic=True, known_expired=True)
+            if status == login_coordinator.SUPPRESSED:
+                held_back[key] = names  # a recent automatic login wasn't completed: the banner instead
+            else:
+                logger.info("auto-renew: session '%s' needs a login; opening the browser (%s)", key, source)
+        # The logins' own events drive the UI; one that isn't completed brings
+        # the banner back (sso.session.login_finished).
+        newly_dead = held_back
 
     if newly_dead:
         hub.publish(
