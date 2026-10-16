@@ -44,6 +44,17 @@ class SSMSession:
             return False
 
     @staticmethod
+    def _plugin_missing(stderr: str) -> bool:
+        """Whether the AWS CLI says the Session Manager plugin isn't installed.
+
+        Matched on its own message only: its errors also name the plugin's
+        command ("Command '['session-manager-plugin', ...]' returned non-zero
+        exit status 15") whenever the installed plugin exits, e.g. when an SSM
+        session is closed.
+        """
+        return "sessionmanagerplugin is not found" in stderr.lower()
+
+    @staticmethod
     def _show_plugin_installation_guide() -> None:
         """Show installation guide for Session Manager plugin"""
         console.print("\n[red]❌ AWS Session Manager Plugin Not Installed[/red]\n")
@@ -188,8 +199,7 @@ class SSMSession:
         stdout, stderr = proc.communicate()
 
         if proc.returncode != 0 and stderr:
-            error_lower = stderr.lower()
-            if "sessionmanagerplugin is not found" in error_lower or "session-manager-plugin" in error_lower:
+            if SSMSession._plugin_missing(stderr):
                 SSMSession._show_plugin_installation_guide()
                 return 1
             console.print(stderr)

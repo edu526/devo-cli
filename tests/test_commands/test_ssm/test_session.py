@@ -161,6 +161,38 @@ def test_start_port_forwarding_plugin_missing_error_in_stderr(mocker):
 
 
 @pytest.mark.unit
+def test_a_plugin_that_exits_is_not_reported_as_missing(mocker):
+    """The AWS CLI names the plugin's command when the installed plugin exits:
+    that must not show the installation guide."""
+    mocker.patch.object(SSMSession, "_check_session_manager_plugin", return_value=True)
+    mock_proc = MagicMock()
+    mock_proc.communicate.return_value = (
+        "",
+        "aws: [ERROR]: Command '['session-manager-plugin', 'AWS_SSM_START_SESSION_RESPONSE', 'us-east-1', "
+        "'StartSession', 'prof', 'https://ssm.us-east-1.amazonaws.com']' returned non-zero exit status 255.",
+    )
+    mock_proc.returncode = 255
+    mock_guide = mocker.patch.object(SSMSession, "_show_plugin_installation_guide")
+    mocker.patch("subprocess.Popen", return_value=mock_proc)
+
+    result = SSMSession.start_port_forwarding_to_remote(
+        bastion="i-abc123",
+        host="db.example.com",
+        port=5432,
+        local_port=15432,
+    )
+
+    assert result == 255
+    mock_guide.assert_not_called()
+
+
+@pytest.mark.unit
+def test_plugin_missing_recognizes_only_the_aws_cli_message():
+    assert SSMSession._plugin_missing("SessionManagerPlugin is not found. Please refer to SessionManager Documentation")
+    assert not SSMSession._plugin_missing("Command '['session-manager-plugin', 'x']' returned non-zero exit status 15.")
+
+
+@pytest.mark.unit
 def test_start_port_forwarding_non_zero_exit_code_prints_stderr(mocker):
     """Prints stderr and returns non-zero code on failure."""
     mocker.patch.object(SSMSession, "_check_session_manager_plugin", return_value=True)

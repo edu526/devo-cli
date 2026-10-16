@@ -534,7 +534,9 @@ def _run_attempt(
                 else:
                     logger.error(f"SSM Error: {stderr.strip()}")
                     error_lower = stderr.lower()
-                    if "sessionmanagerplugin is not found" in error_lower or "session-manager-plugin" in error_lower:
+                    # Only the AWS CLI's own message means the plugin is missing:
+                    # its errors also name the plugin's command when it exits.
+                    if SSMSession._plugin_missing(stderr):
                         SSMSession._show_plugin_installation_guide()
                     else:
                         from rich.panel import Panel
